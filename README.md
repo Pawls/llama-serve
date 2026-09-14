@@ -85,6 +85,13 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 1. Download the GGUF into `F:\AI\models\llm\<publisher>\<repo>\` (LM Studio does this, or `hf download`).
 2. Add a `[name]` section to `presets.ini`. Copy the closest existing section and change `model`, `mmproj` and the sampler lines to the model card's values. `F:\AI\models\llm\HANDOFF.md` §3 explains every key.
 3. Restart the router.
+4. Run `F:\AI\llama-serve\test-tool-calls.ps1 -Model <name>` to confirm it can use tools (see below).
+
+### Check that tool calls work
+
+Pi's agent works by calling tools, and each model writes tool calls in its own format that llama.cpp has to recognize. `test-tool-calls.ps1` checks every preset (or `-Model <name>`, `-Runs <n>`): the model must call a `read_file` tool with valid JSON arguments, with no raw tool markup leaking into the reply, and then answer using the tool's result. Run it after editing `presets.ini` or upgrading the llama.cpp build. It is a one-off check, not something that runs on normal requests. Results go to `logs\tool-calls-*.json`; exit code 1 means some run failed.
+
+On 2026-09-14 (build b10951) all 14 presets passed 3/3, including the thinking and drafter lanes. If a model fails, the usual fix is a corrected chat template for that preset (`chat-template-file = <path to .jinja>`), or a newer llama.cpp build.
 
 Keys are llama-server's command-line flags without the leading `--`. Settings under `[*]` apply to every model. **Never put sampler settings (`temp`, `presence-penalty`, ...) in `[*]`**: thinking and non-thinking modes need different values.
 
@@ -109,6 +116,7 @@ Unsloth Studio stores downloads in `F:\AI\models\llm\hub`. Run `F:\AI\llama-serv
 | `presets.ini` | The model list and each model's settings. |
 | `start-router.ps1` | Starts the router: pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
 | `stop-router.ps1` | Stops the router and any loaded model. |
+| `test-tool-calls.ps1` | Checks that every model's tool calls parse and round-trip. |
 | `link-hub-models.ps1` | Hardlinks Unsloth Studio downloads into the library. |
 
 Why port 8410: 8080 is taken by signal-cli in WSL, and the club-3090 WSL stack uses 8020-8213. Pi finds the router through the user environment variable `LLAMA_BASE_URL=http://127.0.0.1:8410/v1`.
