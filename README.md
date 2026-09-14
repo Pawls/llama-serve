@@ -61,6 +61,8 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 |---|---|---|---|---|---|---|
 | `qwen3.8-27b` | Default. Best all-rounder, the most-validated config | 262k | yes | on | ~57 t/s | both |
 | `qwen3.8-27b-dflash2` | Same model, DFlash2 speed-up drafter; faster than the default, most at long context | 262k | yes | on | ~55-59 t/s (~42 at 128k) | both |
+| `swift-qwen3.8-27b-dflash2` | Swift: Qwen3.8 retrained to think less; about a quarter fewer thinking tokens, same answers in our tests | 262k | yes | on | ~72-87 t/s | both |
+| `swift-qwen3.8-27b` | Swift with the built-in MTP drafter instead | 262k | yes | on | ~64-71 t/s | both |
 | `qwen3.8-27b-nopreserve` | Same as default, but earlier turns' thinking is dropped (BoxelBuilder) | 262k | yes | on | ~54 t/s | both |
 | `qwen3.8-fable-q5` | Qwen3.8 fine-tune tuned for coding (uncensored) | 262k | yes | on | ~59 t/s | both |
 | `qwen3.6-35b-a3b` | Older Qwen, very fast (only 3B active) | 262k | yes | off | ~112 t/s | both |
@@ -91,7 +93,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 
 Pi's agent works by calling tools, and each model writes tool calls in its own format that llama.cpp has to recognize. `test-tool-calls.ps1` checks every preset (or `-Model <name>`, `-Runs <n>`): the model must call a `read_file` tool with valid JSON arguments, with no raw tool markup leaking into the reply, and then answer using the tool's result. Run it after editing `presets.ini` or upgrading the llama.cpp build. It is a one-off check, not something that runs on normal requests. Results go to `logs\tool-calls-*.json`; exit code 1 means some run failed.
 
-On 2026-09-14 (build b10951) all 14 presets passed 3/3, including the thinking and drafter lanes. If a model fails, the usual fix is a corrected chat template for that preset (`chat-template-file = <path to .jinja>`), or a newer llama.cpp build.
+On 2026-09-14 (build b10951) all 16 presets passed 3/3, including the thinking and drafter lanes. If a model fails, the usual fix is a corrected chat template for that preset (`chat-template-file = <path to .jinja>`), or a newer llama.cpp build.
 
 Keys are llama-server's command-line flags without the leading `--`. Settings under `[*]` apply to every model. **Never put sampler settings (`temp`, `presence-penalty`, ...) in `[*]`**: thinking and non-thinking modes need different values.
 
