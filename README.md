@@ -64,6 +64,7 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 | `qwen3.8-27b-nopreserve` | Same as default, but earlier turns' thinking is dropped (BoxelBuilder) | 262k | yes | on | ~54 t/s | both |
 | `qwen3.8-fable-q5` | Qwen3.8 fine-tune tuned for coding (uncensored) | 262k | yes | on | ~59 t/s | both |
 | `qwen3.6-35b-a3b` | Older Qwen, very fast (only 3B active) | 262k | yes | off | ~112 t/s | both |
+| `qwen3.6-35b-a3b-dflash` | Same, text-only with a DFlash drafter: much faster on code, slower on prose | 262k | no | off | ~156 code / ~63 prose | both |
 | `qwen3-coder-30b` | Coding-only, never thinks | 262k | no | n/a | ~135 t/s | both |
 | `qwen3-coder-30b-dflash` | Same, with a DFlash drafter: much faster on code, much slower on prose | 262k | no | n/a | ~190 code / ~56 prose | both |
 | `ornith-35b` | Fast MoE with a built-in speed-up drafter | 262k | yes | off | ~176 t/s | both |
