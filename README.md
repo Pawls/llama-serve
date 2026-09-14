@@ -60,13 +60,20 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 | Pi name | What it is | Context | Images | Thinking by default | Speed | GPUs |
 |---|---|---|---|---|---|---|
 | `qwen3.8-27b` | Default. Best all-rounder, the most-validated config | 262k | yes | on | ~57 t/s | both |
+| `qwen3.8-27b-dflash2` | Same model, DFlash2 speed-up drafter; faster than the default, most at long context | 262k | yes | on | ~55-59 t/s (~42 at 128k) | both |
+| `qwen3.8-27b-nopreserve` | Same as default, but earlier turns' thinking is dropped (BoxelBuilder) | 262k | yes | on | ~54 t/s | both |
 | `qwen3.8-fable-q5` | Qwen3.8 fine-tune tuned for coding (uncensored) | 262k | yes | on | ~59 t/s | both |
 | `qwen3.6-35b-a3b` | Older Qwen, very fast (only 3B active) | 262k | yes | off | ~112 t/s | both |
 | `qwen3-coder-30b` | Coding-only, never thinks | 262k | no | n/a | ~135 t/s | both |
+| `qwen3-coder-30b-dflash` | Same, with a DFlash drafter: much faster on code, much slower on prose | 262k | no | n/a | ~190 code / ~56 prose | both |
 | `ornith-35b` | Fast MoE with a built-in speed-up drafter | 262k | yes | off | ~176 t/s | both |
 | `gemma4-31b` | Google Gemma 4, dense; context kept short | 65k | yes | off | ~36 t/s | both |
-| `gemma4-26b-a4b` | Google Gemma 4 MoE; the long-context Gemma | 262k | yes | off | ~102 t/s | both |
+| `gemma4-31b-mtp` | Same, with an MTP drafter; faster on everything | 65k | yes | off | ~55 code / ~42 prose | both |
+| `gemma4-26b-a4b` | Google Gemma 4 MoE; the long-context Gemma | 262k | yes | off | ~100 t/s | both |
+| `gemma4-26b-a4b-dflash` | Same, with a DFlash drafter: much faster on code, slower on prose | 262k | yes | off | ~190 code / ~65 prose | both |
 | `muse-glimmer-30b` | Strong reasoner with a DFlash drafter | 262k | yes | always reasons | ~90 t/s | GPU1 only |
+
+Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small "drafter" that guesses tokens ahead for the big model to check. The output is the same model's; only speed changes. Speeds for these come from the 2026-09-14 benchmark (5 runs each, coding and essay prompts). A drafter that guesses code well can guess prose badly, so the `-dflash` coder and 26B lanes are for coding sessions.
 
 "Thinking by default" is the preset's setting. **Pi overrides it:** when you pick a model that supports thinking, Pi switches thinking on (`medium`), and Pi's choice wins. Press `Shift+Tab` to turn it off for fast answers. `qwen3-coder-30b` has no thinking mode, and Muse-Glimmer always reasons.
 
