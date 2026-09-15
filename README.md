@@ -61,8 +61,8 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 |---|---|---|---|---|---|---|
 | `qwen3.8-27b` | Default. Best all-rounder, the most-validated config | 262k | yes | on | ~57 t/s | both |
 | `qwen3.8-27b-dflash2` | Same model, DFlash2 speed-up drafter; faster than the default, most at long context | 262k | yes | on | ~55-59 t/s (~42 at 128k) | both |
-| `swift-qwen3.8-27b-dflash2` | Swift: Qwen3.8 retrained to think less; about a quarter fewer thinking tokens, same answers in our tests | 262k | yes | on | ~72-87 t/s | both |
-| `swift-qwen3.8-27b` | Swift with the built-in MTP drafter instead | 262k | yes | on | ~64-71 t/s | both |
+| `swift-qwen3.8-27b-dflash2` | Swift: Qwen3.8 retrained to think less; about a quarter fewer thinking tokens, same answers in our tests | 262k | yes | on | ~74 code / ~47 prose (~50 / ~31 at 128k) | both |
+| `swift-qwen3.8-27b` | Swift with the built-in MTP drafter; only faster for short prose chats | 262k | yes | on | ~65 code / ~53 prose (~38 / ~30 at 128k) | both |
 | `qwen3.8-27b-nopreserve` | Same as default, but earlier turns' thinking is dropped (BoxelBuilder) | 262k | yes | on | ~54 t/s | both |
 | `qwen3.8-fable-q5` | Qwen3.8 fine-tune tuned for coding (uncensored) | 262k | yes | on | ~59 t/s | both |
 | `qwen3.6-35b-a3b` | Older Qwen, very fast (only 3B active) | 262k | yes | off | ~112 t/s | both |
@@ -118,6 +118,7 @@ Unsloth Studio stores downloads in `F:\AI\models\llm\hub`. Run `F:\AI\llama-serv
 | `presets.ini` | The model list and each model's settings. |
 | `start-router.ps1` | Starts the router: pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
 | `stop-router.ps1` | Stops the router and any loaded model. |
+| `bench-depth.ps1` | Speed bench at ~2k / 52k / 128k context, for choosing between drafter lanes. Results in `logs\bench-depth-*.txt`. |
 | `test-tool-calls.ps1` | Checks that every model's tool calls parse and round-trip. |
 | `link-hub-models.ps1` | Hardlinks Unsloth Studio downloads into the library. |
 
