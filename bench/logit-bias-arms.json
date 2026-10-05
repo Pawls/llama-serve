@@ -1,0 +1,27 @@
+{
+  "_about": "Logit-bias arms for bench-thinking.ps1. Words are resolved to the tested model's own token ids at run time. Forms: 'leading-space' is the word after a space (' wait'), 'line-start' is the word opening a line ('Wait' after a newline); these are different tokens. A form that tokenizes to more than one token is skipped, because biasing its first piece would hit unrelated words.",
+  "off": {
+    "about": "No bias.",
+    "bias": -2,
+    "forms": [],
+    "words": []
+  },
+  "paper": {
+    "about": "The 50 overthinking markers of arXiv 2606.00206, leading-space form only, as in the r/LocalLLaMA post. On Qwen3.x 'recheck' is two tokens, leaving 49. Covers 'or', 'but', 'error', which also occur in code and tool-call JSON.",
+    "bias": -2,
+    "forms": ["leading-space"],
+    "words": [
+      "perhaps", "maybe", "wait", "Wait", "actually", "hold", "Hmm", "hmm", "Alternatively", "alternatively",
+      "However", "however", "instead", "Instead", "But", "but", "though", "although", "yet", "rather",
+      "unless", "otherwise", "nonetheless", "nevertheless", "regardless", "still", "anyway", "Or", "or", "either",
+      "whether", "uncertain", "unsure", "possibly", "might", "could", "another", "different", "reconsider", "rethink",
+      "backtrack", "retry", "recheck", "revisit", "doubt", "confused", "wrong", "mistake", "error", "incorrect"
+    ]
+  },
+  "narrow": {
+    "about": "Only wait / hmm / actually, in both forms. On Qwen3.x line-start 'hmm' is two tokens, leaving 11.",
+    "bias": -2,
+    "forms": ["leading-space", "line-start"],
+    "words": ["wait", "Wait", "hmm", "Hmm", "actually", "Actually"]
+  }
+}
