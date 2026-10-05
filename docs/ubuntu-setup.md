@@ -157,32 +157,45 @@ install of the build tools covers only Ubuntu 22.04 and 24.04, so on 26.04 insta
    sudo apt install -y g++-14
    ```
 
-3. **Get Strata, and the model files without downloading them again.** Copy the whole `F:\AI\Strata-data` (73 GB:
-   the model, the image encoder and the MTP draft layer, with the `.done` markers setup checks) to the Linux drive:
+3. **Get Strata, and the model files without downloading them again.** Copy `F:\AI\Strata-data` to the Linux drive:
+   the model, the image encoder and the MTP draft layer, with the `.done` markers setup checks. It holds one folder
+   per size under `models\` and `packs\` (IQ2_XS 73 GB in all; IQ3_XXS added 2026-10-04, ~80 GB more). Copy only the
+   size you will run. The command below copies IQ3_XXS and skips IQ2_XS; swap the names for the other one.
 
    ```bash
    git clone https://github.com/Niko1221/Strata.git ~/strata
-   rsync -a --info=progress2 /mnt/f/AI/Strata-data/ ~/strata-data/     # ~10-15 min NVMe to NVMe
+   rsync -a --info=progress2 --exclude 'models/IQ2_XS' --exclude 'packs/iq2_xs' \
+     /mnt/f/AI/Strata-data/ ~/strata-data/       # ~10-15 min NVMe to NVMe
    ```
+
+   Keep it on the Linux drive (ext4), not read from F: through `/mnt/f`. Strata reads its 29 GB n-gram table at
+   random, a few rows per token, bypassing the file cache, so that table must sit on a fast native filesystem.
 
 4. **Run setup**, with the same choices as the Windows install:
 
    ```bash
    cd ~/strata
    CXX=g++-14 CUDAHOSTCXX=g++-14 STRATA_NVCC=$(ls -d /usr/local/cuda-13*/bin/nvcc | tail -1) \
-     ./setup.sh --yes --family qwen --model IQ2_XS --gpus 0,1 --vision gpu --context 262144 \
+     ./setup.sh --yes --family qwen --model IQ3_XXS --gpus 0,1 --vision gpu --context 262144 \
      --port 8411 --data-dir ~/strata-data --no-browser --no-start
    ```
 
-   It should report the model files as present. It compiles the engine and the image encoder, may prepare the model
-   again (minutes), and writes `run-iq2_xs.sh`. If the compile fails, see the Strata repo's `docs/TROUBLESHOOTING.md`
-   ("Linux: the engine does not compile").
+   Use the size the Windows test settled on (README's Strata section says which). The commands here show IQ3_XXS;
+   for IQ2_XS swap `IQ3_XXS`/`iq3_xxs` for `IQ2_XS`/`iq2_xs`. It should report the model files as present. It
+   compiles the engine and the image encoder, may prepare the model again (minutes), and writes `run-iq3_xxs.sh`. If
+   the compile fails, see the Strata repo's `docs/TROUBLESHOOTING.md` ("Linux: the engine does not compile").
 5. **Start and check it:**
 
    ```bash
-   ./run-iq2_xs.sh                 # in its own terminal; Ctrl+C stops it
+   ./run-iq3_xxs.sh                # in its own terminal; Ctrl+C stops it
    curl -s http://127.0.0.1:8411/health          # "loaded": true, "images": true
    ```
+
+6. **Try the RAM-saving mode (Linux only).** By default Strata copies every expert into RAM, though the two GPUs
+   already hold about half of them and serve 99.9% of decode lookups. `STRATA_ARENA_MMAP=1` (opt-in, engine 0.1.39)
+   maps the experts from the drive instead and gives back the pages of the experts a GPU holds. Strata's docs say to
+   run it with `--pcie-frac 0`. Add both to `strata-iq3_xxs.json` (`"env": {"STRATA_ARENA_MMAP": "1"}`, and
+   `"--pcie-frac", "0"` in `args`), restart, and compare `free -g` and decode speed with and without it.
 
    The start log should show **no** 8 GiB pinning cap: on Linux the whole expert arena is pinned. That is the main
    reason Linux should read prompts faster on two cards.
@@ -194,8 +207,8 @@ The Windows numbers are in [README.md](../README.md#strata-qwen38-flash-next-125
 
 ```bash
 cd /mnt/f/AI/llama-serve
-pwsh ./test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model qwen3.8-flash-next-iq2_xs -Runs 3
-pwsh ./bench-depth.ps1 -Model qwen3.8-flash-next-iq2_xs -BaseUrl http://127.0.0.1:8411
+pwsh ./test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model qwen3.8-flash-next-iq3_xxs -Runs 3
+pwsh ./bench-depth.ps1 -Model qwen3.8-flash-next-iq3_xxs -BaseUrl http://127.0.0.1:8411
 ```
 
 `bench-depth.ps1` calls `curl.exe` and `nvidia-smi`. On Linux `curl.exe` doesn't exist, so the script needs a small

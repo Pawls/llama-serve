@@ -72,28 +72,32 @@ one. 26.04 needs CUDA 13.x and g++-14 installed by hand (guide §4). This slice 
 **After:** U2
 
 - [ ] `cuda-toolkit-13-x` from NVIDIA's ubuntu2604 repository and `g++-14` installed; `nvcc --version` says 13.x
-- [ ] `~/strata` cloned; `F:\AI\Strata-data` copied whole to `~/strata-data` (73 GB)
+- [ ] `~/strata` cloned; the size Windows settled on (README's Strata section) copied from `F:\AI\Strata-data` to
+      `~/strata-data`, the other size excluded (guide §4.3)
 - [ ] `./setup.sh` with the guide's flags finishes with `[ok] engine compiled` and the image encoder built,
       without downloading the model again
-- [ ] `./run-iq2_xs.sh` reaches `ready:`; the start log shows the whole expert arena pinned (no 8 GiB cap)
+- [ ] `./run-<size>.sh` reaches `ready:`; the start log shows the whole expert arena pinned (no 8 GiB cap)
 - [ ] Verify: `/health` says `loaded: true, images: true`
-- [ ] Verify: `pwsh ./test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model qwen3.8-flash-next-iq2_xs -Runs 3`
-      passes 3/3
+- [ ] Verify: `pwsh ./test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id> -Runs 3` passes 3/3
 - [ ] Verify: the image test from the Windows session (a PNG with "7319" in blue) is read correctly
-- [ ] Record the start time and VRAM per card, compared with Windows (45-50 s; 22.0 / 20.6 GB)
+- [ ] Record the start time, VRAM per card and `free -g` while loaded, compared with Windows
+- [ ] Try `STRATA_ARENA_MMAP=1` with `--pcie-frac 0` (guide §4.6): record the RAM it gives back (estimate ~16 GiB
+      for IQ2_XS) and the decode speed, with and without it
 
 **Cancel if:** the build fails after both documented fixes (g++-14, a CUDA 13.x toolkit; Strata's
 `docs/TROUBLESHOOTING.md`). Open a Strata issue with the log instead of patching the engine here.
 
 ### U4 — Linux vs Windows benchmark recorded · Opus 5.5 / medium {#u4}
 
-**Status:** not started. The Windows baseline is `logs/bench-depth-20261004-2030.txt`.
+**Status:** not started. Windows baselines: IQ2_XS in `logs/bench-depth-20261004-2030.txt`; IQ3_XXS from the
+2026-10-04 night run (README's Strata section).
 **Touches:** `bench-depth.ps1`, `README.md`, `logs/`
 **After:** U3
 
 - [ ] `bench-depth.ps1` runs on Linux pwsh: `curl` instead of `curl.exe` when not on Windows. Verify that a Windows run
       still works (2k depth only is enough)
-- [ ] Full matrix on Linux: `pwsh ./bench-depth.ps1 -Model qwen3.8-flash-next-iq2_xs -BaseUrl http://127.0.0.1:8411`
+- [ ] Full matrix on Linux: `pwsh ./bench-depth.ps1 -Model <model id> -BaseUrl http://127.0.0.1:8411`, the same
+      size as the Windows baseline it is compared with
 - [ ] Prompt speed compared on fresh tokens at 52k and 128k (Windows: ~3,100-3,200 t/s), from the prefill rows
 - [ ] README.md Strata section: a Linux column next to the Windows numbers, with the date
 - [ ] Decision written in the README: whether Linux is worth booting for Strata, from the measured difference
