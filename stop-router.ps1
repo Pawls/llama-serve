@@ -1,8 +1,6 @@
 # Stops the router and any model it has loaded, freeing both GPUs.
+# The llama-router logon task runs the tray app, which stays up and shows the router as stopped.
 $ErrorActionPreference = 'Stop'
-
-$task = Get-ScheduledTask -TaskName 'llama-router' -ErrorAction SilentlyContinue
-if ($task -and $task.State -eq 'Running') { Stop-ScheduledTask -TaskName 'llama-router' }
 
 # The router runs each loaded model as a child llama-server; stopping the task does not always reach them.
 $procs = Get-Process llama-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'F:\AI\llama.cpp\*' }

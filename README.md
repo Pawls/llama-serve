@@ -21,9 +21,25 @@ Pi ──> router :8410 ──> presets.ini says how ──> child llama-server 
 
 ## Everyday use
 
-### It starts by itself
+### It starts by itself, in the system tray
 
-A Windows Scheduled Task named `llama-router` starts the router when you log in. It runs hidden and uses no GPU memory until a model is requested.
+A Windows Scheduled Task named `llama-router` starts the **Llama Router** tray app when you log in, and the tray app starts the router without a window. The router uses no GPU memory until a model is requested. If you quit the tray, start it again from the Start menu (**Llama Router**).
+
+The llama icon's color shows the state: grey stopped, blue ready with no model, amber loading or stopping, green model loaded. Click it (left or right) for the menu:
+
+| Menu item | Does |
+|---|---|
+| Status line, GPU memory | What's loaded, and each card's VRAM use when the menu opens |
+| Load model | Loads a preset, replacing the current one; a notification says when it's ready or if it failed |
+| Unload model | Frees the GPUs, keeps the router running |
+| Open chat in browser | llama.cpp's built-in chat page at `http://127.0.0.1:8410/` |
+| Open server log, Edit presets.ini, Open llama-serve folder | Opens them |
+| Stop / Start router, Restart router | Restart after editing `presets.ini` |
+| Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
+| Start with Windows | Turns the logon task on or off |
+| Quit | Stops the router and closes the tray |
+
+If the router is already running when the tray starts (for example in a window), the tray uses it instead of starting another.
 
 ### Using it from Pi
 
@@ -33,15 +49,19 @@ A Windows Scheduled Task named `llama-router` starts the router when you log in.
 
 The footer shows the context size, e.g. `0.0%/262k`. On models that can think, the thinking level appears once the model is selected or after the first message. `Shift+Tab` cycles thinking on and off.
 
+### Using it from VS Code chat
+
+VS Code's own chat lists every router preset (group **llama.cpp Router**) and Strata (group **Strata**) in its model picker. They come from VS Code's custom endpoint provider, configured in `%APPDATA%\Code\User\chatLanguageModels.json`. That file was generated from `presets.ini` on 2026-10-04: image support and context sizes come from each preset, and tool calling is on for all. After adding a preset, add its entry there too, or regenerate the file.
+
 ### Start, stop, restart
 
-Run these from PowerShell.
+The tray menu covers these. From PowerShell:
 
 | To | Run |
 |---|---|
-| Start (in the background, as at login) | `Start-ScheduledTask llama-router` |
-| Stop (frees both GPUs) | `F:\AI\llama-serve\stop-router.ps1` |
-| Restart (after editing `presets.ini`) | stop, then start |
+| Start the tray (and the router), as at login | `Start-ScheduledTask llama-router` |
+| Stop (frees both GPUs; the tray stays and shows it stopped) | `F:\AI\llama-serve\stop-router.ps1` |
+| Restart (after editing `presets.ini`) | stop, then start from the tray menu |
 | Start in a visible window, to watch the log live | `F:\AI\llama-serve\start-router.ps1` (Ctrl+C stops it) |
 | Is it running? | `Invoke-RestMethod http://127.0.0.1:8410/models \| % data \| select id, @{n='status';e={$_.status.value}}` |
 
@@ -55,14 +75,14 @@ Invoke-RestMethod http://127.0.0.1:8410/models/unload -Method Post -ContentType 
 
 ## The models
 
-Every model below was loaded and checked on 2026-09-14: correct answer, image test where it has vision, clean load log, and VRAM under the limit. Speeds are from one short coding reply each, so they're rough, not a benchmark.
+Every model below was loaded and checked on 2026-09-14: correct answer, image test where it has vision, clean load log, and VRAM under the limit. Speeds are from one short coding reply each, so they're rough, not a benchmark. The two Swift rows were re-checked the same way on 2026-09-28, after the swap to Swift 1.5.
 
 | Pi name | What it is | Context | Images | Thinking by default | Speed | GPUs |
 |---|---|---|---|---|---|---|
 | `qwen3.8-27b` | Default. Best all-rounder, the most-validated config | 262k | yes | on | ~57 t/s | both |
 | `qwen3.8-27b-dflash2` | Same model, DFlash2 speed-up drafter; faster than the default, most at long context | 262k | yes | on | ~55-59 t/s (~42 at 128k) | both |
-| `swift-qwen3.8-27b-dflash2` | Swift: Qwen3.8 retrained to think less; about a quarter fewer thinking tokens, same answers in our tests | 262k | yes | on | ~74 code / ~47 prose (~50 / ~31 at 128k) | both |
-| `swift-qwen3.8-27b` | Swift with the built-in MTP drafter; only faster for short prose chats | 262k | yes | on | ~65 code / ~53 prose (~38 / ~30 at 128k) | both |
+| `swift-qwen3.8-27b-dflash2` | Swift 1.5: Qwen3.8 retrained to think less (1.0 used about a quarter fewer thinking tokens, same answers in our tests) | 262k | yes | on | ~76 code / ~48 prose (~52 / ~32 at 128k) | both |
+| `swift-qwen3.8-27b` | Swift 1.5 with the built-in MTP drafter; only faster for short prose chats | 262k | yes | on | ~67 code / ~53 prose (~38 / ~31 at 128k) | both |
 | `qwen3.8-27b-nopreserve` | Same as default, but earlier turns' thinking is dropped (BoxelBuilder) | 262k | yes | on | ~54 t/s | both |
 | `qwen3.8-fable-q5` | Qwen3.8 fine-tune tuned for coding (uncensored) | 262k | yes | on | ~59 t/s | both |
 | `qwen3.6-35b-a3b` | Older Qwen, very fast (only 3B active) | 262k | yes | off | ~112 t/s | both |
@@ -79,6 +99,30 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small "drafter" that guesses tokens ahead for the big model to check. The output is the same model's; only speed changes. Speeds for these come from the 2026-09-14 benchmark (5 runs each, coding and essay prompts). A drafter that guesses code well can guess prose badly, so the `-dflash` coder and 26B lanes are for coding sessions.
 
 "Thinking by default" is the preset's setting. **Pi overrides it:** when you pick a model that supports thinking, Pi switches thinking on (`medium`), and Pi's choice wins. Press `Shift+Tab` to turn it off for fast answers. `qwen3-coder-30b` has no thinking mode, and Muse-Glimmer always reasons.
+
+## Strata: Qwen3.8-Flash-Next (125B MoE)
+
+[Strata](https://github.com/Niko1221/Strata) is a separate engine, installed in `F:\AI\strata` (model files in `F:\AI\Strata-data`). It runs only Qwen3.8-Flash-Next and its variants: the Coder, Swift 1.5, and Unsloth's 4-bit builds. It keeps all 512 experts per layer in RAM and caches the busiest ones on both GPUs. The router can't host it, because every router model is a `llama-server` child, so Strata runs as its own server on `http://127.0.0.1:8411`.
+
+**Start it** from the tray (**Start Strata**), or run `F:\AI\llama-serve\start-strata.ps1`. It is not started at login, because loading pins about 39 GB of RAM and can make the PC unresponsive for up to a minute. Once started, it unloads its model after 15 minutes idle, and the next request loads it again (about 45 s). **In Pi** it is `qwen3.8-flash-next-iq2_xs` under the `strata` provider (`~\.pi\agent\models.json`). Thinking levels are off / low / medium / high. **In Hermes** it is the `strata` provider (`hermes --provider strata`). Its first turn takes ~20 s, because Hermes sends a ~32k-token system prompt.
+
+**Only one of the two holds the GPUs at a time:**
+
+- Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
+- The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
+
+Measured 2026-10-04 (IQ2_XS, both GPUs, 262k context, images on):
+
+| Check | Result |
+|---|---|
+| Code reply (`bench-depth.ps1`, 2k / 52k / 128k context) | 133 / 130 / 117 t/s net; `qwen3.8-27b-dflash2` gets 72 / 63 / 50 |
+| Essay reply, same depths | 100 / 93 / 82 t/s net; `qwen3.8-27b-dflash2` gets 46 / 38 / 31 |
+| Reading a long prompt | ~3,100-3,200 t/s on new tokens at 52k-128k; ~1,000 t/s on a 2k prompt |
+| Start or reload | 45-50 s; 22.0 / 20.6 GB VRAM, ~39 GB RAM |
+| Tool calls (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`) | 3/3 |
+| Image | read "7319" and its color correctly |
+
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s` and `before_load` back afterwards. `F:\AI\strata\UPDATE.bat` updates the engine.
 
 ## Changing things
 
@@ -101,6 +145,14 @@ Keys are llama-server's command-line flags without the leading `--`. Settings un
 
 Unsloth Studio stores downloads in `F:\AI\models\llm\hub`. Run `F:\AI\llama-serve\link-hub-models.ps1` to preview, then add `-Apply`, to hardlink them into the normal library. Hardlinks use no extra disk.
 
+### Overthinking logit bias (tested 2026-09-28, not adopted)
+
+A -2 logit bias on "wait", "maybe", "however" and similar words (arXiv 2606.00206) shortens thinking. `bench-thinking.ps1` measured it at medium effort on 30 math and 20 coding tasks. On `qwen3.8-27b-dflash2` the paper's 49-token list cut math thinking by 13% (median) and 42% (mean) and kept every answer; coding was unchanged. On the Swift lanes it saved nothing, and unbiased Swift 1.5 already thinks as little as the biased base model. For less thinking, use Swift.
+
+It can't go in `presets.ini` on build b10951: a `logit-bias` value keeps only its first entry (`466-2,694-2` biases only 466), and a repeated key keeps only the last. A client can still send `logit_bias` per request (OpenAI format), which applies every entry.
+
+To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Model <name> -ListTokens` to see which of its tokens would be biased (the words are resolved to that model's own token ids), then `.\bench-thinking.ps1 -Model <name>` for the full A/B (about 1-2 hours for a 27B model).
+
 ## When something is wrong
 
 | Symptom | Check |
@@ -109,6 +161,7 @@ Unsloth Studio stores downloads in `F:\AI\models\llm\hub`. Run `F:\AI\llama-serv
 | A model is suddenly very slow (several times slower than usual) | It didn't fit in VRAM and Windows spilled into system RAM. Run `nvidia-smi`: a card near 24,576 MiB used is the culprit. Close other GPU programs, or lower `ctx-size` for that model. |
 | Speeds or memory look off after changing a preset | `Select-String -Path F:\AI\llama-serve\logs\server.log -Pattern 'retrying without pipeline'`. Any hit means the model loaded in a degraded mode; the preset needs less context or a different `tensor-split`. |
 | A model fails to load | Read the end of `F:\AI\llama-serve\logs\server.log`. The previous boot's log is `server.prev.log`. |
+| A router model fails to load while Strata is running | The tray wasn't running to unload Strata. Use **Unload Strata model** in the tray, or `stop-strata.ps1`, and retry. Strata's own log: `logs\strata.log`; engine log: `F:\AI\strata\strata-iq2_xs.log`. |
 | Port 8410 is busy | Another router is already running (for example one started in a window). Stop it first. |
 
 ## Files
@@ -118,9 +171,15 @@ Unsloth Studio stores downloads in `F:\AI\models\llm\hub`. Run `F:\AI\llama-serv
 | `presets.ini` | The model list and each model's settings. |
 | `start-router.ps1` | Starts the router: pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
 | `stop-router.ps1` | Stops the router and any loaded model. |
+| `start-strata.ps1` / `stop-strata.ps1` | Start Strata on port 8411 (after unloading the router's model), logging to `logs\strata.log`, and stop it. |
+| `unload-router-model.ps1` | Unloads the router's model and waits until its VRAM is free. Strata runs it before every load. |
+| `tray\LlamaTray.cs` | The tray app. It starts and stops the router and Strata through the scripts above, and unloads Strata when a router model loads. |
+| `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing `LlamaTray.cs`. |
 | `bench-depth.ps1` | Speed bench at ~2k / 52k / 128k context, for choosing between drafter lanes. Results in `logs\bench-depth-*.txt`. |
+| `bench-thinking.ps1` | Thinking-token and accuracy A/B of logit-bias arms (`bench\logit-bias-arms.json`) on math and code tasks (`bench\tasks-*.jsonl`). Results in `logs\bench-thinking-*.txt`. |
 | `test-tool-calls.ps1` | Checks that every model's tool calls parse and round-trip. |
 | `link-hub-models.ps1` | Hardlinks Unsloth Studio downloads into the library. |
+| `docs/ubuntu-setup.md`, `plans/ubuntu-dual-boot.md` | Guide and plan for an Ubuntu 26.04 dual boot on the spare NVMe, to measure Strata on Linux. |
 
 Why port 8410: 8080 is taken by signal-cli in WSL, and the club-3090 WSL stack uses 8020-8213. Pi finds the router through the user environment variable `LLAMA_BASE_URL=http://127.0.0.1:8410/v1`.
 
