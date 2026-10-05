@@ -7,7 +7,8 @@
 # own token ids, so any preset works. Biases are sent per request, so the model loads once; arms alternate within
 # each task so drift hits every arm alike. Writes logs\bench-thinking-<stamp>.jsonl and a .txt summary.
 # -Resume appends to an earlier run and skips what it already has.
-# Code tests run in a throwaway interpreter (uv run --no-project). Needs the router on :8410.
+# Code tests run in a throwaway interpreter (uv run --no-project). Needs the router on :8410, or -BaseUrl for
+# another server (Strata: http://127.0.0.1:8411, with -Arms off since biases need /tokenize).
 param(
     [Parameter(Mandatory)][string]$Model,
     [string[]]$Arms = @('off', 'paper', 'narrow'),

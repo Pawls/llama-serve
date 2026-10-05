@@ -111,16 +111,34 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Measured 2026-10-04 (IQ2_XS, both GPUs, 262k context, images on):
+Two sizes are installed. IQ2_XS is the default; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
-| Check | Result |
-|---|---|
-| Code reply (`bench-depth.ps1`, 2k / 52k / 128k context) | 133 / 130 / 117 t/s net; `qwen3.8-27b-dflash2` gets 72 / 63 / 50 |
-| Essay reply, same depths | 100 / 93 / 82 t/s net; `qwen3.8-27b-dflash2` gets 46 / 38 / 31 |
-| Reading a long prompt | ~3,100-3,200 t/s on new tokens at 52k-128k; ~1,000 t/s on a 2k prompt |
-| Start or reload | 45-50 s; 22.0 / 20.6 GB VRAM, ~39 GB RAM |
-| Tool calls (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`) | 3/3 |
-| Image | read "7319" and its color correctly |
+| Check | IQ2_XS | IQ3_XXS |
+|---|---|---|
+| Code reply (`bench-depth.ps1`, 2k / 52k / 128k context) | 133 / 130 / 117 t/s net; `qwen3.8-27b-dflash2` gets 72 / 63 / 50 | 130 / 120 / 109 t/s |
+| Essay reply, same depths | 100 / 93 / 82 t/s net; `qwen3.8-27b-dflash2` gets 46 / 38 / 31 | 92 / 89 / 83 t/s |
+| Reading a long prompt | ~3,100-3,200 t/s on new tokens at 52k-128k; ~1,000 t/s on a 2k prompt | ~2,800-2,950 t/s at 52k-128k; ~830-900 t/s on a 2k prompt |
+| Experts cached on the GPUs | 93% | 76% |
+| Start or reload | 45-50 s; 22.0 / 20.6 GB VRAM, ~39 GB RAM in use, 81 GB committed | ~90 s first start, ~48 s reload; 22.6 / 23.5 GB VRAM, 38-43 GB RAM in use, 88-90 GB committed |
+| Free RAM while serving | ~4.6 GB (median) | ~1.8 GB (median); 32 MB at the low point of the first start |
+| Tool calls (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`) | 3/3 | 3/3 |
+| Image | read "7319" and its color correctly | not tested |
+
+The first IQ3_XXS start of the night, with VS Code and the usual background apps open, decoded at only 15-45 t/s for about 20 minutes while Windows paged memory out (`logs\bench-depth-20261004-2324.txt`). The IQ3_XXS speeds above are from a second run straight after it. A reload right after an unload ran at full speed from its first reply.
+
+Thinking, from `bench-thinking.ps1 -Arms off -Effort medium` (20 HumanEval and 30 MATH tasks, 32,768-token cap):
+
+| | IQ2_XS | IQ3_XXS | `qwen3.8-27b-dflash2` |
+|---|---|---|---|
+| Code passed | 19/20 | 20/20 | 20/20 |
+| Code thinking tokens, median / mean | 346 / 453 | 429 / 435 | 418 / 512 |
+| Math passed | 29/30 | 29/30 | 30/30 |
+| Math thinking tokens, median / mean | 982 / 3,980 | 654 / 3,718 | 896 / 3,867 |
+| Wall time, code + math | 1.8 + 18.0 min | 1.9 + 17.6 min | 3.1 + 34.6 min |
+
+These sets are near the ceiling, so equal scores only show that nothing broke, not that the sizes are equally good. Each size's math miss was one task that thought until the cap (IQ3_XXS on algebra/686, IQ2_XS on precalculus/989). Run twice more, the same task was right both times, so neither failure repeats. Per task, the two sizes think about the same amount (IQ3_XXS / IQ2_XS median ratio 0.99 over 48 tasks).
+
+**IQ2_XS stays the default.** IQ3_XXS scored the same here and is 3-8% slower, and it leaves under 2 GB of RAM free, so it can page and slow down when other apps hold memory, as on its first start. Use it when the PC is otherwise idle.
 
 To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s` and `before_load` back afterwards. `F:\AI\strata\UPDATE.bat` updates the engine.
 
