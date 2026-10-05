@@ -112,15 +112,22 @@ function Invoke-Chat($Task, [string]$Arm) {
     @{ response = $response; wall = $clock.Elapsed.TotalSeconds }
 }
 
-# Servers without /tokenize (Strata) fall back to their own reasoning count, or $null when they report none.
+# Prompt tokens of one user turn holding $Text, by the server's Anthropic count_tokens endpoint.
+function Get-PromptTokens([string]$Text) {
+    $body = @{ model = $Model; max_tokens = 1; messages = @(@{ role = 'user'; content = $Text }) } | ConvertTo-Json -Depth 4
+    $result = Invoke-RestMethod "$BaseUrl/v1/messages/count_tokens" -Method Post -ContentType 'application/json; charset=utf-8' `
+        -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 600
+    $result.input_tokens
+}
+
+# Servers without /tokenize (Strata) fall back to their own reasoning count, then to count_tokens on the text minus
+# count_tokens on an empty turn (the chat template's tokens cancel), then $null.
 function Measure-Tokens([string]$Text, $Usage) {
     if (-not $Text) { return 0 }
-    try {
-        return (Get-TokenIds $Text).Count
-    }
-    catch {
-        return $Usage.completion_tokens_details.reasoning_tokens
-    }
+    try { return (Get-TokenIds $Text).Count } catch { }
+    $reported = $Usage.completion_tokens_details.reasoning_tokens
+    if ($null -ne $reported) { return $reported }
+    try { return (Get-PromptTokens $Text) - (Get-PromptTokens '') } catch { $null }
 }
 
 function Measure-Words([string]$Text, [string[]]$Words) {
