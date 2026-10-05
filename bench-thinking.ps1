@@ -112,9 +112,15 @@ function Invoke-Chat($Task, [string]$Arm) {
     @{ response = $response; wall = $clock.Elapsed.TotalSeconds }
 }
 
-function Measure-Tokens([string]$Text) {
+# Servers without /tokenize (Strata) fall back to their own reasoning count, or $null when they report none.
+function Measure-Tokens([string]$Text, $Usage) {
     if (-not $Text) { return 0 }
-    (Get-TokenIds $Text).Count
+    try {
+        return (Get-TokenIds $Text).Count
+    }
+    catch {
+        return $Usage.completion_tokens_details.reasoning_tokens
+    }
 }
 
 function Measure-Words([string]$Text, [string[]]$Words) {
@@ -198,7 +204,7 @@ function Invoke-Run($Task, [string]$Arm, [int]$Sample) {
     $row.detail = $check.detail
     $row.finish = $call.response.choices[0].finish_reason
     $row.completion_tokens = $call.response.usage.completion_tokens
-    $row.reasoning_tokens = Measure-Tokens $reasoning
+    $row.reasoning_tokens = Measure-Tokens $reasoning $call.response.usage
     $row.markers_narrow = Measure-Words $reasoning $NarrowWords
     $row.markers_paper = Measure-Words $reasoning $PaperWords
     if ($Task.set -eq 'code') { $row.or_in_code = Measure-Words $check.code @('or') }
@@ -219,11 +225,12 @@ function Get-Median([double[]]$Values) {
 
 function Get-ArmSummary($Rows, $Baseline) {
     $done = @($Rows | Where-Object finish -ne 'error')
+    $counted = @($done | Where-Object { $null -ne $_.reasoning_tokens })   # rows whose server gave a token count
     $row = [ordered]@{
         n           = $done.Count
         pass        = '{0}/{1}' -f @($done | Where-Object ok).Count, $done.Count
-        med_think   = [int](Get-Median ($done | ForEach-Object reasoning_tokens))
-        mean_think  = $done.Count ? [int]($done | Measure-Object reasoning_tokens -Average).Average : $null
+        med_think   = $counted.Count ? [int](Get-Median ($counted | ForEach-Object reasoning_tokens)) : $null
+        mean_think  = $counted.Count ? [int]($counted | Measure-Object reasoning_tokens -Average).Average : $null
         truncated   = @($done | Where-Object finish -eq 'length').Count
         errors      = $Rows.Count - $done.Count
         narrow_per_k = $null
@@ -231,10 +238,10 @@ function Get-ArmSummary($Rows, $Baseline) {
         vs_off      = ''
         flips       = ''
     }
-    $thinkTotal = ($done | Measure-Object reasoning_tokens -Sum).Sum
+    $thinkTotal = ($counted | Measure-Object reasoning_tokens -Sum).Sum
     if ($thinkTotal) {
-        $row.narrow_per_k = [math]::Round(1000 * ($done | Measure-Object markers_narrow -Sum).Sum / $thinkTotal, 2)
-        $row.paper_per_k = [math]::Round(1000 * ($done | Measure-Object markers_paper -Sum).Sum / $thinkTotal, 1)
+        $row.narrow_per_k = [math]::Round(1000 * ($counted | Measure-Object markers_narrow -Sum).Sum / $thinkTotal, 2)
+        $row.paper_per_k = [math]::Round(1000 * ($counted | Measure-Object markers_paper -Sum).Sum / $thinkTotal, 1)
     }
     if (-not $Baseline) { return $row }
 
@@ -243,9 +250,9 @@ function Get-ArmSummary($Rows, $Baseline) {
     $lost = 0
     $gained = 0
     foreach ($r in $done) {
-        $base = $Baseline | Where-Object { $_.id -eq $r.id -and $_.sample -eq $r.sample -and $_.finish -ne 'error' } | Select-Object -First 1
+        $base =$Baseline | Where-Object { $_.id -eq $r.id -and $_.sample -eq $r.sample -and $_.finish -ne 'error' } | Select-Object -First 1
         if (-not $base) { continue }
-        if ($base.reasoning_tokens) { $ratios += $r.reasoning_tokens / $base.reasoning_tokens }
+        if ($base.reasoning_tokens -and $null -ne $r.reasoning_tokens) { $ratios +=$r.reasoning_tokens / $base.reasoning_tokens }
         if ($base.ok -and -not $r.ok) { $lost++ }
         if ($r.ok -and -not $base.ok) { $gained++ }
     }
