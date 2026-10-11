@@ -19,6 +19,17 @@ if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'server.prev.log'
 
 # 8410: signal-cli holds 8080 (WSL mirrored networking shares the port namespace) and club-3090
 # compose lanes claim 8020-8213 when up. Pi reaches it through user-scope LLAMA_BASE_URL.
+
+# The router's own --sleep-idle-seconds is not passed to its child servers; only a preset key is. So the idle
+# setting goes into a generated copy of presets.ini, leaving the hand-edited file untouched.
+. (Join-Path $Root 'tray-settings.ps1')
+$IdleMinutes = Get-TraySetting 'RouterIdleMinutes'
+if ($IdleMinutes -gt 0) {
+    $Presets = Join-Path $LogDir 'presets.run.ini'
+    $text = Get-Content (Join-Path $Root 'presets.ini') -Raw
+    $text -replace '(?m)^\[\*\]\r?$', "[*]`nsleep-idle-seconds = $($IdleMinutes * 60)" | Set-Content $Presets -NoNewline
+}
+
 $ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host 127.0.0.1 --port 8410"
 # cmd merges stderr at the OS level, so Tee-Object receives plain lines rather than PowerShell ErrorRecords.
 cmd /c "$ArgLine 2>&1" | Tee-Object -FilePath $Log

@@ -12,6 +12,7 @@ The **router** is `llama-server` started in a special mode. It doesn't load a mo
 2. Listens on `http://127.0.0.1:8410` and tells clients which models it offers.
 3. When a request names a model, it **loads that model on demand** (a child `llama-server` process, ~15-60 s), then answers.
 4. Only one model is loaded at a time (`--models-max 1`). Asking for a different model unloads the current one first.
+5. Keeps a model loaded until told otherwise, unless you pick an idle time in the tray. Then `start-router.ps1` writes `logs\presets.run.ini` (a copy of `presets.ini` plus `sleep-idle-seconds`) and starts from it. An idle model goes to `sleeping` in `/models`: its VRAM is free, the process stays, and the next request wakes it. Tested 2026-10-11 with `gemma4-26b-a4b` at 15 s: VRAM fell to 0 on GPU 1 and the next request answered.
 
 So you never pick flags or load models by hand. You pick a model in Pi, and the router does the rest.
 
@@ -37,6 +38,7 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Stop / Start router, Restart router | Restart after editing `presets.ini` |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
+| Router models: free GPUs when idle, Strata: unload when idle | How long a model sits unused before it frees the GPUs: never, 15 / 30 minutes, 1 / 2 / 4 hours. Defaults: router never, Strata 15 minutes. Saved in `tray-settings.json` and used at the next router or Strata start |
 | Start with Windows | Turns the logon task on or off |
 | Quit | Stops the router and closes the tray |
 

@@ -6,7 +6,9 @@ $Router = 'http://127.0.0.1:8410'
 try { $models = (Invoke-RestMethod "$Router/models" -TimeoutSec 5).data }
 catch { Write-Host 'Router is not answering; nothing to unload.'; return }
 
-$active = @($models | Where-Object { $_.status.value -ne 'unloaded' })
+# A sleeping model (see tray-settings.json) has already freed its VRAM.
+$holdsGpus = { $_.status.value -notin 'unloaded', 'sleeping' }
+$active = @($models | Where-Object $holdsGpus)
 if (-not $active) { Write-Host 'Router has no model loaded.'; return }
 
 foreach ($model in $active) {
@@ -18,7 +20,7 @@ foreach ($model in $active) {
 # The router answers before the child exits; its VRAM is only free once the status says unloaded.
 $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline) {
-    $still = @((Invoke-RestMethod "$Router/models" -TimeoutSec 5).data | Where-Object { $_.status.value -ne 'unloaded' })
+    $still = @((Invoke-RestMethod "$Router/models" -TimeoutSec 5).data | Where-Object $holdsGpus)
     if (-not $still) { Write-Host 'Router model unloaded.'; return }
     Start-Sleep -Milliseconds 500
 }

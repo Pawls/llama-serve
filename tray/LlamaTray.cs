@@ -248,6 +248,39 @@ sealed class ScriptProcess
     }
 }
 
+// tray-settings.json holds the idle-unload choices that start-router.ps1 and start-strata.ps1 read at launch.
+// Minutes of idleness before a model frees its VRAM; 0 means never.
+static class TraySettings
+{
+    public const string RouterIdleKey = "RouterIdleMinutes";
+    public const string StrataIdleKey = "StrataIdleMinutes";
+
+    public static int GetMinutes(string root, string key, int fallback)
+    {
+        Dictionary<string, object> saved = Load(root);
+        return saved.ContainsKey(key) ? Convert.ToInt32(saved[key]) : fallback;
+    }
+
+    public static void SetMinutes(string root, string key, int minutes)
+    {
+        Dictionary<string, object> saved = Load(root);
+        saved[key] = minutes;
+        File.WriteAllText(PathOf(root), new JavaScriptSerializer().Serialize(saved));
+    }
+
+    static Dictionary<string, object> Load(string root)
+    {
+        string path = PathOf(root);
+        if (!File.Exists(path)) return new Dictionary<string, object>();
+        return new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
+    }
+
+    static string PathOf(string root)
+    {
+        return Path.Combine(root, "tray-settings.json");
+    }
+}
+
 // One row of `memory-saver.ps1 -Mode List`.
 sealed class SaverCandidate
 {
@@ -556,7 +589,7 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
-    ToolStripMenuItem memorySaverItem;
+    ToolStripMenuItem memorySaverItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
 
     StrataState strataState = StrataState.Stopped;
@@ -639,6 +672,8 @@ sealed class TrayApp : ApplicationContext
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
         memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
+        routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
+        strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
 
         autostartItem = new ToolStripMenuItem("Start with Windows", null, (s, e) => ToggleAutostart());
         var quitItem = new ToolStripMenuItem("Quit (stops the router and Strata)", null, (s, e) => Quit());
@@ -655,6 +690,8 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             new ToolStripSeparator(),
+            routerIdleMenu, strataIdleMenu,
+            new ToolStripSeparator(),
             autostartItem, quitItem,
         });
         strip.Opening += (s, e) => OnMenuOpening();
@@ -662,8 +699,44 @@ sealed class TrayApp : ApplicationContext
         return strip;
     }
 
+    static readonly int[] IdleChoicesMinutes = { 0, 15, 30, 60, 120, 240 };
+
+    // A submenu of idle times. The choice is saved at once and used the next time the server starts.
+    ToolStripMenuItem BuildIdleMenu(string title, string key, int defaultMinutes, string serverName)
+    {
+        var parent = new ToolStripMenuItem(title) { Tag = new KeyValuePair<string, int>(key, defaultMinutes) };
+        foreach (int minutes in IdleChoicesMinutes)
+        {
+            int choice = minutes;
+            parent.DropDownItems.Add(new ToolStripMenuItem(IdleLabel(choice), null, (s, e) =>
+            {
+                TraySettings.SetMinutes(root, key, choice);
+                MarkIdleChoice(parent);
+                Notify("Saved. The " + serverName + " uses \"" + IdleLabel(choice) + "\" from its next start.", ToolTipIcon.Info);
+            }) { Tag = choice });
+        }
+        MarkIdleChoice(parent);
+        return parent;
+    }
+
+    static string IdleLabel(int minutes)
+    {
+        if (minutes == 0) return "Never";
+        return minutes < 60 ? minutes + " minutes" : minutes / 60 + (minutes == 60 ? " hour" : " hours");
+    }
+
+    void MarkIdleChoice(ToolStripMenuItem parent)
+    {
+        var setting = (KeyValuePair<string, int>)parent.Tag;
+        int current = TraySettings.GetMinutes(root, setting.Key, setting.Value);
+        foreach (ToolStripMenuItem item in parent.DropDownItems)
+            item.Checked = (int)item.Tag == current;
+    }
+
     async void OnMenuOpening()
     {
+        MarkIdleChoice(routerIdleMenu);
+        MarkIdleChoice(strataIdleMenu);
         bool? autostart = LogonTask.IsEnabled();
         autostartItem.Visible = autostart.HasValue;
         autostartItem.Checked = autostart == true;
@@ -732,6 +805,8 @@ sealed class TrayApp : ApplicationContext
             bool active = activeModel != null && activeModel.Id == id;
             item.Checked = active;
             item.Text = active && activeModel.Status != "loaded" ? id + "  (" + activeModel.Status + "...)" : id;
+            ModelInfo info = models.First(m => m.Id == id);
+            if (info.Status == "sleeping") item.Text = id + "  (asleep, wakes on use)";
         }
     }
 
@@ -779,7 +854,7 @@ sealed class TrayApp : ApplicationContext
             startRequestedAt = null;
             models = SortByPresetOrder(latest);
         }
-        activeModel = latest == null ? null : latest.FirstOrDefault(m => m.Status != "unloaded");
+        activeModel = latest == null ? null : latest.FirstOrDefault(m => m.Status != "unloaded" && m.Status != "sleeping");   // asleep = VRAM already free
         state = Classify(latest);
 
         FollowRequestedLoad();
