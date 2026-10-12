@@ -114,7 +114,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Two sizes are installed. IQ2_XS is the default; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Two sizes are installed. IQ2_XS is the default, and the only one the tray starts; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
@@ -143,7 +143,9 @@ These sets are near the ceiling, so equal scores only show that nothing broke, n
 
 **IQ2_XS stays the default.** IQ3_XXS scored the same here and is 3-8% slower, and it leaves under 2 GB of RAM free, so it can page and slow down when other apps hold memory, as on its first start. Use it when the PC is otherwise idle.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s` and `before_load` back afterwards. `F:\AI\strata\UPDATE.bat` updates the engine.
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load` and `sampling` back afterwards.
+
+**Sampling.** Both configs set `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 
 ### Memory saver
 
