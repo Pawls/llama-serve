@@ -89,16 +89,31 @@ Other moving parts:
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: the `session is up (engine X)` line in `F:\AI\strata\strata-iq2_xs.log`. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
-- **As of 2026-10-11 the installed engine is 0.1.39 and upstream is 0.1.43 (released that day). Not updated yet.**
-  The review of 0.1.40-0.1.43 found these relevant to this PC: CUDA route tail skip on by default (+13-16% decode on
-  single 12-16 GB cards, none when nearly every expert is cached; changes answers slightly), an sm_86 Q3_K kernel, a fix
-  for a Windows layer-split stall, parallel expert reads from GGUF files on Windows (1.35-1.85x on tight-RAM setups),
-  and a NaN guard. No two-3090 Windows measurement exists upstream, so measure before and after. To keep 0.1.41 answers,
-  set `STRATA_ROUTE_TAIL_SKIP=0`, `STRATA_PCIE_FRAC_DEFAULT=old`, `STRATA_PREFILL_CPU_SHARE=0` in the config's `"env"`.
-- To update: record a baseline first ([bench-depth.ps1](./bench-depth.ps1), upstream `BENCH.bat` on 0.1.43+), run
-  `F:\AI\strata\UPDATE.bat`, then confirm the config still has `idle_unload_s` and `before_load` and rerun the bench.
-  **`SETUP.bat` rewrites `strata-*.json`, so re-add `idle_unload_s` and `before_load` after it.** Whether `UPDATE.bat`
-  keeps them is unverified.
+- **Engine 0.1.43 was installed on 2026-10-11 (from 0.1.39); no speed bench has been run on it yet.** The 0.1.39
+  engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine` restores it. What 0.1.40-0.1.43
+  changed for this PC: CUDA route tail skip on by default (+13-16% decode on single 12-16 GB cards, none when nearly
+  every expert is cached; changes answers slightly), an sm_86 Q3_K kernel, a fix for a Windows layer-split stall,
+  parallel expert reads from GGUF files on Windows (1.35-1.85x on tight-RAM setups), and a NaN guard. No two-3090
+  Windows measurement exists upstream. To get 0.1.41 answers back, set `STRATA_ROUTE_TAIL_SKIP=0`,
+  `STRATA_PCIE_FRAC_DEFAULT=old`, `STRATA_PREFILL_CPU_SHARE=0` in the config's `"env"`.
+- **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It pulls
+  the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
+  2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
+  baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
+  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s` and `before_load` after it.**
+- **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
+  `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
+  `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
+  not touched) lets the pull fast-forward. Back up `strata-*.json` and `run-*.bat` first.
+- **Sampling:** the Strata configs have no `sampling` block, so a request that sends no temperature decodes greedy
+  (temperature 0). Pi's `models.json` sets `temperature 1.0, top_p 0.95, top_k 20, presence_penalty 0` in a
+  `samplingParams` entry (the same values as the router's `qwen3.8-27b` preset), and a request's own fields always
+  win. Add `"sampling": {...}` to a config to change the default for clients that send none.
+- **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
+  IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache
+  held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`
+  keeps only a fixed window in VRAM. With the memory saver on and the other apps closed, Paul measured ~53 GB used and
+  ~11 GB free while serving IQ2_XS.
 
 ## Working in this repo
 
