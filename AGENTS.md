@@ -100,15 +100,20 @@ Other moving parts:
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
   2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
   baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
-  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s` and `before_load` after it.**
+  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load` and `sampling` after it.**
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
   not touched) lets the pull fast-forward. Back up `strata-*.json` and `run-*.bat` first.
-- **Sampling:** the Strata configs have no `sampling` block, so a request that sends no temperature decodes greedy
-  (temperature 0). Pi's `models.json` sets `temperature 1.0, top_p 0.95, top_k 20, presence_penalty 0` in a
-  `samplingParams` entry (the same values as the router's `qwen3.8-27b` preset), and a request's own fields always
-  win. Add `"sampling": {...}` to a config to change the default for clients that send none.
+- **Sampling:** without a `sampling` block, a request that sends no temperature decodes greedy (temperature 0), and
+  greedy decoding loops on tool calls. Both Strata configs now carry
+  `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}` (set 2026-10-12, the router's
+  `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
+  these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` drops this block
+  along with `idle_unload_s` and `before_load`.
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq2_xs`, and the tray calls it with
+  no arguments, so the tray always starts IQ2_XS. IQ3_XXS starts only with `.\start-strata.ps1 -Model iq3_xxs`.
+  The router has no size choice; it serves only `presets.ini` models.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`
