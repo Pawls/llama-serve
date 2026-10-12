@@ -12,6 +12,7 @@ The **router** is `llama-server` started in a special mode. It doesn't load a mo
 2. Listens on `http://127.0.0.1:8410` and tells clients which models it offers.
 3. When a request names a model, it **loads that model on demand** (a child `llama-server` process, ~15-60 s), then answers.
 4. Only one model is loaded at a time (`--models-max 1`). Asking for a different model unloads the current one first.
+5. Keeps a model loaded until told otherwise, unless you pick an idle time in the tray. Then `start-router.ps1` writes `logs\presets.run.ini` (a copy of `presets.ini` plus `sleep-idle-seconds`) and starts from it. An idle model goes to `sleeping` in `/models`: its VRAM is free, the process stays, and the next request wakes it. Tested 2026-10-11 with `gemma4-26b-a4b` at 15 s: VRAM fell to 0 on GPU 1 and the next request answered.
 
 So you never pick flags or load models by hand. You pick a model in Pi, and the router does the rest.
 
@@ -36,6 +37,8 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Open server log, Edit presets.ini, Open llama-serve folder | Opens them |
 | Stop / Start router, Restart router | Restart after editing `presets.ini` |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
+| Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
+| Router models: free GPUs when idle, Strata: unload when idle | How long a model sits unused before it frees the GPUs: never, 15 / 30 minutes, 1 / 2 / 4 hours. Defaults: router never, Strata 15 minutes. Saved in `tray-settings.json` and used at the next router or Strata start |
 | Start with Windows | Turns the logon task on or off |
 | Quit | Stops the router and closes the tray |
 
@@ -142,6 +145,20 @@ These sets are near the ceiling, so equal scores only show that nothing broke, n
 
 To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s` and `before_load` back afterwards. `F:\AI\strata\UPDATE.bat` updates the engine.
 
+### Memory saver
+
+Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed.
+
+| Group | Rows | How it closes and reopens |
+|---|---|---|
+| Tested apps | WSL, Docker Desktop, Discord, OneDrive | WSL: `wsl --shutdown`, stopping Docker Desktop first if it runs and restarting it, with its running containers, on reopen. Docker: `docker desktop stop` / `start`, then restarts the containers that were running (`boxel-sonarqube` has no restart policy). Discord and OneDrive restart minimized. |
+| Other apps | Anything in your session above 100 MB that is safe to close, such as Firefox or PowerToys, one row per install folder | Asked to close, then ended like Task Manager's End task after 10 s; reopened with the command line it was started with. Shells, interpreters, VS Code, Claude, this repo's servers, drivers' helpers, security software and Store apps are never offered. |
+| VS Code extensions, services | Extensions' language servers above 100 MB; third-party services above 20 MB | Information only. Free an extension in VS Code; a window opened before you disabled it keeps it until **Developer: Reload Window**. Stopping a service needs admin. |
+
+Measured 2026-10-10: WSL with Docker and SonarQube running freed 6.0 GB (27.4 → 33.4 GB free); Discord, OneDrive and Docker Desktop (VM included) freed 3.3 GB. NVIDIA App and NVIDIA Overlay are not offered: NVIDIA's services restart them within a minute. Turn the overlay off in NVIDIA App's settings instead.
+
+From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the saved ticks, `-Mode On` closes the ticked apps, `-Mode Off` reopens them, and `-Mode List` prints the candidates as JSON.
+
 ## Changing things
 
 ### Add a model
@@ -190,6 +207,7 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | `start-router.ps1` | Starts the router: pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
 | `stop-router.ps1` | Stops the router and any loaded model. |
 | `start-strata.ps1` / `stop-strata.ps1` | Start Strata on port 8411 (after unloading the router's model), logging to `logs\strata.log`, and stop it. |
+| `memory-saver.ps1` | Lists, closes and reopens background apps for the tray's Memory saver. |
 | `unload-router-model.ps1` | Unloads the router's model and waits until its VRAM is free. Strata runs it before every load. |
 | `tray\LlamaTray.cs` | The tray app. It starts and stops the router and Strata through the scripts above, and unloads Strata when a router model loads. |
 | `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing `LlamaTray.cs`. |

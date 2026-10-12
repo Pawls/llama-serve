@@ -248,6 +248,239 @@ sealed class ScriptProcess
     }
 }
 
+// tray-settings.json holds the idle-unload choices that start-router.ps1 and start-strata.ps1 read at launch.
+// Minutes of idleness before a model frees its VRAM; 0 means never.
+static class TraySettings
+{
+    public const string RouterIdleKey = "RouterIdleMinutes";
+    public const string StrataIdleKey = "StrataIdleMinutes";
+
+    public static int GetMinutes(string root, string key, int fallback)
+    {
+        Dictionary<string, object> saved = Load(root);
+        return saved.ContainsKey(key) ? Convert.ToInt32(saved[key]) : fallback;
+    }
+
+    public static void SetMinutes(string root, string key, int minutes)
+    {
+        Dictionary<string, object> saved = Load(root);
+        saved[key] = minutes;
+        File.WriteAllText(PathOf(root), new JavaScriptSerializer().Serialize(saved));
+    }
+
+    static Dictionary<string, object> Load(string root)
+    {
+        string path = PathOf(root);
+        if (!File.Exists(path)) return new Dictionary<string, object>();
+        return new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(path));
+    }
+
+    static string PathOf(string root)
+    {
+        return Path.Combine(root, "tray-settings.json");
+    }
+}
+
+// One row of `memory-saver.ps1 -Mode List`.
+sealed class SaverCandidate
+{
+    public string Id, Kind, Name, Cost;
+    public int PrivateMB;
+    public bool CanClose, Chosen;
+}
+
+// memory-saver.ps1 closes the background apps picked in memory-saver.choices.json to leave Strata more RAM, and
+// reopens them. Its state file says whether it is on, so a switch made from a terminal shows in the menu too.
+static class MemorySaver
+{
+    public static bool IsOn(string root)
+    {
+        return File.Exists(Path.Combine(root, "logs", "memory-saver.json"));
+    }
+
+    public static async Task<List<SaverCandidate>> ListAsync(string root)
+    {
+        string json = await RunAsync(root, "List");
+        var rows = new JavaScriptSerializer().Deserialize<List<Dictionary<string, object>>>(json);
+        return rows.Select(row => new SaverCandidate
+        {
+            Id = (string)row["Id"],
+            Kind = (string)row["Kind"],
+            Name = (string)row["Name"],
+            Cost = (string)row["Cost"],
+            PrivateMB = Convert.ToInt32(row["PrivateMB"]),
+            CanClose = (bool)row["CanClose"],
+            Chosen = (bool)row["Chosen"],
+        }).ToList();
+    }
+
+    // Keeps the choices for apps that were not running, so they are not forgotten while closed.
+    public static void SaveChoices(string root, IEnumerable<string> shownIds, IEnumerable<string> chosenIds)
+    {
+        string path = Path.Combine(root, "memory-saver.choices.json");
+        var serializer = new JavaScriptSerializer();
+        var kept = new List<string>();
+        if (File.Exists(path))
+        {
+            var saved = serializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(path));
+            List<string> previous;
+            if (saved != null && saved.TryGetValue("Close", out previous)) kept.AddRange(previous.Except(shownIds));
+        }
+        kept.AddRange(chosenIds);
+        File.WriteAllText(path, serializer.Serialize(new Dictionary<string, object> { { "Close", kept } }));
+    }
+
+    // Returns the script's summary line; throws with its error when it fails.
+    public static async Task<string> SwitchAsync(string root, bool on)
+    {
+        return LastLine(await RunAsync(root, on ? "On" : "Off"));
+    }
+
+    static Task<string> RunAsync(string root, string mode)
+    {
+        var startInfo = new ProcessStartInfo("pwsh.exe",
+            "-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, "memory-saver.ps1") + "\" -Mode " + mode)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        return Task.Run(() =>
+        {
+            using (Process process = Process.Start(startInfo))
+            {
+                Task<string> errors = process.StandardError.ReadToEndAsync();
+                string output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+                if (process.ExitCode != 0) throw new InvalidOperationException(LastLine(errors.Result) ?? "memory-saver.ps1 failed.");
+                return output;
+            }
+        });
+    }
+
+    static string LastLine(string text)
+    {
+        return text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()).LastOrDefault();
+    }
+}
+
+// The checklist shown before the memory saver closes anything. VS Code extensions and services are listed for
+// their RAM only: the script cannot free them, so their rows cannot be ticked.
+sealed class MemorySaverPicker : Form
+{
+    static readonly string[] GroupTitles =
+    {
+        "known", "Apps with a tested close and reopen",
+        "other", "Other apps (ended like Task Manager's End task if they do not close on request)",
+        "extension", "VS Code extensions (information only: free them in VS Code)",
+        "service", "Services (information only: stopping one needs admin)",
+    };
+
+    readonly ListView list;
+    readonly Label checkedLabel;
+
+    public MemorySaverPicker(List<SaverCandidate> candidates)
+    {
+        Text = "Memory saver";
+        Font = SystemFonts.MessageBoxFont;
+        StartPosition = FormStartPosition.CenterScreen;
+        TopMost = true;
+        MinimizeBox = false;
+        AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(1000, 560);
+
+        var intro = new Label
+        {
+            Dock = DockStyle.Top,
+            AutoSize = false,
+            Height = Font.Height * 3,
+            Padding = new Padding(8, 8, 8, 0),
+            Text = "Tick the apps to close while Strata runs. Your ticks are remembered. Click the menu item again to reopen them.\n"
+                + "RAM is private memory per app. Free RAM now: " + FreeRamText() + ". Hover a row for what you lose while it is closed.",
+        };
+
+        list = new ListView
+        {
+            Dock = DockStyle.Fill,
+            View = View.Details,
+            CheckBoxes = true,
+            FullRowSelect = true,
+            ShowItemToolTips = true,
+            HeaderStyle = ColumnHeaderStyle.Nonclickable,
+        };
+        list.Columns.Add("App", 300);
+        list.Columns.Add("RAM", 90, HorizontalAlignment.Right);
+        list.Columns.Add("While closed", 580);
+        AddRows(candidates);
+        list.ItemCheck += (s, e) => { if (!((SaverCandidate)list.Items[e.Index].Tag).CanClose) e.NewValue = e.CurrentValue; };
+        list.ItemChecked += (s, e) => UpdateCheckedLabel();
+
+        var closeButton = new Button { Text = "Close checked apps", AutoSize = true, DialogResult = DialogResult.OK };
+        var cancelButton = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
+        checkedLabel = new Label { AutoSize = true, Margin = new Padding(3, 8, 24, 3) };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8),
+        };
+        buttons.Controls.AddRange(new Control[] { cancelButton, closeButton, checkedLabel });
+
+        Controls.Add(list);
+        Controls.Add(intro);
+        Controls.Add(buttons);
+        AcceptButton = closeButton;
+        CancelButton = cancelButton;
+        UpdateCheckedLabel();
+    }
+
+    public List<string> ShownIds()
+    {
+        return list.Items.Cast<ListViewItem>().Select(item => ((SaverCandidate)item.Tag).Id).ToList();
+    }
+
+    public List<string> CheckedIds()
+    {
+        return list.CheckedItems.Cast<ListViewItem>().Select(item => ((SaverCandidate)item.Tag).Id).ToList();
+    }
+
+    void AddRows(List<SaverCandidate> candidates)
+    {
+        for (int i = 0; i < GroupTitles.Length; i += 2)
+        {
+            string kind = GroupTitles[i];
+            var group = new ListViewGroup(kind, GroupTitles[i + 1]);
+            list.Groups.Add(group);
+            foreach (SaverCandidate candidate in candidates.Where(c => c.Kind == kind).OrderByDescending(c => c.PrivateMB))
+            {
+                var item = new ListViewItem(new[] { candidate.Name, candidate.PrivateMB.ToString("N0") + " MB", candidate.Cost }, group)
+                {
+                    Tag = candidate,
+                    Checked = candidate.CanClose && candidate.Chosen,
+                    ToolTipText = candidate.Cost,
+                };
+                if (!candidate.CanClose) item.ForeColor = SystemColors.GrayText;
+                list.Items.Add(item);
+            }
+        }
+    }
+
+    void UpdateCheckedLabel()
+    {
+        int total = list.CheckedItems.Cast<ListViewItem>().Sum(item => ((SaverCandidate)item.Tag).PrivateMB);
+        checkedLabel.Text = "Checked: " + (total / 1024.0).ToString("0.0") + " GB";
+    }
+
+    static string FreeRamText()
+    {
+        using (var counter = new PerformanceCounter("Memory", "Available MBytes"))
+            return (counter.NextValue() / 1024).ToString("0.0") + " GB";
+    }
+}
+
 static class RouterProcess
 {
     const string LlamaCppDir = @"F:\AI\llama.cpp\";   // same filter as stop-router.ps1
@@ -356,6 +589,8 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
+    ToolStripMenuItem memorySaverItem, routerIdleMenu, strataIdleMenu;
+    bool memorySaverSwitching;
 
     StrataState strataState = StrataState.Stopped;
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
@@ -436,6 +671,9 @@ sealed class TrayApp : ApplicationContext
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
+        memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
+        routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
+        strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
 
         autostartItem = new ToolStripMenuItem("Start with Windows", null, (s, e) => ToggleAutostart());
         var quitItem = new ToolStripMenuItem("Quit (stops the router and Strata)", null, (s, e) => Quit());
@@ -450,7 +688,9 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             startStopItem, restartItem,
             new ToolStripSeparator(),
-            strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem,
+            strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            new ToolStripSeparator(),
+            routerIdleMenu, strataIdleMenu,
             new ToolStripSeparator(),
             autostartItem, quitItem,
         });
@@ -459,8 +699,44 @@ sealed class TrayApp : ApplicationContext
         return strip;
     }
 
+    static readonly int[] IdleChoicesMinutes = { 0, 15, 30, 60, 120, 240 };
+
+    // A submenu of idle times. The choice is saved at once and used the next time the server starts.
+    ToolStripMenuItem BuildIdleMenu(string title, string key, int defaultMinutes, string serverName)
+    {
+        var parent = new ToolStripMenuItem(title) { Tag = new KeyValuePair<string, int>(key, defaultMinutes) };
+        foreach (int minutes in IdleChoicesMinutes)
+        {
+            int choice = minutes;
+            parent.DropDownItems.Add(new ToolStripMenuItem(IdleLabel(choice), null, (s, e) =>
+            {
+                TraySettings.SetMinutes(root, key, choice);
+                MarkIdleChoice(parent);
+                Notify("Saved. The " + serverName + " uses \"" + IdleLabel(choice) + "\" from its next start.", ToolTipIcon.Info);
+            }) { Tag = choice });
+        }
+        MarkIdleChoice(parent);
+        return parent;
+    }
+
+    static string IdleLabel(int minutes)
+    {
+        if (minutes == 0) return "Never";
+        return minutes < 60 ? minutes + " minutes" : minutes / 60 + (minutes == 60 ? " hour" : " hours");
+    }
+
+    void MarkIdleChoice(ToolStripMenuItem parent)
+    {
+        var setting = (KeyValuePair<string, int>)parent.Tag;
+        int current = TraySettings.GetMinutes(root, setting.Key, setting.Value);
+        foreach (ToolStripMenuItem item in parent.DropDownItems)
+            item.Checked = (int)item.Tag == current;
+    }
+
     async void OnMenuOpening()
     {
+        MarkIdleChoice(routerIdleMenu);
+        MarkIdleChoice(strataIdleMenu);
         bool? autostart = LogonTask.IsEnabled();
         autostartItem.Visible = autostart.HasValue;
         autostartItem.Checked = autostart == true;
@@ -488,6 +764,12 @@ sealed class TrayApp : ApplicationContext
         strataStartStopItem.Text = strataState == StrataState.Stopped ? "Start Strata (Qwen3.8-Flash-Next)" : "Stop Strata";
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
+
+        bool saverOn = MemorySaver.IsOn(root);
+        memorySaverItem.Checked = saverOn;
+        memorySaverItem.Enabled = !memorySaverSwitching;
+        if (!memorySaverSwitching)
+            memorySaverItem.Text = saverOn ? "Memory saver on: reopen the closed apps" : "Memory saver: close apps to free RAM...";
     }
 
     string StrataStatusText()
@@ -523,6 +805,8 @@ sealed class TrayApp : ApplicationContext
             bool active = activeModel != null && activeModel.Id == id;
             item.Checked = active;
             item.Text = active && activeModel.Status != "loaded" ? id + "  (" + activeModel.Status + "...)" : id;
+            ModelInfo info = models.First(m => m.Id == id);
+            if (info.Status == "sleeping") item.Text = id + "  (asleep, wakes on use)";
         }
     }
 
@@ -570,7 +854,7 @@ sealed class TrayApp : ApplicationContext
             startRequestedAt = null;
             models = SortByPresetOrder(latest);
         }
-        activeModel = latest == null ? null : latest.FirstOrDefault(m => m.Status != "unloaded");
+        activeModel = latest == null ? null : latest.FirstOrDefault(m => m.Status != "unloaded" && m.Status != "sleeping");   // asleep = VRAM already free
         state = Classify(latest);
 
         FollowRequestedLoad();
@@ -823,6 +1107,44 @@ sealed class TrayApp : ApplicationContext
         ShowState(state);
         if (reason != null) Notify("Unloaded Strata's model: " + reason + ".", ToolTipIcon.Info);
         return true;
+    }
+
+    // Off: measure the candidates, let the user pick, close the picks. On: reopen what was closed.
+    async Task ToggleMemorySaverAsync()
+    {
+        bool turnOn = !MemorySaver.IsOn(root);
+        memorySaverSwitching = true;
+        try
+        {
+            if (turnOn)
+            {
+                ShowMemorySaverProgress("Memory saver: measuring apps...");
+                List<SaverCandidate> candidates = await MemorySaver.ListAsync(root);
+                using (var picker = new MemorySaverPicker(candidates))
+                {
+                    if (picker.ShowDialog() != DialogResult.OK) return;
+                    MemorySaver.SaveChoices(root, picker.ShownIds(), picker.CheckedIds());
+                }
+                ShowMemorySaverProgress("Memory saver: closing apps...");
+            }
+            else
+            {
+                ShowMemorySaverProgress("Memory saver: reopening apps (Docker takes about a minute)...");
+            }
+            string summary = await MemorySaver.SwitchAsync(root, turnOn);
+            if (summary != null) Notify(summary, ToolTipIcon.Info);
+        }
+        finally
+        {
+            memorySaverSwitching = false;
+            UpdateMenu();
+        }
+    }
+
+    void ShowMemorySaverProgress(string text)
+    {
+        memorySaverItem.Text = text;
+        UpdateMenu();
     }
 
     void ToggleAutostart()
