@@ -89,13 +89,28 @@ Other moving parts:
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: the `session is up (engine X)` line in `F:\AI\strata\strata-iq2_xs.log`. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
-- **Engine 0.1.43 was installed on 2026-10-11 (from 0.1.39); no speed bench has been run on it yet.** The 0.1.39
-  engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine` restores it. What 0.1.40-0.1.43
-  changed for this PC: CUDA route tail skip on by default (+13-16% decode on single 12-16 GB cards, none when nearly
-  every expert is cached; changes answers slightly), an sm_86 Q3_K kernel, a fix for a Windows layer-split stall,
-  parallel expert reads from GGUF files on Windows (1.35-1.85x on tight-RAM setups), and a NaN guard. No two-3090
-  Windows measurement exists upstream. To get 0.1.41 answers back, set `STRATA_ROUTE_TAIL_SKIP=0`,
-  `STRATA_PCIE_FRAC_DEFAULT=old`, `STRATA_PREFILL_CPU_SHARE=0` in the config's `"env"`.
+- **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43); no speed bench has been run on 0.1.43 or 0.1.44.1.**
+  The 0.1.43 engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine` restores it.
+  Upstream says answers on the GSQ-RCO packs (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43. What 0.1.43.1-0.1.44.1
+  changed for this PC: a failed `before_load` hook now checks free VRAM and answers 503 instead of loading onto a full
+  card (`before_load_strict`, `before_load_timeout_s`), Windows watchdog fixes for long prompts and conversation
+  parking, a fix for an empty answer when a message quotes `</tool_call>`, fenced-JSON tool calls recovered, the auto
+  split's slow-link penalty applied only from a 4x link gap (GPU 1's x4 against GPU 0's x16 is exactly 4x), and the
+  opt-in `STRATA_PIN_BY_NEED=1` (Windows: pins the experts the GPUs will not hold instead of the arena's first 8 GiB).
+  0.1.40-0.1.43 added the CUDA route tail skip (on by default; changes answers slightly), an sm_86 Q3_K kernel, a
+  Windows layer-split stall fix and parallel GGUF expert reads. No two-3090 Windows measurement exists upstream. To get
+  0.1.41 answers back, set `STRATA_ROUTE_TAIL_SKIP=0`, `STRATA_PCIE_FRAC_DEFAULT=old`, `STRATA_PREFILL_CPU_SHARE=0` in
+  the config's `"env"`.
+- **Forks checked 2026-10-16, none worth installing.** Hardin22/Strata-DualGPU (0.1.38-based) and architectds/Strata
+  (0.1.40.2-based) both went upstream as opt-in flags: `--adapt-async 1`, `--pipeline-windows 2`,
+  `STRATA_PREFILL_CPU_SHARE=auto` (upstream issue #1352, PR #1414). The untried A/B is those flags against the current
+  config, with `--remote-expert-opt` dropped (inert on a plain layer split, `F:\AI\strata\docs\MULTI_GPU.md`). That doc
+  has a reported 2x3090 x16+x4 table (IQ3_S, `--resident-experts`): 137 decode by default, 145 with `--adapt-async 1`,
+  prompt 1,798 -> 2,097 with `--pipeline-windows 2`.
+- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 has Windows sm_86 builds and its
+  own `.ninfer` weights (not GGUF), one GPU per model on Windows. It claims ~117-126 tok/s for Qwen3.8-27B on one 3090
+  (greedy, thinking off) and ~112 for Flash-Next at 32k (preview, ~33 GiB pinned RAM). Not measured here; its downloader
+  fetches an optional private "graft" when a Hugging Face login exists (`NINFER_GRAFTS=off`).
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It pulls
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
   2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
