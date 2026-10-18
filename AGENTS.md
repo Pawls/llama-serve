@@ -123,11 +123,12 @@ Other moving parts:
   and nothing on prose or prefill. `--adapt-async 1` is untried (it needs `--resident-experts`).
 - **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
   `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
-  2026-10-18: Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
+  2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
   router's `qwen3.8-27b-dflash2`, on a ~4-bit conversion (17.2 GiB) against UD-Q5_K_XL; quality was not compared.
   Flash-Next does not start on this PC (it must pin 34.7 GiB of host memory, which Windows maps into a GPU address
-  space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Always set
-  `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
+  space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Stop the
+  router (not just unload its model) while ninfer runs, since a router load lands on GPU 1 beside it and nothing
+  coordinates the two. Always set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
   when a Hugging Face login exists).
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It pulls
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
