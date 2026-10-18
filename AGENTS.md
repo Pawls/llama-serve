@@ -85,13 +85,21 @@ Other moving parts:
 
 - Installed sizes: IQ2_XS (default) and IQ3_XXS. Configs: `F:\AI\strata\strata-iq2_xs.json`,
   `strata-iq3_xxs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
+  `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` and `--pipeline-windows 2` in `args` (added
+  2026-10-18, see below); `strata-iq3_xxs.json` has neither and has not been tested on 0.1.44.1.
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
   `F:\AI\strata\strata-iq2_xs.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
-- **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43); it has not been started or benched yet, and neither
-  was 0.1.43.** The 0.1.43 engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine`
+- **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43) and benched on 2026-10-18; 0.1.43 never was.** The
+  installed IQ2_XS config decoded 52 tok/s on code at every depth (133 / 130 / 117 on 2026-10-04) because the auto
+  split left the desktop card (Strata's CUDA1) with 160 MiB free and the start log said so ("CUDA1: 160 MiB of VRAM
+  free ... LOW", under WDDM a full card pages). `--vram-reserve-later-mib 1308`, the value that log line suggests,
+  restored it to 170 / 158 / 152, and `--pipeline-windows 2` on top gave 188 / 168 / 162. Table and method in
+  [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or `SETUP.bat`, read the
+  `VRAM free with everything loaded` lines in the start log; a "LOW" there means the desktop card needs a larger
+  reserve.** The 0.1.43 engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine`
   restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
   only when a message quotes `</tool_call>`. What 0.1.43.1-0.1.44.1 changed for this PC: Windows watchdog fixes for
   long prompts and conversation parking, that `</tool_call>` fix, fenced-JSON tool calls recovered, and the auto
@@ -110,19 +118,27 @@ Other moving parts:
   `STRATA_PREFILL_CPU_SHARE=auto` (upstream issue #1352, PR #1414). `F:\AI\strata\docs\MULTI_GPU.md` has a 2x3090
   x16+x4 table from one user (#1447: Ryzen 7 9800X3D, 32 GB RAM, 250 W limits, IQ3_S, temperature 0.6, mostly one run
   per arm, OS not stated, not repeated upstream): 137 tok/s decode by default, 145 with `--adapt-async 1`, prompt
-  1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Untried here. Each arm changes more than one flag against our
-  arena config: `--adapt-async 1` on a split needs `--resident-experts`, and the pipeline row used
-  `"layer_split": "29"` rather than `auto`. `--remote-expert-opt` is inert on a plain split and can be dropped first,
-  as its own arm.
-- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 has Windows sm_86 builds and its
-  own `.ninfer` weights (not GGUF), one GPU per model on Windows. It claims ~117-126 tok/s for Qwen3.8-27B on one 3090
-  (greedy, thinking off) and ~112 for Flash-Next at 32k (preview, ~33 GiB pinned RAM). Not measured here; its downloader
-  fetches an optional private "graft" when a Hugging Face login exists (`NINFER_GRAFTS=off`).
+  1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
+  `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
+  and nothing on prose or prefill. `--adapt-async 1` is untried (it needs `--resident-experts`).
+- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
+  `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
+  2026-10-18: Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
+  router's `qwen3.8-27b-dflash2`, on a ~4-bit conversion (17.2 GiB) against UD-Q5_K_XL; quality was not compared.
+  Flash-Next does not start on this PC (it must pin 34.7 GiB of host memory, which Windows maps into a GPU address
+  space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Always set
+  `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
+  when a Hugging Face login exists).
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It pulls
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
   2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
   baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
-  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load` and `sampling` after it.**
+  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the two
+  `args` flags above after it.**
+- **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
+  restarts on 2026-10-18; no engine process appeared and nothing was logged). The likely cause is the old launcher still
+  holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a hardening pause (wait for the `strata`
+  process to exit, then about 15 s) 9 of 9 restarts worked. Do that when restarting from a script.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
