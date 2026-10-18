@@ -143,7 +143,28 @@ These sets are near the ceiling, so equal scores only show that nothing broke, n
 
 **IQ2_XS stays the default.** IQ3_XXS scored the same here and is 3-8% slower, and it leaves under 2 GB of RAM free, so it can page and slow down when other apps hold memory, as on its first start. Use it when the PC is otherwise idle.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load` and `sampling` back afterwards.
+### Engine 0.1.44.1 (measured 2026-10-18)
+
+The table above is from the older 0.1.39 engine. After the update to 0.1.44.1 (2026-10-16), the installed IQ2_XS config decoded at 52 t/s on code at every depth. The engine's auto layer split had left the desktop card (Strata's CUDA1) with 160 MiB of VRAM free, and its start log said so (`CUDA1: 160 MiB of VRAM free with everything loaded - LOW`; under WDDM a full card pages). The IQ2_XS config now carries two more flags in `args`, `--vram-reserve-later-mib 1308` (the value that log line suggested) and `--pipeline-windows 2`.
+
+Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell, thinking off), memory saver on, ~4 GB RAM free. Four configs, three rounds each, interleaved (12 `bench-depth.ps1` runs), with a Strata restart before every config in every round. Median net t/s over the three rounds:
+
+| Config | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (2k / 52k / 128k) |
+|---|---|---|---|
+| A: as installed | 52 / 52 / 51 | 44 / 43 / 43 | 830 / 1,510 / 1,530 |
+| B: A + `--vram-reserve-later-mib 1308` | 170 / 158 / 152 | 124 / 114 / 107 | 1,250 / 3,620 / 3,570 |
+| C: B without `--remote-expert-opt` | 171 / 160 / 148 | 123 / 114 / 108 | 1,260 / 3,610 / 3,580 |
+| D: B + `--pipeline-windows 2` (now installed) | 188 / 168 / 162 | 125 / 114 / 107 | 1,260 / 3,600 / 3,570 |
+
+- **A to B is the fix**: 3.0-3.3x on code and 2.5-2.8x on prose. VRAM in use went from 23,988 / 21,217 MiB to 23,560 / 22,015 MiB (GPU 0 / GPU 1).
+- **B and C are the same config**: `--remote-expert-opt` does nothing on a plain layer split, as upstream's docs say. The 1-3% gaps between them are the run-to-run noise.
+- **D beats B on code only**: +11% / +6% / +7%. The slowest D round beat the fastest B round at every depth (180 vs 174, 167 vs 159, 161 vs 153). Prose and prompt reading are unchanged. Draft acceptance on code fell from ~0.80 to ~0.73 and decode still rose.
+- **Compared with 2026-10-04** (133 / 130 / 117 code, 100 / 93 / 82 essay, ~3,100-3,200 prompt t/s at 52k-128k), D is 41% / 29% / 38% faster on code and 25% / 23% / 30% on prose (from the table's rounded values), on a newer engine and a different system state, so this is not one variable.
+- Tool calls on D: 5/5 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`). On 2k and 30k prompts, D decodes 184 / 167 on code and 125 / 116 on prose (one round).
+- Not done: IQ3_XXS on 0.1.44.1 (its config has neither flag and probably needs the reserve too), and `--adapt-async 1`.
+- Every start logs `Windows commit: 0.3-1.3 GiB left of a 118 GiB limit` with a warning that Strata can exit with no message at the limit (upstream #1607). The engine started 14 times that day and none of those runs died at the limit. Two more launches never reached the engine (the log has no engine-start line; see the restart note in [AGENTS.md](./AGENTS.md)), so they say nothing about the limit either way.
+
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the two `args` flags back afterwards.
 
 **Sampling.** Both configs set `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 
@@ -160,6 +181,42 @@ Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so othe
 Measured 2026-10-10: WSL with Docker and SonarQube running freed 6.0 GB (27.4 → 33.4 GB free); Discord, OneDrive and Docker Desktop (VM included) freed 3.3 GB. NVIDIA App and NVIDIA Overlay are not offered: NVIDIA's services restart them within a minute. Turn the overlay off in NVIDIA App's settings instead.
 
 From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the saved ticks, `-Mode On` closes the ticked apps, `-Mode Off` reopens them, and `-Mode List` prints the candidates as JSON.
+
+## ninfer-3090 (measured 2026-10-18)
+
+Don-Chad/ninfer-3090 v0.16.1 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. It is not wired into the tray, the router or any client. Nothing here starts it at login. To run Qwen3.8-27B on the headless card, first stop Strata and stop the router with `stop-router.ps1`. Unloading the router's model is not enough: any request from Pi or VS Code reloads a two-GPU preset onto GPU 1 beside ninfer, both slow down, and the tray unloads only Strata.
+
+```powershell
+$env:CUDA_DEVICE_ORDER='PCI_BUS_ID'; $env:CUDA_VISIBLE_DEVICES='1'; $env:NINFER_GRAFTS='off'
+$env:NINFER_PORT='8412'; $env:NINFER_MODEL_DIR='F:\AI\ninfer-3090\models'
+& 'F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.16.1-rtx3090\run.bat' qwen38-27b
+# After ninfer stops: these variables persist in the shell, and CUDA_VISIBLE_DEVICES=1 would hide GPU 0 from a router or Strata started from it.
+Remove-Item Env:CUDA_DEVICE_ORDER, Env:CUDA_VISIBLE_DEVICES, Env:NINFER_GRAFTS, Env:NINFER_PORT, Env:NINFER_MODEL_DIR
+```
+
+Set `NINFER_PORT` every time: the default, 8080, belongs to signal-cli. `NINFER_GRAFTS=off` stops the downloader from fetching a private graft through the Hugging Face login. The server is ready in about 10 s (`/health` answers 200), speaks the OpenAI API at `http://127.0.0.1:8412/v1`, and returns llama.cpp-style `timings`, so `bench-depth.ps1 -BaseUrl http://127.0.0.1:8412` works unchanged.
+
+`bench-depth.ps1`, thinking off, 5 measured runs per cell, one round each, not interleaved (a second, swapped round was cut short when the PC was needed), so read it as an estimate. Net t/s:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k |
+|---|---|---|
+| Router `qwen3.8-27b-dflash2` | 81 / 63 / 52 | 50 / 41 / 33 |
+| ninfer `qwen38-27b` | 204 / 171 / 146 | 100 / 89 / 76 |
+
+The two rows are not the same model file:
+
+| | Router | ninfer |
+|---|---|---|
+| Weights | UD-Q5_K_XL GGUF, 2 GPUs | ~4-bit conversion, 17.2 GiB, GPU 1 alone |
+| KV cache | q8_0, 262k context | rk4v4 (4-bit keys), up to 188k context |
+| Drafter | DFlash2, 4 draft tokens | DFlash2, 7 draft tokens, plus n-gram copying |
+| Sampling | preset: temp 1.0, top-p 0.95, top-k 20 | the model's registered preset, with `run.bat`'s guard of min-p 0.03 and presence penalty 0.5 |
+
+- **No quality comparison was run.** The speed gap is real, but part of it is a smaller quantization on one card.
+- **Replies that stop on their own** (3 coding and explanation prompts, 2 measured runs each, ninfer only): median 153 t/s, range 129-202. `bench-depth.ps1` forces full-length replies, which can help n-gram drafting; the router was not rerun this way.
+- **Tool calls:** `test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8412` passed 5/5, at 1-4 s per run. The router presets think by default, so this is not a like-for-like timing.
+- **Flash-Next (`qwen38-flash-next`) does not start.** It must pin 34.7 GiB of host memory, which Windows maps into the GPU's address space, and the allocation fails with `cudaErrorMemoryAllocation` (it reported 18.9 GiB free) with `CUDA_VISIBLE_DEVICES` set to 1 and again to 0, with 47.6 GiB of RAM free. Its release notes say Flash-Next was not part of their benchmark.
+- **Not tested:** images, long sessions, a client talking to it (Pi, Hermes, VS Code).
 
 ## Changing things
 
