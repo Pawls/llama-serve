@@ -46,11 +46,13 @@ If the router is already running when the tray starts (for example in a window),
 
 ### Using it from Pi
 
-1. Run `pi`.
-2. Type `/model` and choose any model under **llama.cpp** (for example `qwen3.8-27b`).
-3. The first message loads it; a `[llama.cpp] Loading...` line appears under the prompt. After that, replies are fast.
+1. Run `pi`. It starts on `swift-qwen3.8-27b-dflash2` at `xhigh` thinking (`defaultModel` and `defaultThinkingLevel` in `~\.pi\agent\settings.json`).
+2. To switch, type `/model` and choose any model under **llama.cpp**. `/llama` shows what the router has loaded.
+3. The first message loads the model (15-60 s). After that, replies are fast.
 
-The footer shows the context size, e.g. `0.0%/262k`. On models that can think, the thinking level appears once the model is selected or after the first message. `Shift+Tab` cycles thinking on and off.
+The footer shows the context size, e.g. `0.0%/262k`, and the thinking level. Pi talks to the router through its built-in `llama.cpp` provider (it reads `LLAMA_BASE_URL`); the older `huggingface/pi-llama` package is not installed, since it registers a second copy of every model and resets the overrides below after the first request.
+
+On its own, Pi treats llama.cpp thinking as on/off and never sends an effort, so the preset's `xhigh` always applied. The Qwen3.8 router models get `modelOverrides` in `~\.pi\agent\models.json` (provider `llama.cpp`) that map Pi's thinking level onto the template's `reasoning_effort`, so `Shift+Tab` cycles off / low / medium / xhigh and the footer shows the effort the model really gets. Pi sends `preserve_thinking: true` for all of them except `qwen3.8-27b-nopreserve`. Checked 2026-10-19 by capturing Pi's request bodies at each level. A new Qwen3.8 preset needs its own entry there.
 
 ### Using it from VS Code chat
 
@@ -101,7 +103,7 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 
 Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small "drafter" that guesses tokens ahead for the big model to check. The output is the same model's; only speed changes. Speeds for these come from the 2026-09-14 benchmark (5 runs each, coding and essay prompts). A drafter that guesses code well can guess prose badly, so the `-dflash` coder and 26B lanes are for coding sessions.
 
-"Thinking by default" is the preset's setting. **Pi overrides it:** when you pick a model that supports thinking, Pi switches thinking on (`medium`), and Pi's choice wins. Press `Shift+Tab` to turn it off for fast answers. `qwen3-coder-30b` has no thinking mode, and Muse-Glimmer always reasons.
+"Thinking by default" is the preset's setting. **Pi overrides it:** Pi sends its own thinking level, and Pi's choice wins. Press `Shift+Tab` to change it (off for fast answers). On the Qwen3.8 models that also sets the effort (low / medium / xhigh); Hermes sets it with `reasoning_effort` (`/reasoning`), which the router passes to the template the same way. `qwen3-coder-30b` has no thinking mode, and Muse-Glimmer always reasons.
 
 ## Strata: Qwen3.8-Flash-Next (125B MoE)
 
