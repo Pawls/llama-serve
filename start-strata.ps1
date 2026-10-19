@@ -29,7 +29,12 @@ if ($null -ne $IdleMinutes) {
 }
 
 New-Item -ItemType Directory -Force $LogDir | Out-Null
-if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'strata.prev.log') }
+$AppendLog = $false
+if (Test-Path $Log) {
+    # A launcher from the previous run can still hold the log briefly; a locked log must not abort the start.
+    try { Move-Item -Force $Log (Join-Path $LogDir 'strata.prev.log') }
+    catch { $AppendLog = $true; Write-Warning "Could not rotate $Log ($($_.Exception.Message)); appending to it." }
+}
 
 # The run script ends with "if errorlevel 1 pause"; stdin from nul lets that return instead of hanging hidden.
-cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $Log
+cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $Log -Append:$AppendLog
