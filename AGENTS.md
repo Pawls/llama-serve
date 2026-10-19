@@ -29,9 +29,11 @@ Clients that consume these servers (none of their configs are in this repo):
 - **Pi** (`pi`): finds the router through the user environment variable `LLAMA_BASE_URL=http://127.0.0.1:8410/v1`,
   using Pi's built-in `llama.cpp` provider (not the `huggingface/pi-llama` package, which resets model overrides after
   the first request). Effort for the Qwen3.8 presets comes from `modelOverrides` under `llama.cpp` in
-  `~\.pi\agent\models.json`; a new Qwen3.8 preset needs an entry there. Strata is the `strata` provider in the same
-  file. That file holds an API key field; do not print it.
-- **Hermes**: `hermes --provider strata`.
+  `~\.pi\agent\models.json`, which also pins `reasoning` for every preset (Pi otherwise marks only models it saw
+  loaded); a new preset needs an entry there. Strata is the `strata` provider in the same file. That file holds an API
+  key field; do not print it.
+- **Hermes**: `hermes --provider llama-router` (the router; effort via `/reasoning low|medium|xhigh`, other values
+  are an HTTP 500 unless the `pawl-patches` plugin clamps them) and `hermes --provider strata`.
 - **VS Code chat**: `%APPDATA%\Code\User\chatLanguageModels.json`, generated from `presets.ini`. Adding a preset means
   adding an entry there too.
 - llama.cpp's own chat page at `http://127.0.0.1:8410/`.
