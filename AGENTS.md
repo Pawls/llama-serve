@@ -139,6 +139,13 @@ Other moving parts:
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
   2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
   baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
+  **Since upstream 0.2.0-beta (2026-10-19) `UPDATE.bat` cannot fetch a Windows engine**: it looks for
+  `strata-windows-x64.zip`, which 0.2.0 no longer ships (engines are now `.tar.gz` packages for the app's signed feed),
+  so it 404s and keeps the old engine. Point it at the last release that has the zip:
+  `$env:STRATA_PREBUILT_URL='https://github.com/Niko1221/Strata/releases/download/v0.1.45/'` before `UPDATE.bat` (the
+  SHA-256 is still checked against GitHub). That is how 0.1.45 was installed on 2026-10-19, over 0.1.44.1 (now in
+  `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Not started on it yet.
+  Engine 0.1.45.3 (0.2.0's, with a new default sm_86 decode table) exists only as the new package.
   **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the two
   `args` flags above after it.**
 - **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
