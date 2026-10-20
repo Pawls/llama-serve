@@ -80,7 +80,7 @@ Other moving parts:
   `start-strata.ps1` writes `idle_unload_s` into the Strata config JSON (keeping a `.bak`). Both apply at the next
   start.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata
-  (it leaves ~4.6 GB free on IQ2_XS, ~1.8 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
+  (measured 2026-10-19 on engine 0.1.45 with it on: 6.3-7.1 GB free on IQ2_XS, 2.5-4.1 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
 - **The tray** is one C# file, [tray/LlamaTray.cs](./tray/LlamaTray.cs), compiled with the C# compiler built into
   Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\` (untracked). After editing it, re-run
@@ -88,8 +88,8 @@ Other moving parts:
 
 ## Strata state and updating it
 
-- Installed sizes: IQ2_XS (default) and IQ3_XXS. Configs: `F:\AI\strata\strata-iq2_xs.json`,
-  `strata-iq3_xxs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
+- Installed sizes: IQ3_XXS (default since 2026-10-19) and IQ2_XS. Configs: `F:\AI\strata\strata-iq3_xxs.json`,
+  `strata-iq2_xs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
   `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` and `--pipeline-windows 2` in `args` (added
   2026-10-18, see below); `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310`, `--pipeline-windows 2` and
   `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked for; numbers in
@@ -97,7 +97,7 @@ Other moving parts:
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
-  `F:\AI\strata\strata-iq2_xs.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
+  `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
 - **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43) and benched on 2026-10-18; 0.1.43 never was.** The
   installed IQ2_XS config decoded 52 tok/s on code at every depth (133 / 130 / 117 on 2026-10-04) because the auto
@@ -164,9 +164,11 @@ Other moving parts:
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
   these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` drops this block
   along with `idle_unload_s` and `before_load`.
-- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq2_xs`. The tray has one start
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq3_xxs`. The tray has one start
   item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
-  The router has no size choice; it serves only `presets.ini` models.
+  The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
+  whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
+  each client lists both ids and either works.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`

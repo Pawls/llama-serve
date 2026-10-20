@@ -603,8 +603,8 @@ sealed class TrayApp : ApplicationContext
     // start-strata.ps1's -Model values and their menu labels; the first is also the script's default.
     static readonly string[,] StrataSizes =
     {
-        { "iq2_xs", "IQ2_XS (faster, more RAM free)" },
         { "iq3_xxs", "IQ3_XXS (more accurate)" },
+        { "iq2_xs", "IQ2_XS (faster, more RAM free)" },
     };
 
     StrataState strataState = StrataState.Stopped;

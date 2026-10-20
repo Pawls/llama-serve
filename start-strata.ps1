@@ -1,6 +1,6 @@
 # Starts Strata (Qwen3.8-Flash-Next) on 127.0.0.1:8411 after freeing the GPUs from the router's model.
 # Strata's own flags live in the run-<model>.bat its setup wrote; this script only picks and launches it.
-param([string]$Model = 'iq2_xs')
+param([string]$Model = 'iq3_xxs')
 $ErrorActionPreference = 'Stop'
 
 $StrataDir = 'F:\AI\strata'

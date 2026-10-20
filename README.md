@@ -109,14 +109,14 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 
 [Strata](https://github.com/Niko1221/Strata) is a separate engine, installed in `F:\AI\strata` (model files in `F:\AI\Strata-data`). It runs only Qwen3.8-Flash-Next and its variants: the Coder, Swift 1.5, and Unsloth's 4-bit builds. It keeps all 512 experts per layer in RAM and caches the busiest ones on both GPUs. The router can't host it, because every router model is a `llama-server` child, so Strata runs as its own server on `http://127.0.0.1:8411`.
 
-**Start it** from the tray (**Start Strata**), or run `F:\AI\llama-serve\start-strata.ps1`. It is not started at login, because loading pins about 39 GB of RAM and can make the PC unresponsive for up to a minute. Once started, it unloads its model after 15 minutes idle, and the next request loads it again (about 45 s). **In Pi** it is `qwen3.8-flash-next-iq2_xs` under the `strata` provider (`~\.pi\agent\models.json`). Thinking levels are off / low / medium / high. **In Hermes** it is the `strata` provider (`hermes --provider strata`). Its first turn takes ~20 s, because Hermes sends a ~32k-token system prompt.
+**Start it** from the tray (**Start Strata: Flash-Next IQ3_XXS** or **IQ2_XS**), or run `F:\AI\llama-serve\start-strata.ps1` (`-Model iq2_xs` for the smaller size). It is not started at login, because loading pins about 39 GB of RAM and can make the PC unresponsive for up to a minute. Once started, it unloads its model after 15 minutes idle, and the next request loads it again (about 45 s). **In Pi** it is `qwen3.8-flash-next-iq3_xxs` or `qwen3.8-flash-next-iq2_xs` under the `strata` provider (`~\.pi\agent\models.json`); Strata answers with whichever size is loaded, whichever name you pick. Thinking levels are off / low / medium / high. **In Hermes** it is the `strata` provider (`hermes --provider strata`). Its first turn takes ~20 s, because Hermes sends a ~32k-token system prompt.
 
 **Only one of the two holds the GPUs at a time:**
 
-- Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
+- Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-<size>.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Two sizes are installed, and the tray has a start item for each. IQ2_XS is the default; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS from a terminal (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Two sizes are installed, and the tray has a start item for each. IQ3_XXS is the default since 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
@@ -143,7 +143,7 @@ Thinking, from `bench-thinking.ps1 -Arms off -Effort medium` (20 HumanEval and 3
 
 These sets are near the ceiling, so equal scores only show that nothing broke, not that the sizes are equally good. Each size's math miss was one task that thought until the cap (IQ3_XXS on algebra/686, IQ2_XS on precalculus/989). Run twice more, the same task was right both times, so neither failure repeats. Per task, the two sizes think about the same amount (IQ3_XXS / IQ2_XS median ratio 0.99 over 48 tasks).
 
-**IQ2_XS stays the default.** IQ3_XXS scored the same here and is 3-8% slower, and it leaves under 2 GB of RAM free, so it can page and slow down when other apps hold memory, as on its first start. Use it when the PC is otherwise idle.
+**On 2026-10-04 IQ2_XS stayed the default.** IQ3_XXS scored the same here and was 3-8% slower, and it left under 2 GB of RAM free, so it could page and slow down when other apps held memory, as on its first start. With engine 0.1.45 and a fixed page file it leaves more room, and it became the default on 2026-10-19 (see [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)).
 
 ### Engine 0.1.44.1 (measured 2026-10-18)
 
@@ -180,6 +180,9 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 - In these runs IQ3_XXS's start log still warned "only 404-546 MiB of VRAM free at the start of this request" on the desktop card. `--vram-reserve-mib` went from 700 to 1344, the value the log suggested. One more round with it decoded the same (140 / 135 / 130 code, 105 / 100 / 97 essay), with 1,258 MiB free at load and no warning. Tool calls 3/3.
 - **IQ2_XS is slower than on 2026-10-18** (161 vs ~186 code at 2k, same config, same VRAM split, draft acceptance 0.71-0.76 vs 0.69-0.73). The engine went 0.1.44.1 -> 0.1.45 in between; the day's system state differs too, so the cause is not isolated. 0.1.44.1 is in `F:\AI\strata\engine\.previous`.
 - **Windows commit is the real limit, not RAM.** Every run of both sizes had 0.2-0.5 GB of commit headroom at its low point, with the system-managed page file growing the limit to 129-135 GB. No engine died. The start log keeps warning about upstream #1607 (exit at the limit with no message).
+- **Recheck with a fixed page file** (C:, 64-96 GB, set the same day). One IQ3_XXS start, memory saver off with the day's apps open: the start log said `Windows commit: 27.0 GiB left of a 127.8 GiB limit` and gave no warning; 1,258 MiB of VRAM free, 901 MiB on the desktop card. Sampled every 2 s through a tool-call test (3/3) and a 128k `bench-depth.ps1` run (2 measured runs: 120 code, 88 essay t/s, one round, so an estimate): free RAM 8.7 GB at the low point, commit headroom 24.7 GB at the low point.
+
+**IQ3_XXS is the default from 2026-10-19.** It is the more accurate size, it stays above 95 t/s at 128k in the interleaved runs, and with the fixed page file the commit limit is no longer close. IQ2_XS is still in the tray for when speed or free RAM matters more.
 
 To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the two `args` flags back afterwards.
 
@@ -272,7 +275,7 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | A model is suddenly very slow (several times slower than usual) | It didn't fit in VRAM and Windows spilled into system RAM. Run `nvidia-smi`: a card near 24,576 MiB used is the culprit. Close other GPU programs, or lower `ctx-size` for that model. |
 | Speeds or memory look off after changing a preset | `Select-String -Path F:\AI\llama-serve\logs\server.log -Pattern 'retrying without pipeline'`. Any hit means the model loaded in a degraded mode; the preset needs less context or a different `tensor-split`. |
 | A model fails to load | Read the end of `F:\AI\llama-serve\logs\server.log`. The previous boot's log is `server.prev.log`. |
-| A router model fails to load while Strata is running | The tray wasn't running to unload Strata. Use **Unload Strata model** in the tray, or `stop-strata.ps1`, and retry. Strata's own log: `logs\strata.log`; engine log: `F:\AI\strata\strata-iq2_xs.log`. |
+| A router model fails to load while Strata is running | The tray wasn't running to unload Strata. Use **Unload Strata model** in the tray, or `stop-strata.ps1`, and retry. Strata's own log: `logs\strata.log`; engine log: `F:\AI\strata\strata-<size>.log`. |
 | Port 8410 is busy | Another router is already running (for example one started in a window). Stop it first. |
 
 ## Files
