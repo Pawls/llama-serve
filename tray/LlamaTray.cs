@@ -293,9 +293,16 @@ sealed class SaverCandidate
 // reopens them. Its state file says whether it is on, so a switch made from a terminal shows in the menu too.
 static class MemorySaver
 {
+    [DllImport("kernel32.dll")]
+    static extern ulong GetTickCount64();
+
+    // A state file from before this boot counts as off: Windows' startup has relaunched those apps.
+    // memory-saver.ps1 applies the same rule and removes such a file on its next run.
     public static bool IsOn(string root)
     {
-        return File.Exists(Path.Combine(root, "logs", "memory-saver.json"));
+        var state = new FileInfo(Path.Combine(root, "logs", "memory-saver.json"));
+        DateTime bootedAt = DateTime.Now - TimeSpan.FromMilliseconds(GetTickCount64());
+        return state.Exists && state.LastWriteTime > bootedAt;
     }
 
     public static async Task<List<SaverCandidate>> ListAsync(string root)
@@ -330,10 +337,10 @@ static class MemorySaver
         File.WriteAllText(path, serializer.Serialize(new Dictionary<string, object> { { "Close", kept } }));
     }
 
-    // Returns the script's summary line; throws with its error when it fails.
-    public static async Task<string> SwitchAsync(string root, bool on)
+    // Runs -Mode On, Reapply or Off. Returns the script's summary line; throws with its error when it fails.
+    public static async Task<string> SwitchAsync(string root, string mode)
     {
-        return LastLine(await RunAsync(root, on ? "On" : "Off"));
+        return LastLine(await RunAsync(root, mode));
     }
 
     static Task<string> RunAsync(string root, string mode)
@@ -589,7 +596,7 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
-    ToolStripMenuItem memorySaverItem, routerIdleMenu, strataIdleMenu;
+    ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
 
     StrataState strataState = StrataState.Stopped;
@@ -672,6 +679,8 @@ sealed class TrayApp : ApplicationContext
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
         memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
+        memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close apps again...", null,
+            (s, e) => RunAction(ReapplyMemorySaverAsync));
         routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
         strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
 
@@ -689,6 +698,7 @@ sealed class TrayApp : ApplicationContext
             startStopItem, restartItem,
             new ToolStripSeparator(),
             strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            memorySaverReapplyItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
             new ToolStripSeparator(),
@@ -770,6 +780,8 @@ sealed class TrayApp : ApplicationContext
         memorySaverItem.Enabled = !memorySaverSwitching;
         if (!memorySaverSwitching)
             memorySaverItem.Text = saverOn ? "Memory saver on: reopen the closed apps" : "Memory saver: close apps to free RAM...";
+        memorySaverReapplyItem.Visible = saverOn;
+        memorySaverReapplyItem.Enabled = !memorySaverSwitching;
     }
 
     string StrataStatusText()
@@ -1110,28 +1122,42 @@ sealed class TrayApp : ApplicationContext
     }
 
     // Off: measure the candidates, let the user pick, close the picks. On: reopen what was closed.
-    async Task ToggleMemorySaverAsync()
+    Task ToggleMemorySaverAsync()
     {
-        bool turnOn = !MemorySaver.IsOn(root);
+        return MemorySaver.IsOn(root)
+            ? SwitchMemorySaverAsync("Off", "Memory saver: reopening apps (Docker takes about a minute)...", null)
+            : SwitchMemorySaverAsync("On", "Memory saver: closing apps...", PickAppsToCloseAsync);
+    }
+
+    // While on: the same checklist, showing what runs now, then close the ticked apps that run again.
+    // Off still reopens everything closed by either pass, once.
+    Task ReapplyMemorySaverAsync()
+    {
+        return SwitchMemorySaverAsync("Reapply", "Memory saver: closing apps...", PickAppsToCloseAsync);
+    }
+
+    // False when the user cancels the checklist.
+    async Task<bool> PickAppsToCloseAsync()
+    {
+        ShowMemorySaverProgress("Memory saver: measuring apps...");
+        List<SaverCandidate> candidates = await MemorySaver.ListAsync(root);
+        using (var picker = new MemorySaverPicker(candidates))
+        {
+            if (picker.ShowDialog() != DialogResult.OK) return false;
+            MemorySaver.SaveChoices(root, picker.ShownIds(), picker.CheckedIds());
+            return true;
+        }
+    }
+
+    // `confirm` runs first and can cancel; null goes straight to the script.
+    async Task SwitchMemorySaverAsync(string mode, string progress, Func<Task<bool>> confirm)
+    {
         memorySaverSwitching = true;
         try
         {
-            if (turnOn)
-            {
-                ShowMemorySaverProgress("Memory saver: measuring apps...");
-                List<SaverCandidate> candidates = await MemorySaver.ListAsync(root);
-                using (var picker = new MemorySaverPicker(candidates))
-                {
-                    if (picker.ShowDialog() != DialogResult.OK) return;
-                    MemorySaver.SaveChoices(root, picker.ShownIds(), picker.CheckedIds());
-                }
-                ShowMemorySaverProgress("Memory saver: closing apps...");
-            }
-            else
-            {
-                ShowMemorySaverProgress("Memory saver: reopening apps (Docker takes about a minute)...");
-            }
-            string summary = await MemorySaver.SwitchAsync(root, turnOn);
+            if (confirm != null && !await confirm()) return;
+            ShowMemorySaverProgress(progress);
+            string summary = await MemorySaver.SwitchAsync(root, mode);
             if (summary != null) Notify(summary, ToolTipIcon.Info);
         }
         finally

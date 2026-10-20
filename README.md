@@ -172,7 +172,7 @@ To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `stra
 
 ### Memory saver
 
-Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed.
+Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed. While it is on, **Memory saver: close apps again...** opens the same checklist, showing what runs now, so you can close apps you reopened in the meantime and change the ticks; the next reopen still starts each app once. A restart turns the saver off: Windows' startup has launched those apps again, so the tray shows it off and nothing is reopened twice.
 
 | Group | Rows | How it closes and reopens |
 |---|---|---|
@@ -182,7 +182,7 @@ Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so othe
 
 Measured 2026-10-10: WSL with Docker and SonarQube running freed 6.0 GB (27.4 → 33.4 GB free); Discord, OneDrive and Docker Desktop (VM included) freed 3.3 GB. NVIDIA App and NVIDIA Overlay are not offered: NVIDIA's services restart them within a minute. Turn the overlay off in NVIDIA App's settings instead.
 
-From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the saved ticks, `-Mode On` closes the ticked apps, `-Mode Off` reopens them, and `-Mode List` prints the candidates as JSON.
+From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the saved ticks, `-Mode On` closes the ticked apps (run again while on, it closes the ones reopened since), `-Mode Reapply` does only the second part and refuses when the saver is off, `-Mode Off` reopens them, and `-Mode List` prints the candidates as JSON.
 
 ## ninfer-3090 (measured 2026-10-18)
 
