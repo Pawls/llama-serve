@@ -330,10 +330,10 @@ static class MemorySaver
         File.WriteAllText(path, serializer.Serialize(new Dictionary<string, object> { { "Close", kept } }));
     }
 
-    // Returns the script's summary line; throws with its error when it fails.
-    public static async Task<string> SwitchAsync(string root, bool on)
+    // Runs -Mode On, Reapply or Off. Returns the script's summary line; throws with its error when it fails.
+    public static async Task<string> SwitchAsync(string root, string mode)
     {
-        return LastLine(await RunAsync(root, on ? "On" : "Off"));
+        return LastLine(await RunAsync(root, mode));
     }
 
     static Task<string> RunAsync(string root, string mode)
@@ -1118,14 +1118,29 @@ sealed class TrayApp : ApplicationContext
     Task ToggleMemorySaverAsync()
     {
         return MemorySaver.IsOn(root)
-            ? SwitchMemorySaverAsync(false, "Memory saver: reopening apps (Docker takes about a minute)...", null)
-            : SwitchMemorySaverAsync(true, "Memory saver: closing apps...", PickAppsToCloseAsync);
+            ? SwitchMemorySaverAsync("Off", "Memory saver: reopening apps (Docker takes about a minute)...", null)
+            : SwitchMemorySaverAsync("On", "Memory saver: closing apps...", PickAppsToCloseAsync);
     }
 
-    // While on: close the ticked apps reopened since, with the saved ticks and no picker. Off still reopens each app once.
+    // While on: close the ticked apps reopened since, after one Yes/No that names them. Off still reopens each app once.
     Task ReapplyMemorySaverAsync()
     {
-        return SwitchMemorySaverAsync(true, "Memory saver: closing reopened apps...", null);
+        return SwitchMemorySaverAsync("Reapply", "Memory saver: closing reopened apps...", ConfirmReapplyAsync);
+    }
+
+    // The checklist's ticks can include apps opened only after it was shown, so name what will close first.
+    async Task<bool> ConfirmReapplyAsync()
+    {
+        ShowMemorySaverProgress("Memory saver: checking what runs again...");
+        List<SaverCandidate> running = (await MemorySaver.ListAsync(root)).Where(c => c.Chosen && c.CanClose).ToList();
+        if (running.Count == 0)
+        {
+            Notify("Memory saver is on; none of the ticked apps is running again.", ToolTipIcon.Info);
+            return false;
+        }
+        string names = string.Join("\n", running.Select(c => "  " + c.Name + " (" + c.PrivateMB + " MB)"));
+        return MessageBox.Show("Close these ticked apps again? Save your work in them first.\n\n" + names,
+            "Memory saver", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
     }
 
     // False when the user cancels the checklist.
@@ -1141,14 +1156,15 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
-    async Task SwitchMemorySaverAsync(bool on, string progress, Func<Task<bool>> pick)
+    // `confirm` runs first and can cancel; null goes straight to the script.
+    async Task SwitchMemorySaverAsync(string mode, string progress, Func<Task<bool>> confirm)
     {
         memorySaverSwitching = true;
         try
         {
-            if (pick != null && !await pick()) return;
+            if (confirm != null && !await confirm()) return;
             ShowMemorySaverProgress(progress);
-            string summary = await MemorySaver.SwitchAsync(root, on);
+            string summary = await MemorySaver.SwitchAsync(root, mode);
             if (summary != null) Notify(summary, ToolTipIcon.Info);
         }
         finally

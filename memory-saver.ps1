@@ -1,12 +1,13 @@
 # Closes background apps that hold RAM Strata could use, and reopens them afterwards.
 #   -Mode List    JSON of every candidate with its RAM: known apps, other apps that are safe to close,
 #                 and (as information only) VS Code extensions and services. The tray's picker shows it.
-#   -Mode On      closes the apps named in memory-saver.choices.json and records them in logs\memory-saver.json;
-#                 run again while on, it closes the ones reopened since and adds them to the record
-#   -Mode Off     reopens exactly the apps -Mode On closed
-#   -Mode Status  what is on and what each known app holds
+#   -Mode On       closes the apps named in memory-saver.choices.json and records them in logs\memory-saver.json;
+#                  run again while on, it closes the ones reopened since and adds them to the record
+#   -Mode Reapply  the second half of On only: refuses when the saver is off (the tray's reapply item)
+#   -Mode Off      reopens exactly the apps -Mode On closed
+#   -Mode Status   what is on and what each known app holds
 # What each known app costs while it is closed is in README.md § Memory saver.
-param([Parameter(Mandatory)][ValidateSet('List', 'On', 'Off', 'Status')][string]$Mode)
+param([Parameter(Mandatory)][ValidateSet('List', 'On', 'Reapply', 'Off', 'Status')][string]$Mode)
 $ErrorActionPreference = 'Stop'
 
 $StateFile   = Join-Path $PSScriptRoot 'logs\memory-saver.json'
@@ -157,7 +158,7 @@ function Get-OtherAppRows($processes) {
         $description = (Get-Item $roots[0].ExecutablePath).VersionInfo.FileDescription
         [pscustomobject]@{
             Id = "other:$($group.Name)"; Kind = 'other'; CanClose = $true
-            Name = if ("$description".Trim()) { $description } else { Split-Path $group.Name -Leaf }
+            Name = if ("$description".Trim()) { "$description".Trim() } else { Split-Path $group.Name -Leaf }
             PrivateMB = [math]::Round(($group.Group | Measure-Object PrivateMB -Sum).Sum)
             Cost = "Asked to close, then ended like Task Manager's End task if still running after 10 s, so save work in it first. Reopened afterwards as it was started."
         }
@@ -255,12 +256,14 @@ function Close-OtherApp($group, $processes) {
     Get-Process -Id $memberIds -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
-# The launches an app needs, from both passes that closed it, without repeats.
+# The launches an app needs, from both passes that closed it, without repeats. A launch is one per executable
+# (the first pass's arguments win), so an app reopened with other arguments still starts once.
 function Join-Saved($earlier, $now) {
     $seen = @{}
     foreach ($item in @($earlier) + @($now)) {
         if ($null -eq $item) { continue }
-        $key = ConvertTo-Json -InputObject $item -Compress -Depth 6
+        $key = if ($item.PSObject.Properties.Name -contains 'Path') { "$($item.Path)".ToLowerInvariant() }
+               else { ConvertTo-Json -InputObject $item -Compress -Depth 6 }
         if ($seen.ContainsKey($key)) { continue }
         $seen[$key] = $true
         $item
@@ -287,27 +290,32 @@ function Enable-Saver {
     $otherGroups = @{}
     foreach ($group in Get-OtherAppGroups $processes) { $otherGroups["other:$($group.Name)"] = $group }
     $closed = @()
-    foreach ($row in @(Get-KnownAppRows $processes) + @(Get-OtherAppRows $processes)) {
-        if ($row.Id -notin $choices) { continue }
-        if ($row.Kind -eq 'known') {
-            $app = $KnownApps | Where-Object { "known:$($_.Name)" -eq $row.Id }
-            $saved = @(& $app.Close)
+    try {
+        foreach ($row in @(Get-KnownAppRows $processes) + @(Get-OtherAppRows $processes)) {
+            if ($row.Id -notin $choices) { continue }
+            if ($row.Kind -eq 'known') {
+                $app = $KnownApps | Where-Object { "known:$($_.Name)" -eq $row.Id }
+                $saved = @(& $app.Close)
+            }
+            else {
+                $saved = @(Close-OtherApp $otherGroups[$row.Id] $processes)
+            }
+            $closed += [pscustomobject]@{ Id = $row.Id; Name = $row.Name; PrivateMB = $row.PrivateMB; Saved = $saved }
+            Write-Output "Closed $($row.Name) ($($row.PrivateMB) MB private)"
         }
-        else {
-            $saved = @(Close-OtherApp $otherGroups[$row.Id] $processes)
-        }
-        $closed += [pscustomobject]@{ Id = $row.Id; Name = $row.Name; PrivateMB = $row.PrivateMB; Saved = $saved }
-        Write-Output "Closed $($row.Name) ($($row.PrivateMB) MB private)"
     }
-    New-Item -ItemType Directory -Force (Split-Path $StateFile) | Out-Null
-    $since = if ($state) { $state.Since } else { (Get-Date).ToString('s') }
-    [pscustomobject]@{ Since = $since; Closed = @(Merge-Closed $state.Closed $closed) } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
+    finally {
+        # Even when a close throws, Off must still reopen the apps this pass already closed.
+        New-Item -ItemType Directory -Force (Split-Path $StateFile) | Out-Null
+        $since = if ($state) { $state.Since } else { (Get-Date).ToString('s') }
+        [pscustomobject]@{ Since = $since; Closed = @(Merge-Closed $state.Closed $closed) } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
+    }
 
     if ($state -and -not $closed) { Write-Output 'Memory saver is on; none of the chosen apps is running again.'; return }
     # Windows takes a few seconds to return a closed app's pages to the free list.
     Start-Sleep -Seconds 5
     $names = if ($closed) { $closed.Name -join ', ' } else { 'nothing (none of the chosen apps was running)' }
-    $verb = if ($state) { 'reapplied: closed again' } else { 'on: closed' }
+    $verb = if ($state) { 'reapplied: closed' } else { 'on: closed' }
     Write-Output ("Memory saver {0} {1}. Free RAM {2:N1} -> {3:N1} GB." -f $verb, $names, ($freeBefore / 1KB), ((Get-FreeMB) / 1KB))
 }
 
@@ -361,6 +369,10 @@ switch ($Mode) {
         ConvertTo-Json -InputObject @($rows) -Depth 3 -Compress
     }
     'On' { Enable-Saver }
+    'Reapply' {
+        if (-not (Read-JsonFile $StateFile)) { Write-Output 'Memory saver is off; nothing to reapply.'; return }
+        Enable-Saver
+    }
     'Off' { Disable-Saver }
     'Status' { Show-Status }
 }
