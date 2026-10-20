@@ -184,7 +184,7 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 
 **IQ3_XXS is the default from 2026-10-19.** It is the more accurate size, it stays above 95 t/s at 128k in the interleaved runs, and with the fixed page file the commit limit is no longer close. IQ2_XS is still in the tray for when speed or free RAM matters more.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the two `args` flags back afterwards.
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the extra `args` flags back afterwards: `--vram-reserve-later-mib` and `--pipeline-windows 2` on both sizes, plus `--vram-reserve-mib 1344` on IQ3_XXS (values in [AGENTS.md](./AGENTS.md)).
 
 **Sampling.** Both configs set `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 

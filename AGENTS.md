@@ -148,8 +148,8 @@ Other moving parts:
   SHA-256 is still checked against GitHub). That is how 0.1.45 was installed on 2026-10-19, over 0.1.44.1 (now in
   `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Not started on it yet.
   Engine 0.1.45.3 (0.2.0's, with a new default sm_86 decode table) exists only as the new package.
-  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the two
-  `args` flags above after it.**
+  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the `args`
+  flags listed under "Installed sizes" above after it (two for IQ2_XS, three for IQ3_XXS).**
 - **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
   restarts on 2026-10-18; no engine process appeared and nothing was logged). The likely cause is the old launcher still
   holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a hardening pause (wait for the `strata`
