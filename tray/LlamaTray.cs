@@ -222,23 +222,24 @@ sealed class ScriptProcess
     // The start script launched by this tray, while it is alive.
     public Process Launcher { get { return launcher != null && !launcher.HasExited ? launcher : null; } }
 
-    public void Start()
+    // `arguments` go to the start script as they are, e.g. "-Model iq3_xxs".
+    public void Start(string arguments = "")
     {
-        launcher = RunScriptHidden(startScript);
+        launcher = RunScriptHidden(startScript, arguments);
     }
 
     public Task StopAsync()
     {
-        Process stopper = RunScriptHidden(stopScript);
+        Process stopper = RunScriptHidden(stopScript, "");
         return Task.Run(() => stopper.WaitForExit());
     }
 
     // CreateNoWindow gives the console no window at all. pwsh -WindowStyle Hidden does not help here:
     // with Windows Terminal as the default terminal, the window it opens stays visible.
-    Process RunScriptHidden(string script)
+    Process RunScriptHidden(string script, string arguments)
     {
         var startInfo = new ProcessStartInfo("pwsh.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, script) + "\"")
+            ("-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, script) + "\" " + arguments).TrimEnd())
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -588,11 +589,19 @@ sealed class TrayApp : ApplicationContext
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
-    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
+    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem memorySaverItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
 
+    // start-strata.ps1's -Model values and their menu labels; the first is also the script's default.
+    static readonly string[,] StrataSizes =
+    {
+        { "iq2_xs", "IQ2_XS (faster, more RAM free)" },
+        { "iq3_xxs", "IQ3_XXS (more accurate)" },
+    };
+
     StrataState strataState = StrataState.Stopped;
+    string strataSize;                  // the size this tray started; null when started elsewhere
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
     string strataYieldedTo;             // the router model Strata was last unloaded for
@@ -667,7 +676,8 @@ sealed class TrayApp : ApplicationContext
         restartItem = new ToolStripMenuItem("Restart router (reload presets.ini)", null, (s, e) => RunAction(RestartAsync));
 
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
-        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(StrataStartOrStopAsync));
+        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[0, 0])));
+        strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[1, 0])));
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -688,7 +698,7 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             startStopItem, restartItem,
             new ToolStripSeparator(),
-            strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
             new ToolStripSeparator(),
@@ -761,7 +771,10 @@ sealed class TrayApp : ApplicationContext
         restartItem.Enabled = answering;
 
         strataStatusItem.Text = StrataStatusText();
-        strataStartStopItem.Text = strataState == StrataState.Stopped ? "Start Strata (Qwen3.8-Flash-Next)" : "Stop Strata";
+        bool strataStopped = strataState == StrataState.Stopped;
+        strataStartStopItem.Text = strataStopped ? "Start Strata: Flash-Next " + StrataSizes[0, 1] : "Stop Strata";
+        strataStartOtherItem.Text = "Start Strata: Flash-Next " + StrataSizes[1, 1];
+        strataStartOtherItem.Visible = strataStopped;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
@@ -779,7 +792,7 @@ sealed class TrayApp : ApplicationContext
             case StrataState.Stopped: return "Strata stopped";
             case StrataState.Starting: return "Strata starting (1-3 min)...";
             case StrataState.Unloaded: return "Strata ready, model unloaded (loads on use)";
-            default: return "Strata: Qwen3.8-Flash-Next loaded";
+            default: return "Strata: Qwen3.8-Flash-Next " + (strataSize == null ? "" : strataSize.ToUpperInvariant() + " ") + "loaded";
         }
     }
 
@@ -1066,12 +1079,14 @@ sealed class TrayApp : ApplicationContext
         ShowState(RouterState.Stopped);   // before the next poll, so Apply does not report a crash
     }
 
-    async Task StrataStartOrStopAsync()
+    // While stopped, starts `size` (one of StrataSizes); otherwise stops Strata, whichever size runs.
+    async Task StrataStartOrStopAsync(string size)
     {
         if (strataState == StrataState.Stopped)
         {
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
-            strataProcess.Start();
+            strataProcess.Start("-Model " + size);
+            strataSize = size;
             strataStartRequestedAt = DateTime.Now;
             strataState = StrataState.Starting;
             ShowState(state);
@@ -1080,6 +1095,7 @@ sealed class TrayApp : ApplicationContext
         strataStartRequestedAt = null;
         await strataProcess.StopAsync();
         strataState = StrataState.Stopped;
+        strataSize = null;
         ShowState(state);
     }
 

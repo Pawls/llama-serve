@@ -164,8 +164,8 @@ Other moving parts:
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
   these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` drops this block
   along with `idle_unload_s` and `before_load`.
-- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq2_xs`, and the tray calls it with
-  no arguments, so the tray always starts IQ2_XS. IQ3_XXS starts only with `.\start-strata.ps1 -Model iq3_xxs`.
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq2_xs`. The tray has one start
+  item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
   The router has no size choice; it serves only `presets.ini` models.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache

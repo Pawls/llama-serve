@@ -116,7 +116,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Two sizes are installed. IQ2_XS is the default, and the only one the tray starts; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Two sizes are installed, and the tray has a start item for each. IQ2_XS is the default; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS from a terminal (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
