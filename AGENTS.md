@@ -91,7 +91,9 @@ Other moving parts:
 - Installed sizes: IQ2_XS (default) and IQ3_XXS. Configs: `F:\AI\strata\strata-iq2_xs.json`,
   `strata-iq3_xxs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
   `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` and `--pipeline-windows 2` in `args` (added
-  2026-10-18, see below); `strata-iq3_xxs.json` has neither and has not been tested on 0.1.44.1.
+  2026-10-18, see below); `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310`, `--pipeline-windows 2` and
+  `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked for; numbers in
+  [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)).
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
