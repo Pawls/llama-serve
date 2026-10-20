@@ -1115,45 +1115,40 @@ sealed class TrayApp : ApplicationContext
     }
 
     // Off: measure the candidates, let the user pick, close the picks. On: reopen what was closed.
-    async Task ToggleMemorySaverAsync()
+    Task ToggleMemorySaverAsync()
     {
-        bool turnOn = !MemorySaver.IsOn(root);
-        memorySaverSwitching = true;
-        try
-        {
-            if (turnOn)
-            {
-                ShowMemorySaverProgress("Memory saver: measuring apps...");
-                List<SaverCandidate> candidates = await MemorySaver.ListAsync(root);
-                using (var picker = new MemorySaverPicker(candidates))
-                {
-                    if (picker.ShowDialog() != DialogResult.OK) return;
-                    MemorySaver.SaveChoices(root, picker.ShownIds(), picker.CheckedIds());
-                }
-                ShowMemorySaverProgress("Memory saver: closing apps...");
-            }
-            else
-            {
-                ShowMemorySaverProgress("Memory saver: reopening apps (Docker takes about a minute)...");
-            }
-            string summary = await MemorySaver.SwitchAsync(root, turnOn);
-            if (summary != null) Notify(summary, ToolTipIcon.Info);
-        }
-        finally
-        {
-            memorySaverSwitching = false;
-            UpdateMenu();
-        }
+        return MemorySaver.IsOn(root)
+            ? SwitchMemorySaverAsync(false, "Memory saver: reopening apps (Docker takes about a minute)...", null)
+            : SwitchMemorySaverAsync(true, "Memory saver: closing apps...", PickAppsToCloseAsync);
     }
 
     // While on: close the ticked apps reopened since, with the saved ticks and no picker. Off still reopens each app once.
-    async Task ReapplyMemorySaverAsync()
+    Task ReapplyMemorySaverAsync()
+    {
+        return SwitchMemorySaverAsync(true, "Memory saver: closing reopened apps...", null);
+    }
+
+    // False when the user cancels the checklist.
+    async Task<bool> PickAppsToCloseAsync()
+    {
+        ShowMemorySaverProgress("Memory saver: measuring apps...");
+        List<SaverCandidate> candidates = await MemorySaver.ListAsync(root);
+        using (var picker = new MemorySaverPicker(candidates))
+        {
+            if (picker.ShowDialog() != DialogResult.OK) return false;
+            MemorySaver.SaveChoices(root, picker.ShownIds(), picker.CheckedIds());
+            return true;
+        }
+    }
+
+    async Task SwitchMemorySaverAsync(bool on, string progress, Func<Task<bool>> pick)
     {
         memorySaverSwitching = true;
         try
         {
-            ShowMemorySaverProgress("Memory saver: closing reopened apps...");
-            string summary = await MemorySaver.SwitchAsync(root, true);
+            if (pick != null && !await pick()) return;
+            ShowMemorySaverProgress(progress);
+            string summary = await MemorySaver.SwitchAsync(root, on);
             if (summary != null) Notify(summary, ToolTipIcon.Info);
         }
         finally

@@ -219,11 +219,7 @@ function Read-Choices {
 # unquoted path with spaces such as `C:\Program Files\App\app.exe --hidden` (Logi Options+ starts that way).
 function Get-Arguments([string]$commandLine, [string]$path) {
     $line = $commandLine.TrimStart()
-    if ($path) {
-        foreach ($prefix in @("`"$path`"", $path)) {
-            if ($line.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $line.Substring($prefix.Length).Trim() }
-        }
-    }
+    if ($path -and $line.StartsWith($path, [StringComparison]::OrdinalIgnoreCase)) { return $line.Substring($path.Length).Trim() }
     if ($line -match '^("[^"]*"|\S+)\s*(.*)$') { return $Matches[2].Trim() }
     return ''
 }
@@ -305,8 +301,7 @@ function Enable-Saver {
     }
     New-Item -ItemType Directory -Force (Split-Path $StateFile) | Out-Null
     $since = if ($state) { $state.Since } else { (Get-Date).ToString('s') }
-    $all = if ($state) { @(Merge-Closed $state.Closed $closed) } else { $closed }
-    [pscustomobject]@{ Since = $since; Closed = $all } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
+    [pscustomobject]@{ Since = $since; Closed = @(Merge-Closed $state.Closed $closed) } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
 
     if ($state -and -not $closed) { Write-Output 'Memory saver is on; none of the chosen apps is running again.'; return }
     # Windows takes a few seconds to return a closed app's pages to the free list.
