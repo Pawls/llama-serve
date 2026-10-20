@@ -169,6 +169,9 @@ sealed class StrataClient
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
+    // /health's "model" from the last answer, e.g. "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
+    public string Model { get; private set; }
+
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
     public async Task<bool?> GetLoadedAsync()
     {
@@ -179,6 +182,7 @@ sealed class StrataClient
             {
                 if (!response.IsSuccessStatusCode) return null;
                 var root = (Dictionary<string, object>)json.DeserializeObject(await response.Content.ReadAsStringAsync());
+                Model = root.ContainsKey("model") ? root["model"] as string : null;
                 return root.ContainsKey("loaded") && (bool)root["loaded"];
             }
         }
@@ -608,7 +612,6 @@ sealed class TrayApp : ApplicationContext
     };
 
     StrataState strataState = StrataState.Stopped;
-    string strataSize;                  // the size this tray started; null when started elsewhere
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
     string strataYieldedTo;             // the router model Strata was last unloaded for
@@ -804,7 +807,7 @@ sealed class TrayApp : ApplicationContext
             case StrataState.Stopped: return "Strata stopped";
             case StrataState.Starting: return "Strata starting (1-3 min)...";
             case StrataState.Unloaded: return "Strata ready, model unloaded (loads on use)";
-            default: return "Strata: Qwen3.8-Flash-Next " + (strataSize == null ? "" : strataSize.ToUpperInvariant() + " ") + "loaded";
+            default: return "Strata loaded: " + (strata.Model ?? "Qwen3.8-Flash-Next");
         }
     }
 
@@ -1098,7 +1101,6 @@ sealed class TrayApp : ApplicationContext
         {
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
             strataProcess.Start("-Model " + size);
-            strataSize = size;
             strataStartRequestedAt = DateTime.Now;
             strataState = StrataState.Starting;
             ShowState(state);
@@ -1107,7 +1109,6 @@ sealed class TrayApp : ApplicationContext
         strataStartRequestedAt = null;
         await strataProcess.StopAsync();
         strataState = StrataState.Stopped;
-        strataSize = null;
         ShowState(state);
     }
 
