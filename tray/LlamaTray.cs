@@ -232,10 +232,11 @@ sealed class ScriptProcess
         launcher = RunScriptHidden(startScript, arguments);
     }
 
-    public Task StopAsync()
+    // The stop script's exit code: non-zero when something it stops was still running at the end of its wait.
+    public Task<int> StopAsync()
     {
         Process stopper = RunScriptHidden(stopScript, "");
-        return Task.Run(() => stopper.WaitForExit());
+        return Task.Run(() => { stopper.WaitForExit(); return stopper.ExitCode; });
     }
 
     // CreateNoWindow gives the console no window at all. pwsh -WindowStyle Hidden does not help here:
@@ -614,6 +615,7 @@ sealed class TrayApp : ApplicationContext
     StrataState strataState = StrataState.Stopped;
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
+    bool strataStopping;                // stop-strata.ps1 is running
     string strataYieldedTo;             // the router model Strata was last unloaded for
 
     RouterState state = RouterState.Stopped;
@@ -784,8 +786,10 @@ sealed class TrayApp : ApplicationContext
         restartItem.Enabled = answering;
 
         strataStatusItem.Text = StrataStatusText();
-        bool strataStopped = strataState == StrataState.Stopped;
+        // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
+        bool strataStopped = strataState == StrataState.Stopped && !strataStopping;
         strataStartStopItem.Text = strataStopped ? "Start Strata: Flash-Next " + StrataSizes[0, 1] : "Stop Strata";
+        strataStartStopItem.Enabled = !strataStopping;
         strataStartOtherItem.Text = "Start Strata: Flash-Next " + StrataSizes[1, 1];
         strataStartOtherItem.Visible = strataStopped;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
@@ -802,6 +806,7 @@ sealed class TrayApp : ApplicationContext
 
     string StrataStatusText()
     {
+        if (strataStopping) return "Strata stopping...";
         switch (strataState)
         {
             case StrataState.Stopped: return "Strata stopped";
@@ -1107,7 +1112,18 @@ sealed class TrayApp : ApplicationContext
             return;
         }
         strataStartRequestedAt = null;
-        await strataProcess.StopAsync();
+        strataStopping = true;
+        UpdateMenu();
+        int exitCode;
+        try
+        {
+            exitCode = await strataProcess.StopAsync();
+        }
+        finally
+        {
+            strataStopping = false;
+        }
+        if (exitCode != 0) Notify("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.", ToolTipIcon.Error);
         strataState = StrataState.Stopped;
         ShowState(state);
     }

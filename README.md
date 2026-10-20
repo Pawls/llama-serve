@@ -176,7 +176,7 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 | IQ3_XXS | 139 / 136 / 128 | 105 / 99 / 96 | 1,020 / 3,110 / 3,270 | 2.5-4.1 GB (1.1) |
 | IQ3_XXS on 2026-10-04 (engine 0.1.39, neither flag) | 130 / 120 / 109 | 92 / 89 / 83 | | ~1.8 GB |
 
-- **IQ3_XXS is 7-18% faster than on 2026-10-04** and 12-14% slower than IQ2_XS on code (5-10% on prose). Both sizes stay above 95 t/s at 128k.
+- **IQ3_XXS is 7-17% faster than on 2026-10-04** and 11-14% slower than IQ2_XS on code (5-10% on prose). Both sizes stay above 95 t/s at 128k.
 - In these runs IQ3_XXS's start log still warned "only 404-546 MiB of VRAM free at the start of this request" on the desktop card. `--vram-reserve-mib` went from 700 to 1344, the value the log suggested. One more round with it decoded the same (140 / 135 / 130 code, 105 / 100 / 97 essay), with 1,258 MiB free at load and no warning. Tool calls 3/3.
 - **IQ2_XS is slower than on 2026-10-18** (161 vs ~186 code at 2k, same config, same VRAM split, draft acceptance 0.71-0.76 vs 0.69-0.73). The engine went 0.1.44.1 -> 0.1.45 in between; the day's system state differs too, so the cause is not isolated. 0.1.44.1 is in `F:\AI\strata\engine\.previous`.
 - **Windows commit is the real limit, not RAM.** Every run of both sizes had 0.2-0.5 GB of commit headroom at its low point, with the system-managed page file growing the limit to 129-135 GB. No engine died. The start log keeps warning about upstream #1607 (exit at the limit with no message).
@@ -190,7 +190,7 @@ To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `stra
 
 ### Memory saver
 
-Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed. While it is on, **Memory saver: close apps again...** opens the same checklist, showing what runs now, so you can close apps you reopened in the meantime and change the ticks; the next reopen still starts each app once. A restart turns the saver off: Windows' startup has launched those apps again, so the tray shows it off and nothing is reopened twice.
+With the memory saver on, Strata leaves 6.3-7.1 GB of RAM free on IQ2_XS and 2.5-4.1 GB on IQ3_XXS (median, 2026-10-19, engine 0.1.45), so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed. While it is on, **Memory saver: close apps again...** opens the same checklist, showing what runs now, so you can close apps you reopened in the meantime and change the ticks; the next reopen still starts each app once. A restart turns the saver off: Windows' startup has launched those apps again, so the tray shows it off and nothing is reopened twice.
 
 | Group | Rows | How it closes and reopens |
 |---|---|---|

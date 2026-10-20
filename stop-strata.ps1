@@ -1,5 +1,6 @@
 # Stops the Strata server and its engine, freeing the GPUs and the RAM it pins.
-# Returns only once the engine processes are gone and the launcher has let go of its files.
+# Returns once the server, the engine and the start-strata.ps1 launcher that logs them have exited; exits 1 if
+# any is still running after its wait.
 $ErrorActionPreference = 'Stop'
 
 # A venv's python.exe is a redirector that starts the real interpreter as a child, so match the command line,
@@ -9,7 +10,13 @@ function Get-StrataServers {
         Where-Object { $_.CommandLine -like '*F:\AI\strata\serve\server.py*' }
 }
 function Test-StrataRunning {
-    [bool]((Get-StrataServers) -or (Get-Process strata, strata-vision -ErrorAction SilentlyContinue))
+    [bool]((Get-StrataServers) -or
+        (Get-Process strata, strata-vision -ErrorAction SilentlyContinue | Where-Object Path -like 'F:\AI\strata\*'))
+}
+# The launcher's Tee-Object holds logs\strata.log until it exits; a start before then cannot rotate the log.
+function Get-StrataLaunchers {
+    Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe'" |
+        Where-Object { $_.CommandLine -like '*start-strata.ps1*' }
 }
 
 $servers = Get-StrataServers
@@ -22,6 +29,9 @@ $deadline = (Get-Date).AddSeconds(60)
 while ((Test-StrataRunning) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
 if (Test-StrataRunning) { throw 'Strata processes are still running 60 s after taskkill.' }
 
-# A restart straight after a stop failed 2 of 4 times; after this pause 9 of 9 worked (AGENTS.md, Strata state).
-Start-Sleep -Seconds 15
+$launchers = @(Get-StrataLaunchers)
+if ($launchers) {
+    Wait-Process -Id $launchers.ProcessId -Timeout 30 -ErrorAction SilentlyContinue
+    if (Get-StrataLaunchers) { throw 'The start-strata.ps1 launcher is still running 30 s after Strata stopped.' }
+}
 Write-Host "Stopped $(@($servers).Count) Strata server process(es)."

@@ -28,13 +28,23 @@ if ($null -ne $IdleMinutes) {
     }
 }
 
-New-Item -ItemType Directory -Force $LogDir | Out-Null
-$AppendLog = $false
-if (Test-Path $Log) {
-    # A launcher from the previous run can still hold the log briefly; a locked log must not abort the start.
-    try { Move-Item -Force $Log (Join-Path $LogDir 'strata.prev.log') }
-    catch { $AppendLog = $true; Write-Warning "Could not rotate $Log ($($_.Exception.Message)); appending to it." }
+# Returns the file this run logs to. The previous run's launcher can still hold the log (its Tee-Object shares it
+# for reading only, so neither a move nor an append works): wait for it, then log beside it rather than not start.
+function Resolve-StrataLog([string]$log, [int]$waitSeconds = 30) {
+    if (-not (Test-Path $log)) { return $log }
+    $previous = Join-Path (Split-Path $log) 'strata.prev.log'
+    $deadline = (Get-Date).AddSeconds($waitSeconds)
+    while ($true) {
+        try { Move-Item -Force $log $previous; return $log }
+        catch { if ((Get-Date) -ge $deadline) { break }; Start-Sleep -Milliseconds 500 }
+    }
+    $instead = Join-Path (Split-Path $log) ("strata.{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
+    Write-Warning "$log is still in use after $waitSeconds s; logging to $instead."
+    $instead
 }
 
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$RunLog = Resolve-StrataLog $Log
+
 # The run script ends with "if errorlevel 1 pause"; stdin from nul lets that return instead of hanging hidden.
-cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $Log -Append:$AppendLog
+cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $RunLog

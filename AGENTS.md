@@ -146,14 +146,16 @@ Other moving parts:
   so it 404s and keeps the old engine. Point it at the last release that has the zip:
   `$env:STRATA_PREBUILT_URL='https://github.com/Niko1221/Strata/releases/download/v0.1.45/'` before `UPDATE.bat` (the
   SHA-256 is still checked against GitHub). That is how 0.1.45 was installed on 2026-10-19, over 0.1.44.1 (now in
-  `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Not started on it yet.
+  `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Benched the same day (README "Engine 0.1.45").
   Engine 0.1.45.3 (0.2.0's, with a new default sm_86 decode table) exists only as the new package.
   **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the `args`
   flags listed under "Installed sizes" above after it (two for IQ2_XS, three for IQ3_XXS).**
 - **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
   restarts on 2026-10-18; no engine process appeared and nothing was logged). The likely cause is the old launcher still
-  holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a hardening pause (wait for the `strata`
-  process to exit, then about 15 s) 9 of 9 restarts worked. Do that when restarting from a script.
+  holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a pause (wait for the `strata` process to
+  exit, then about 15 s) 9 of 9 restarts worked. The scripts now handle it themselves: `stop-strata.ps1` returns only
+  after the old `start-strata.ps1` launcher has exited, and `start-strata.ps1` waits up to 30 s for a held log, then
+  logs to `logs\strata.<timestamp>.log` instead. No caller needs its own pause.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
