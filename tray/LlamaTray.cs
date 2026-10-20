@@ -672,7 +672,7 @@ sealed class TrayApp : ApplicationContext
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
         memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
-        memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close the ticked apps opened since", null,
+        memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close apps again...", null,
             (s, e) => RunAction(ReapplyMemorySaverAsync));
         routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
         strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
@@ -1122,25 +1122,11 @@ sealed class TrayApp : ApplicationContext
             : SwitchMemorySaverAsync("On", "Memory saver: closing apps...", PickAppsToCloseAsync);
     }
 
-    // While on: close the ticked apps reopened since, after one Yes/No that names them. Off still reopens each app once.
+    // While on: the same checklist, showing what runs now, then close the ticked apps that run again.
+    // Off still reopens everything closed by either pass, once.
     Task ReapplyMemorySaverAsync()
     {
-        return SwitchMemorySaverAsync("Reapply", "Memory saver: closing reopened apps...", ConfirmReapplyAsync);
-    }
-
-    // The checklist's ticks can include apps opened only after it was shown, so name what will close first.
-    async Task<bool> ConfirmReapplyAsync()
-    {
-        ShowMemorySaverProgress("Memory saver: checking what runs again...");
-        List<SaverCandidate> running = (await MemorySaver.ListAsync(root)).Where(c => c.Chosen && c.CanClose).ToList();
-        if (running.Count == 0)
-        {
-            Notify("Memory saver is on; none of the ticked apps is running again.", ToolTipIcon.Info);
-            return false;
-        }
-        string names = string.Join("\n", running.Select(c => "  " + c.Name + " (" + c.PrivateMB + " MB)"));
-        return MessageBox.Show("Close these ticked apps again? Save your work in them first.\n\n" + names,
-            "Memory saver", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+        return SwitchMemorySaverAsync("Reapply", "Memory saver: closing apps...", PickAppsToCloseAsync);
     }
 
     // False when the user cancels the checklist.
