@@ -1,6 +1,6 @@
 # Starts Strata (Qwen3.8-Flash-Next) on 127.0.0.1:8411 after freeing the GPUs from the router's model.
 # Strata's own flags live in the run-<model>.bat its setup wrote; this script only picks and launches it.
-param([string]$Model = 'iq2_xs')
+param([string]$Model = 'iq3_xxs')
 $ErrorActionPreference = 'Stop'
 
 $StrataDir = 'F:\AI\strata'
@@ -28,8 +28,23 @@ if ($null -ne $IdleMinutes) {
     }
 }
 
+# Returns the file this run logs to. The previous run's launcher can still hold the log (its Tee-Object shares it
+# for reading only, so neither a move nor an append works): wait for it, then log beside it rather than not start.
+function Resolve-StrataLog([string]$log, [int]$waitSeconds = 30) {
+    if (-not (Test-Path $log)) { return $log }
+    $previous = Join-Path (Split-Path $log) 'strata.prev.log'
+    $deadline = (Get-Date).AddSeconds($waitSeconds)
+    while ($true) {
+        try { Move-Item -Force $log $previous; return $log }
+        catch { if ((Get-Date) -ge $deadline) { break }; Start-Sleep -Milliseconds 500 }
+    }
+    $instead = Join-Path (Split-Path $log) ("strata.{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
+    Write-Warning "$log is still in use after $waitSeconds s; logging to $instead."
+    $instead
+}
+
 New-Item -ItemType Directory -Force $LogDir | Out-Null
-if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'strata.prev.log') }
+$RunLog = Resolve-StrataLog $Log
 
 # The run script ends with "if errorlevel 1 pause"; stdin from nul lets that return instead of hanging hidden.
-cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $Log
+cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $RunLog

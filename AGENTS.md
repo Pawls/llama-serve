@@ -80,7 +80,7 @@ Other moving parts:
   `start-strata.ps1` writes `idle_unload_s` into the Strata config JSON (keeping a `.bak`). Both apply at the next
   start.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata
-  (it leaves ~4.6 GB free on IQ2_XS, ~1.8 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
+  (measured 2026-10-19 on engine 0.1.45 with it on: 6.3-7.1 GB free on IQ2_XS, 2.5-4.1 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
 - **The tray** is one C# file, [tray/LlamaTray.cs](./tray/LlamaTray.cs), compiled with the C# compiler built into
   Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\` (untracked). After editing it, re-run
@@ -88,14 +88,16 @@ Other moving parts:
 
 ## Strata state and updating it
 
-- Installed sizes: IQ2_XS (default) and IQ3_XXS. Configs: `F:\AI\strata\strata-iq2_xs.json`,
-  `strata-iq3_xxs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
+- Installed sizes: IQ3_XXS (default since 2026-10-19) and IQ2_XS. Configs: `F:\AI\strata\strata-iq3_xxs.json`,
+  `strata-iq2_xs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
   `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` and `--pipeline-windows 2` in `args` (added
-  2026-10-18, see below); `strata-iq3_xxs.json` has neither and has not been tested on 0.1.44.1.
+  2026-10-18, see below); `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310`, `--pipeline-windows 2` and
+  `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked for; numbers in
+  [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)).
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
-  `F:\AI\strata\strata-iq2_xs.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
+  `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
 - **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43) and benched on 2026-10-18; 0.1.43 never was.** The
   installed IQ2_XS config decoded 52 tok/s on code at every depth (133 / 130 / 117 on 2026-10-04) because the auto
@@ -139,12 +141,25 @@ Other moving parts:
   the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
   2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
   baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
-  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the two
-  `args` flags above after it.**
+  **Since upstream 0.2.0-beta (2026-10-19) `UPDATE.bat` cannot fetch a Windows engine**: it looks for
+  `strata-windows-x64.zip`, which 0.2.0 no longer ships (engines are now `.tar.gz` packages for the app's signed feed),
+  so it 404s and keeps the old engine. Point it at the last release that has the zip:
+  `$env:STRATA_PREBUILT_URL='https://github.com/Niko1221/Strata/releases/download/v0.1.45/'` before `UPDATE.bat` (the
+  SHA-256 is still checked against GitHub). That is how 0.1.45 was installed on 2026-10-19, over 0.1.44.1 (now in
+  `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Benched the same day (README "Engine 0.1.45").
+  Engine 0.1.45.3 (0.2.0's, with a new default sm_86 decode table) exists only as the new package.
+  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the `args`
+  flags listed under "Installed sizes" above after it (two for IQ2_XS, three for IQ3_XXS).**
 - **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
   restarts on 2026-10-18; no engine process appeared and nothing was logged). The likely cause is the old launcher still
-  holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a hardening pause (wait for the `strata`
-  process to exit, then about 15 s) 9 of 9 restarts worked. Do that when restarting from a script.
+  holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a pause (wait for the `strata` process to
+  exit, then about 15 s) 9 of 9 restarts worked. The scripts now handle it themselves: `stop-strata.ps1` returns only
+  after the old `start-strata.ps1` launcher has exited, and `start-strata.ps1` waits up to 30 s for a held log, then
+  logs to `logs\strata.<timestamp>.log` instead. No caller needs its own pause. Measured 2026-10-19 (IQ3_XXS,
+  stop then start at once, each start reaching `/health` loaded in 28 s): 8 of 8 restarts, stops 0.5-1.8 s, the log
+  rotated every time and no fallback log was written. The first 4 found an engine still exiting after the stop
+  returned (an exiting process has no `Path`, so the path filter skipped it); counted as running now, none was left
+  in the last 4.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
@@ -155,9 +170,11 @@ Other moving parts:
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
   these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` drops this block
   along with `idle_unload_s` and `before_load`.
-- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq2_xs`, and the tray calls it with
-  no arguments, so the tray always starts IQ2_XS. IQ3_XXS starts only with `.\start-strata.ps1 -Model iq3_xxs`.
-  The router has no size choice; it serves only `presets.ini` models.
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq3_xxs`. The tray has one start
+  item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
+  The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
+  whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
+  each client lists both ids and either works.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`

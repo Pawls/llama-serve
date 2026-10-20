@@ -169,6 +169,9 @@ sealed class StrataClient
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
+    // /health's "model" from the last answer, e.g. "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
+    public string Model { get; private set; }
+
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
     public async Task<bool?> GetLoadedAsync()
     {
@@ -179,6 +182,7 @@ sealed class StrataClient
             {
                 if (!response.IsSuccessStatusCode) return null;
                 var root = (Dictionary<string, object>)json.DeserializeObject(await response.Content.ReadAsStringAsync());
+                Model = root.ContainsKey("model") ? root["model"] as string : null;
                 return root.ContainsKey("loaded") && (bool)root["loaded"];
             }
         }
@@ -222,23 +226,25 @@ sealed class ScriptProcess
     // The start script launched by this tray, while it is alive.
     public Process Launcher { get { return launcher != null && !launcher.HasExited ? launcher : null; } }
 
-    public void Start()
+    // `arguments` go to the start script as they are, e.g. "-Model iq3_xxs".
+    public void Start(string arguments = "")
     {
-        launcher = RunScriptHidden(startScript);
+        launcher = RunScriptHidden(startScript, arguments);
     }
 
-    public Task StopAsync()
+    // The stop script's exit code: non-zero when something it stops was still running at the end of its wait.
+    public Task<int> StopAsync()
     {
-        Process stopper = RunScriptHidden(stopScript);
-        return Task.Run(() => stopper.WaitForExit());
+        Process stopper = RunScriptHidden(stopScript, "");
+        return Task.Run(() => { stopper.WaitForExit(); return stopper.ExitCode; });
     }
 
     // CreateNoWindow gives the console no window at all. pwsh -WindowStyle Hidden does not help here:
     // with Windows Terminal as the default terminal, the window it opens stays visible.
-    Process RunScriptHidden(string script)
+    Process RunScriptHidden(string script, string arguments)
     {
         var startInfo = new ProcessStartInfo("pwsh.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, script) + "\"")
+            ("-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, script) + "\" " + arguments).TrimEnd())
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -595,13 +601,21 @@ sealed class TrayApp : ApplicationContext
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
-    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
+    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
+
+    // start-strata.ps1's -Model values and their menu labels; the first is also the script's default.
+    static readonly string[,] StrataSizes =
+    {
+        { "iq3_xxs", "IQ3_XXS (more accurate)" },
+        { "iq2_xs", "IQ2_XS (faster, more RAM free)" },
+    };
 
     StrataState strataState = StrataState.Stopped;
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
+    bool strataStopping;                // stop-strata.ps1 is running
     string strataYieldedTo;             // the router model Strata was last unloaded for
 
     RouterState state = RouterState.Stopped;
@@ -674,7 +688,8 @@ sealed class TrayApp : ApplicationContext
         restartItem = new ToolStripMenuItem("Restart router (reload presets.ini)", null, (s, e) => RunAction(RestartAsync));
 
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
-        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(StrataStartOrStopAsync));
+        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[0, 0])));
+        strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[1, 0])));
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -697,7 +712,7 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             startStopItem, restartItem,
             new ToolStripSeparator(),
-            strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             memorySaverReapplyItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
@@ -771,7 +786,12 @@ sealed class TrayApp : ApplicationContext
         restartItem.Enabled = answering;
 
         strataStatusItem.Text = StrataStatusText();
-        strataStartStopItem.Text = strataState == StrataState.Stopped ? "Start Strata (Qwen3.8-Flash-Next)" : "Stop Strata";
+        // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
+        bool strataStopped = strataState == StrataState.Stopped && !strataStopping;
+        strataStartStopItem.Text = strataStopped ? "Start Strata: Flash-Next " + StrataSizes[0, 1] : "Stop Strata";
+        strataStartStopItem.Enabled = !strataStopping;
+        strataStartOtherItem.Text = "Start Strata: Flash-Next " + StrataSizes[1, 1];
+        strataStartOtherItem.Visible = strataStopped;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
@@ -786,12 +806,13 @@ sealed class TrayApp : ApplicationContext
 
     string StrataStatusText()
     {
+        if (strataStopping) return "Strata stopping...";
         switch (strataState)
         {
             case StrataState.Stopped: return "Strata stopped";
             case StrataState.Starting: return "Strata starting (1-3 min)...";
             case StrataState.Unloaded: return "Strata ready, model unloaded (loads on use)";
-            default: return "Strata: Qwen3.8-Flash-Next loaded";
+            default: return "Strata loaded: " + (strata.Model ?? "Qwen3.8-Flash-Next");
         }
     }
 
@@ -1078,19 +1099,31 @@ sealed class TrayApp : ApplicationContext
         ShowState(RouterState.Stopped);   // before the next poll, so Apply does not report a crash
     }
 
-    async Task StrataStartOrStopAsync()
+    // While stopped, starts `size` (one of StrataSizes); otherwise stops Strata, whichever size runs.
+    async Task StrataStartOrStopAsync(string size)
     {
         if (strataState == StrataState.Stopped)
         {
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
-            strataProcess.Start();
+            strataProcess.Start("-Model " + size);
             strataStartRequestedAt = DateTime.Now;
             strataState = StrataState.Starting;
             ShowState(state);
             return;
         }
         strataStartRequestedAt = null;
-        await strataProcess.StopAsync();
+        strataStopping = true;
+        UpdateMenu();
+        int exitCode;
+        try
+        {
+            exitCode = await strataProcess.StopAsync();
+        }
+        finally
+        {
+            strataStopping = false;
+        }
+        if (exitCode != 0) Notify("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.", ToolTipIcon.Error);
         strataState = StrataState.Stopped;
         ShowState(state);
     }
