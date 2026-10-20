@@ -155,7 +155,11 @@ Other moving parts:
   holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a pause (wait for the `strata` process to
   exit, then about 15 s) 9 of 9 restarts worked. The scripts now handle it themselves: `stop-strata.ps1` returns only
   after the old `start-strata.ps1` launcher has exited, and `start-strata.ps1` waits up to 30 s for a held log, then
-  logs to `logs\strata.<timestamp>.log` instead. No caller needs its own pause.
+  logs to `logs\strata.<timestamp>.log` instead. No caller needs its own pause. Measured 2026-10-19 (IQ3_XXS,
+  stop then start at once, each start reaching `/health` loaded in 28 s): 8 of 8 restarts, stops 0.5-1.8 s, the log
+  rotated every time and no fallback log was written. The first 4 found an engine still exiting after the stop
+  returned (an exiting process has no `Path`, so the path filter skipped it); counted as running now, none was left
+  in the last 4.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is

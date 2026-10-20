@@ -11,7 +11,8 @@ function Get-StrataServers {
 }
 function Test-StrataRunning {
     [bool]((Get-StrataServers) -or
-        (Get-Process strata, strata-vision -ErrorAction SilentlyContinue | Where-Object Path -like 'F:\AI\strata\*'))
+        (Get-Process strata, strata-vision -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.Path -or $_.Path -like 'F:\AI\strata\*' }))   # an exiting process has no Path
 }
 # The launcher's Tee-Object holds logs\strata.log until it exits; a start before then cannot rotate the log.
 function Get-StrataLaunchers {
