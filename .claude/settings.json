@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "C:\\Users\\Paul\\.pi\\agent"
+    ],
+    "allow": [
+      "Bash(mkdir -p ~/.claude/review-costs)",
+      "Bash(~/.claude/scripts/reviewer-token.sh Pawls/llama-serve)",
+      "Bash(GH_TOKEN=$\\(~/.claude/scripts/reviewer-token.sh Pawls/llama-serve\\) claude -p --no-session-persistence --model opus --output-format json \"/code-review high 5 --comment\")",
+      "Bash(node -e \"const r=require\\(process.env.HOME+'/.claude/review-costs/llama-serve-5.json'\\);console.log\\(JSON.stringify\\(r.usage\\),r.total_cost_usd\\);console.log\\(String\\(r.result\\).slice\\(0,1500\\)\\)\")"
+    ]
+  }
+}
