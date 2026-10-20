@@ -1,7 +1,8 @@
 # Closes background apps that hold RAM Strata could use, and reopens them afterwards.
 #   -Mode List    JSON of every candidate with its RAM: known apps, other apps that are safe to close,
 #                 and (as information only) VS Code extensions and services. The tray's picker shows it.
-#   -Mode On      closes the apps named in memory-saver.choices.json and records them in logs\memory-saver.json
+#   -Mode On      closes the apps named in memory-saver.choices.json and records them in logs\memory-saver.json;
+#                 run again while on, it closes the ones reopened since and adds them to the record
 #   -Mode Off     reopens exactly the apps -Mode On closed
 #   -Mode Status  what is on and what each known app holds
 # What each known app costs while it is closed is in README.md § Memory saver.
@@ -156,7 +157,7 @@ function Get-OtherAppRows($processes) {
         $description = (Get-Item $roots[0].ExecutablePath).VersionInfo.FileDescription
         [pscustomobject]@{
             Id = "other:$($group.Name)"; Kind = 'other'; CanClose = $true
-            Name = if ($description) { $description } else { Split-Path $group.Name -Leaf }
+            Name = if ("$description".Trim()) { $description } else { Split-Path $group.Name -Leaf }
             PrivateMB = [math]::Round(($group.Group | Measure-Object PrivateMB -Sum).Sum)
             Cost = "Asked to close, then ended like Task Manager's End task if still running after 10 s, so save work in it first. Reopened afterwards as it was started."
         }
@@ -214,9 +215,16 @@ function Read-Choices {
     return @($KnownApps | ForEach-Object { "known:$($_.Name)" })
 }
 
-# The executable's arguments from a command line such as `"C:\path\app.exe" --hidden` or `app.exe --hidden`.
-function Get-Arguments([string]$commandLine) {
-    if ($commandLine -match '^\s*("[^"]*"|\S+)\s*(.*)$') { return $Matches[2] }
+# The executable's arguments from its command line: `"C:\path\app.exe" --hidden`, `app.exe --hidden`, or an
+# unquoted path with spaces such as `C:\Program Files\App\app.exe --hidden` (Logi Options+ starts that way).
+function Get-Arguments([string]$commandLine, [string]$path) {
+    $line = $commandLine.TrimStart()
+    if ($path) {
+        foreach ($prefix in @("`"$path`"", $path)) {
+            if ($line.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $line.Substring($prefix.Length).Trim() }
+        }
+    }
+    if ($line -match '^("[^"]*"|\S+)\s*(.*)$') { return $Matches[2].Trim() }
     return ''
 }
 
@@ -237,7 +245,7 @@ function Close-OtherApp($group, $processes) {
     $memberIds = $members.ProcessId
     foreach ($root in Get-RootProcesses $members) {
         if (-not (Test-UserLaunched $root $processes)) { continue }
-        [pscustomobject]@{ Path = $root.ExecutablePath; Arguments = Get-Arguments $root.CommandLine }
+        [pscustomobject]@{ Path = $root.ExecutablePath; Arguments = Get-Arguments $root.CommandLine $root.ExecutablePath }
     }
 
     foreach ($member in $members) {
@@ -251,8 +259,32 @@ function Close-OtherApp($group, $processes) {
     Get-Process -Id $memberIds -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 
+# The launches an app needs, from both passes that closed it, without repeats.
+function Join-Saved($earlier, $now) {
+    $seen = @{}
+    foreach ($item in @($earlier) + @($now)) {
+        if ($null -eq $item) { continue }
+        $key = ConvertTo-Json -InputObject $item -Compress -Depth 6
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $item
+    }
+}
+
+# One entry per app across every pass, so Off reopens each app once.
+function Merge-Closed($earlier, $now) {
+    $merged = [ordered]@{}
+    foreach ($entry in @($earlier) + @($now)) {
+        if (-not $entry) { continue }
+        if ($merged.Contains($entry.Id)) { $merged[$entry.Id].Saved = @(Join-Saved $merged[$entry.Id].Saved $entry.Saved) }
+        else { $merged[$entry.Id] = $entry }
+    }
+    @($merged.Values)
+}
+
+# Run again while on, it closes the chosen apps that were opened since and adds them to what Off reopens.
 function Enable-Saver {
-    if (Read-JsonFile $StateFile) { Write-Output 'Memory saver is already on.'; return }
+    $state = Read-JsonFile $StateFile
     $choices = Read-Choices
     $processes = Get-ProcessTable
     $freeBefore = Get-FreeMB
@@ -272,12 +304,16 @@ function Enable-Saver {
         Write-Output "Closed $($row.Name) ($($row.PrivateMB) MB private)"
     }
     New-Item -ItemType Directory -Force (Split-Path $StateFile) | Out-Null
-    [pscustomobject]@{ Since = (Get-Date).ToString('s'); Closed = $closed } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
+    $since = if ($state) { $state.Since } else { (Get-Date).ToString('s') }
+    $all = if ($state) { @(Merge-Closed $state.Closed $closed) } else { $closed }
+    [pscustomobject]@{ Since = $since; Closed = $all } | ConvertTo-Json -Depth 8 | Set-Content $StateFile
 
+    if ($state -and -not $closed) { Write-Output 'Memory saver is on; none of the chosen apps is running again.'; return }
     # Windows takes a few seconds to return a closed app's pages to the free list.
     Start-Sleep -Seconds 5
     $names = if ($closed) { $closed.Name -join ', ' } else { 'nothing (none of the chosen apps was running)' }
-    Write-Output ("Memory saver on: closed {0}. Free RAM {1:N1} -> {2:N1} GB." -f $names, ($freeBefore / 1KB), ((Get-FreeMB) / 1KB))
+    $verb = if ($state) { 'reapplied: closed again' } else { 'on: closed' }
+    Write-Output ("Memory saver {0} {1}. Free RAM {2:N1} -> {3:N1} GB." -f $verb, $names, ($freeBefore / 1KB), ((Get-FreeMB) / 1KB))
 }
 
 function Open-ClosedApp($entry) {

@@ -589,7 +589,7 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
-    ToolStripMenuItem memorySaverItem, routerIdleMenu, strataIdleMenu;
+    ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
 
     StrataState strataState = StrataState.Stopped;
@@ -672,6 +672,8 @@ sealed class TrayApp : ApplicationContext
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
         memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
+        memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close the ticked apps opened since", null,
+            (s, e) => RunAction(ReapplyMemorySaverAsync));
         routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
         strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
 
@@ -689,6 +691,7 @@ sealed class TrayApp : ApplicationContext
             startStopItem, restartItem,
             new ToolStripSeparator(),
             strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            memorySaverReapplyItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
             new ToolStripSeparator(),
@@ -770,6 +773,8 @@ sealed class TrayApp : ApplicationContext
         memorySaverItem.Enabled = !memorySaverSwitching;
         if (!memorySaverSwitching)
             memorySaverItem.Text = saverOn ? "Memory saver on: reopen the closed apps" : "Memory saver: close apps to free RAM...";
+        memorySaverReapplyItem.Visible = saverOn;
+        memorySaverReapplyItem.Enabled = !memorySaverSwitching;
     }
 
     string StrataStatusText()
@@ -1132,6 +1137,23 @@ sealed class TrayApp : ApplicationContext
                 ShowMemorySaverProgress("Memory saver: reopening apps (Docker takes about a minute)...");
             }
             string summary = await MemorySaver.SwitchAsync(root, turnOn);
+            if (summary != null) Notify(summary, ToolTipIcon.Info);
+        }
+        finally
+        {
+            memorySaverSwitching = false;
+            UpdateMenu();
+        }
+    }
+
+    // While on: close the ticked apps reopened since, with the saved ticks and no picker. Off still reopens each app once.
+    async Task ReapplyMemorySaverAsync()
+    {
+        memorySaverSwitching = true;
+        try
+        {
+            ShowMemorySaverProgress("Memory saver: closing reopened apps...");
+            string summary = await MemorySaver.SwitchAsync(root, true);
             if (summary != null) Notify(summary, ToolTipIcon.Info);
         }
         finally
