@@ -209,6 +209,17 @@ function Read-JsonFile([string]$path) {
     if (Test-Path $path) { Get-Content $path -Raw | ConvertFrom-Json } else { $null }
 }
 
+# A state file last written before this boot is stale: Windows' startup has relaunched those apps, so the saver is
+# off and Off must not start second copies. The tray applies the same rule (MemorySaver.IsOn).
+function Read-State {
+    if (-not (Test-Path $StateFile)) { return $null }
+    if ((Get-Item $StateFile).LastWriteTime -lt (Get-CimInstance Win32_OperatingSystem).LastBootUpTime) {
+        Remove-Item $StateFile
+        return $null
+    }
+    Read-JsonFile $StateFile
+}
+
 function Read-Choices {
     $choices = Read-JsonFile $ChoicesFile
     if ($choices) { return @($choices.Close) }
@@ -283,7 +294,7 @@ function Merge-Closed($earlier, $now) {
 
 # Run again while on, it closes the chosen apps that were opened since and adds them to what Off reopens.
 function Enable-Saver {
-    $state = Read-JsonFile $StateFile
+    $state = Read-State
     $choices = Read-Choices
     $processes = Get-ProcessTable
     $freeBefore = Get-FreeMB
@@ -333,7 +344,7 @@ function Open-ClosedApp($entry) {
 }
 
 function Disable-Saver {
-    $state = Read-JsonFile $StateFile
+    $state = Read-State
     if (-not $state) { Write-Output 'Memory saver is already off.'; return }
     $failed = @()
     foreach ($entry in $state.Closed) {
@@ -351,7 +362,7 @@ function Disable-Saver {
 }
 
 function Show-Status {
-    $state = Read-JsonFile $StateFile
+    $state = Read-State
     if ($state) { Write-Output "Memory saver on since $($state.Since): closed $($state.Closed.Name -join ', ')." }
     else { Write-Output 'Memory saver off.' }
     $choices = Read-Choices
@@ -370,7 +381,7 @@ switch ($Mode) {
     }
     'On' { Enable-Saver }
     'Reapply' {
-        if (-not (Read-JsonFile $StateFile)) { Write-Output 'Memory saver is off; nothing to reapply.'; return }
+        if (-not (Read-State)) { Write-Output 'Memory saver is off; nothing to reapply.'; return }
         Enable-Saver
     }
     'Off' { Disable-Saver }

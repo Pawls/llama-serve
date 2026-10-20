@@ -293,9 +293,16 @@ sealed class SaverCandidate
 // reopens them. Its state file says whether it is on, so a switch made from a terminal shows in the menu too.
 static class MemorySaver
 {
+    [DllImport("kernel32.dll")]
+    static extern ulong GetTickCount64();
+
+    // A state file from before this boot counts as off: Windows' startup has relaunched those apps.
+    // memory-saver.ps1 applies the same rule and removes such a file on its next run.
     public static bool IsOn(string root)
     {
-        return File.Exists(Path.Combine(root, "logs", "memory-saver.json"));
+        var state = new FileInfo(Path.Combine(root, "logs", "memory-saver.json"));
+        DateTime bootedAt = DateTime.Now - TimeSpan.FromMilliseconds(GetTickCount64());
+        return state.Exists && state.LastWriteTime > bootedAt;
     }
 
     public static async Task<List<SaverCandidate>> ListAsync(string root)

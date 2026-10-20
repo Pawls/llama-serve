@@ -172,7 +172,7 @@ To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `stra
 
 ### Memory saver
 
-Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed. While it is on, **Memory saver: close apps again...** opens the same checklist, showing what runs now, so you can close apps you reopened in the meantime and change the ticks; the next reopen still starts each app once.
+Strata leaves only ~4.6 GB of RAM free on IQ2_XS and ~1.8 GB on IQ3_XXS, so other apps' memory decides whether Windows starts paging. **Memory saver** in the tray measures what is running and shows a checklist with each app's private memory and what you lose while it is closed. Tick what to close; the ticks are saved in `memory-saver.choices.json` (not tracked) and preselected next time. Click the menu item again to reopen exactly what it closed. While it is on, **Memory saver: close apps again...** opens the same checklist, showing what runs now, so you can close apps you reopened in the meantime and change the ticks; the next reopen still starts each app once. A restart turns the saver off: Windows' startup has launched those apps again, so the tray shows it off and nothing is reopened twice.
 
 | Group | Rows | How it closes and reopens |
 |---|---|---|
