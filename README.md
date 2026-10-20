@@ -116,7 +116,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-iq2_xs.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Two sizes are installed. IQ2_XS is the default, and the only one the tray starts; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Two sizes are installed. IQ2_XS is the default, and the only one the tray starts; `start-strata.ps1 -Model iq3_xxs` starts IQ3_XXS instead (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
@@ -165,6 +165,21 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 - Tool calls on D: 5/5 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`). On 2k and 30k prompts, D decodes 184 / 167 on code and 125 / 116 on prose (one round).
 - Not done: IQ3_XXS on 0.1.44.1 (its config has neither flag and probably needs the reserve too), and `--adapt-async 1`.
 - Every start logs `Windows commit: 0.3-1.3 GiB left of a 118 GiB limit` with a warning that Strata can exit with no message at the limit (upstream #1607). The engine started 14 times that day and none of those runs died at the limit. Two more launches never reached the engine (the log has no engine-start line; see the restart note in [AGENTS.md](./AGENTS.md)), so they say nothing about the limit either way.
+
+### Engine 0.1.45: IQ3_XXS against IQ2_XS (measured 2026-10-19)
+
+Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell, thinking off), memory saver on. Three rounds, sizes interleaved and the order swapped each round, a Strata restart before every run. IQ3_XXS now carries the IQ2_XS fixes (`--vram-reserve-later-mib 1310`, `--pipeline-windows 2`); its start log asked for 1310, the same as IQ2_XS. Median net t/s over the rounds:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (2k / 52k / 128k, code) | Free RAM while serving, median (min) |
+|---|---|---|---|---|
+| IQ2_XS | 161 / 153 / 146 | 116 / 107 / 101 | 1,270 / 3,600 / 3,570 | 6.3-7.1 GB (5.5) |
+| IQ3_XXS | 139 / 136 / 128 | 105 / 99 / 96 | 1,020 / 3,110 / 3,270 | 2.5-4.1 GB (1.1) |
+| IQ3_XXS on 2026-10-04 (engine 0.1.39, neither flag) | 130 / 120 / 109 | 92 / 89 / 83 | | ~1.8 GB |
+
+- **IQ3_XXS is 7-18% faster than on 2026-10-04** and 12-14% slower than IQ2_XS on code (5-10% on prose). Both sizes stay above 95 t/s at 128k.
+- In these runs IQ3_XXS's start log still warned "only 404-546 MiB of VRAM free at the start of this request" on the desktop card. `--vram-reserve-mib` went from 700 to 1344, the value the log suggested. One more round with it decoded the same (140 / 135 / 130 code, 105 / 100 / 97 essay), with 1,258 MiB free at load and no warning. Tool calls 3/3.
+- **IQ2_XS is slower than on 2026-10-18** (161 vs ~186 code at 2k, same config, same VRAM split, draft acceptance 0.71-0.76 vs 0.69-0.73). The engine went 0.1.44.1 -> 0.1.45 in between; the day's system state differs too, so the cause is not isolated. 0.1.44.1 is in `F:\AI\strata\engine\.previous`.
+- **Windows commit is the real limit, not RAM.** Every run of both sizes had 0.2-0.5 GB of commit headroom at its low point, with the system-managed page file growing the limit to 129-135 GB. No engine died. The start log keeps warning about upstream #1607 (exit at the limit with no message).
 
 To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the two `args` flags back afterwards.
 
