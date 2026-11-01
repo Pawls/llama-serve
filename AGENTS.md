@@ -155,7 +155,9 @@ Other moving parts:
   coordinates the two. Always set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
   when a Hugging Face login exists). Cleaned up 2026-11-01: the Flash-Next conversion, its `.ngram` file, a partial
   download and `_download\ninfer.zip` are deleted; only the engine folder and `models\qwen3_8_27b.ninfer` (17.7 GB)
-  remain. Upstream status and known bugs are in the README section.
+  remain. **Don-Chad's v0.16.1 is a snapshot of ashalliants/ninfer-3090 at `931bd49b` (2026-10-15) plus Windows
+  build fixes; ashalliants is where the work happens** (v0.17.1 on 2026-10-29, with Windows zips its author built
+  but never ran on a card). Upstream status, known bugs and which build has which fix are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
   the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`
