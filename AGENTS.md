@@ -86,8 +86,9 @@ Other moving parts:
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
   `tray-settings.json` and a router restart; the tray menu click was not driven.
-- **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata
-  (measured 2026-10-19 on engine 0.1.45 with it on: 6.3-7.1 GB free on IQ2_XS, 2.5-4.1 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
+- **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
+  Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
+  it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
 - **The tray** is one C# file, [tray/LlamaTray.cs](./tray/LlamaTray.cs), compiled with the C# compiler built into
   Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\` (untracked). After editing it, re-run
@@ -112,7 +113,7 @@ Other moving parts:
   (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
   ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `idle_unload_s`, `sampling` and `before_load`. Windows refuses
   to pin its 24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead), which is the
-  likely reason it reads prompts at about half IQ3_XXS's speed; IQ3_XXS's 17 GiB copy pins. GPU caches are pre-filled
+  likely reason it reads prompts at a third to a half of IQ3_XXS's speed; IQ3_XXS's 17 GiB copy pins. GPU caches are pre-filled
   from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%).
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
@@ -276,7 +277,9 @@ Logs: `logs\server.log` (router; `server.prev.log` is the previous boot), `logs\
 
 [plans/ubuntu-dual-boot.md](./plans/ubuntu-dual-boot.md), with the how-to in [docs/ubuntu-setup.md](./docs/ubuntu-setup.md):
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
-8 GiB of its ~33 GiB expert arena on a multi-GPU split; Linux pins all of it). Slices U1-U5; U1 is Paul's hands-on
+8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
+run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, Swift's 24.6 GiB copy is refused, so the Linux
+comparison should be against Swift, or against both modes. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.

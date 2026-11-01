@@ -639,7 +639,7 @@ sealed class TrayApp : ApplicationContext
         { "swift-iq3_s", "Swift 1.5 IQ3_S", null },
         { "iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null },
         { "unsloth-ud-q4_k_xl", "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
-          "UD-Q4_K_XL leaves only ~3 GB of RAM free. Turn on the memory saver if other apps are open." },
+          "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open." },
     };
 
     StrataState strataState = StrataState.Stopped;
@@ -724,7 +724,7 @@ sealed class TrayApp : ApplicationContext
         strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(0)));
         strataStartOtherItems = Enumerable.Range(1, StrataSizes.GetLength(0) - 1)
             .Select(size => new ToolStripMenuItem("Start Strata: " + StrataSizes[size, 1], null,
-                (s, e) => RunAction(() => StrataStartOrStopAsync(size))))
+                (s, e) => RunAction(() => StrataStartOnlyAsync(size))))
             .ToArray();
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
@@ -1167,6 +1167,12 @@ sealed class TrayApp : ApplicationContext
         }
         ShowState(RouterState.Stopped);   // before the next poll, so Apply does not report a crash
         return exitCode;
+    }
+
+    // The extra size items only start: a click on a menu opened before Strata left Stopped must not stop it.
+    async Task StrataStartOnlyAsync(int size)
+    {
+        if (strataState == StrataState.Stopped && !strataStopping) await StrataStartOrStopAsync(size);
     }
 
     // While stopped, starts StrataSizes row `size`; otherwise stops Strata, whichever size runs (`size` may be null).
