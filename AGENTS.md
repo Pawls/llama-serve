@@ -154,7 +154,9 @@ Other moving parts:
   space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Stop the
   router (not just unload its model) while ninfer runs, since a router load lands on GPU 1 beside it and nothing
   coordinates the two. Always set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
-  when a Hugging Face login exists).
+  when a Hugging Face login exists). Cleaned up 2026-11-01: the Flash-Next conversion, its `.ngram` file, a partial
+  download and `_download\ninfer.zip` are deleted; only the engine folder and `models\qwen3_8_27b.ninfer` (17.7 GB)
+  remain. Upstream status and known bugs are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
   the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`

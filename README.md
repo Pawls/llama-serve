@@ -292,6 +292,13 @@ The two rows are not the same model file:
 - **Flash-Next (`qwen38-flash-next`) does not start.** It must pin 34.7 GiB of host memory, which Windows maps into the GPU's address space, and the allocation fails with `cudaErrorMemoryAllocation` (it reported 18.9 GiB free) with `CUDA_VISIBLE_DEVICES` set to 1 and again to 0, with 47.6 GiB of RAM free. Its release notes say Flash-Next was not part of their benchmark.
 - **Not tested:** images, long sessions, a client talking to it (Pi, Hermes, VS Code).
 
+**Cleanup and upstream status (checked 2026-11-01).** The Flash-Next conversion (29.8 GB), its `.ngram` companion (27.1 GB), an 8.4 GB partial download and `_download\ninfer.zip` (1.1 GB) were deleted. Kept: the engine folder and `models\qwen3_8_27b.ninfer` (17.7 GB). The newest release on Don-Chad/ninfer-3090 is still v0.16.1 (2026-10-16), but the repo had commits on 2026-10-31 (an optional Studio web dashboard) with no new Windows build. Open issues that could matter here:
+
+- **Single lane by default.** The v0.16.1 notes say several simultaneous requests need a different multi-lane profile, so two clients at once (Pi plus VS Code, or subagents) queue or fail. The router has no such limit. Upstream issues #414 (concurrent requests with a shared prefix crash the engine, a regression on an RTX 5090 build), #426 (`worker crash` under deep agent traffic; the server exits by design) and #434 (long requests stall until a restart) are not confirmed on v0.16.1, which was cut from the fork.
+- Fork #36 (open): `response_format` JSON output comes out garbled on Qwen3.8-27B because the grammar forbids whitespace. Fork #20 (open): reasoning-effort values outside the template's rungs may not be mapped. Fork #37 (closed, no explanation in the thread): the 27B looped in its thinking at 234k context.
+- Models must be converted to ninfer's own `.ninfer` v3 container. It cannot load GGUFs, so a new Qwen3.8 fine-tune (fork #34 asks about Swift 1.5) waits on someone converting it. Our 17.7 GB file is the maintainers' pinned download.
+- The release notes say distinct-GPU execution and Flash-Next were not part of their benchmark; they qualified one desktop-attached 3090 at a 16K context cap (116.7 tok/s median decode, 52-token prompts).
+
 ## Changing things
 
 ### Add a model
