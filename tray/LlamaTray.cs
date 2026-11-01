@@ -1101,7 +1101,17 @@ sealed class TrayApp : ApplicationContext
     {
         bool reserve = !TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
         TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, reserve);
-        if (state != RouterState.Stopped) await RestartAsync();
+        if (state != RouterState.Stopped)
+        {
+            if (await StopRouterAsync() != 0)
+            {
+                // The old router may still serve dual-GPU presets, so do not start another or claim the reservation.
+                TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, !reserve);
+                Notify("The router did not stop cleanly, so the GPU 0 setting was not changed. Check Task Manager.", ToolTipIcon.Error);
+                return;
+            }
+            StartRouter();
+        }
         string note = reserve
             ? "GPU 0 reserved: only single-GPU presets are listed. Strata cannot start."
             : "GPU 0 released: all presets are listed again.";
@@ -1116,14 +1126,16 @@ sealed class TrayApp : ApplicationContext
         ShowState(RouterState.Starting);
     }
 
-    async Task StopRouterAsync()
+    // Returns the stop script's exit code; non-zero means a llama-server may still be running.
+    async Task<int> StopRouterAsync()
     {
         stopping = true;
         activeModel = null;
         ShowState(RouterState.Stopping);
+        int exitCode;
         try
         {
-            await routerProcess.StopAsync();
+            exitCode = await routerProcess.StopAsync();
         }
         finally
         {
@@ -1131,6 +1143,7 @@ sealed class TrayApp : ApplicationContext
             startRequestedAt = null;
         }
         ShowState(RouterState.Stopped);   // before the next poll, so Apply does not report a crash
+        return exitCode;
     }
 
     // While stopped, starts `size` (one of StrataSizes); otherwise stops Strata, whichever size runs.
