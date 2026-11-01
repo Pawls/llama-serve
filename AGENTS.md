@@ -148,9 +148,9 @@ Other moving parts:
   - **The 8 GiB pin cap on the two-GPU split** is `STRATA_ARENA_PIN_GIB` (the start log says so). The new opt-in
     `STRATA_PIN_BY_NEED=1` is documented for the arena on one GPU.
   - 0.1.40-0.1.43 added the CUDA route tail skip, an sm_86 Q3_K kernel, a Windows layer-split stall fix and parallel
-    GGUF expert reads. The tail skip is off on this config (the log: 99.2% of experts are in the GPU cache), and the
-    prefill CPU share is off on a layer split, so of the three "0.1.41 answers" variables only
-    `STRATA_PCIE_FRAC_DEFAULT=old` changes anything here.
+    GGUF expert reads. **The tail skip is on here** (corrected 2026-11-01: the start logs of Swift and IQ3_XXS print
+    `route tail skip: N missed experts skipped`, tens of thousands per bench session; its 90% line counts experts held
+    in VRAM, not the routed share). The prefill CPU share is off on a layer split.
 - **Forks checked 2026-10-16, none worth installing.** Hardin22/Strata-DualGPU (0.1.38-based) and architectds/Strata
   (0.1.40.2-based) both went upstream as opt-in flags: `--adapt-async 1`, `--pipeline-windows 2`,
   `STRATA_PREFILL_CPU_SHARE=auto` (upstream issue #1352, PR #1414). `F:\AI\strata\docs\MULTI_GPU.md` has a 2x3090
@@ -158,7 +158,7 @@ Other moving parts:
   per arm, OS not stated, not repeated upstream): 137 tok/s decode by default, 145 with `--adapt-async 1`, prompt
   1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
   `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
-  and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is untried (it needs `--resident-experts`).
+  and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is untried (see "Untried levers" below).
 - **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
   `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
@@ -238,8 +238,29 @@ Other moving parts:
   of them. On a layer split `--resident-experts` leaves every card's cache out of the RAM copy
   (`F:\AI\strata\docs\MULTI_GPU.md`, "The resident RAM mode works on a split"; `docs\DETAILS.md` "Low-RAM modes"):
   17.05 GiB for IQ3_XXS (pinned), 24.59 GiB for Swift IQ3_S. Measured 2026-11-01, three interleaved rounds: free RAM
-  7.5 -> 28 GB on IQ3_XXS, decode within 1-4%, prompt reads 12-16% faster, load ~45 -> ~110 s. `--adapt-async 1`
-  needs this mode and is untried.
+  7.5 -> 28 GB on IQ3_XXS, decode within 1-4%, prompt reads 12-16% faster, load ~45 -> ~110 s.
+- **Untried levers from `F:\AI\strata\docs\DETAILS.md`** (read in full 2026-11-01; upstream figures, none measured
+  here). What the start logs show about this PC: 9 CPU workers on logical processors 2,4,...,12,13,14,15 (P-cores
+  and E-cores mixed; i5-12600K is 6P+4E), host thread on 0, `large pages refused`, Swift's RAM copy `pinned 0.00 GiB`.
+  - Speed, flags in `args`: `--pool-affinity p-cores` or `measure` (13700K, Swift IQ3_XXS: 148 -> 188 tok/s; Swift
+    misses the GPU cache 3-5% of the time, so the CPU pool matters more than on IQ3_XXS); `--host-core last` (a
+    layer-split box: +8%, steady); `--adapt-async 1` (resident mode; RTX 3090 + 5600X: decode x1.07-1.11, #1447 on
+    2x 3090: 137 -> 145).
+  - Speed, `env`: `STRATA_PF_FUSED=1` (fused int8 prompt kernels for IQ3_S/IQ3_XXS, default only on gfx12 and big
+    sm_120 cards; may help Swift's slow prompts; unverified on Ampere); `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an
+    RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB more pinned RAM).
+  - Hit rate: `"expert_profile_save": "expert-profile-swift-learned.bin"` (config key) keeps what the cache learned
+    across restarts; Swift's cache is pre-filled from a profile built on the original model. `--vision cpu` with a
+    Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at ~3 s per picture.
+    `--draft-vocab en`: ~110 MiB VRAM, English 1-2% faster, no CJK drafts.
+  - Agents: `--prompt-cache-spread` (an agent that rewrites history a few turns back resumes near the edit: 10 s
+    against 40 s upstream; same RAM).
+  - Pinning: granting "Lock pages in memory" (`F:\AI\strata\tools\windows\enable_large_pages.ps1` as admin, then log
+    off and on) is what large pages need; whether it helps Swift's refused pin is unknown.
+  - Quality: `STRATA_ROUTE_TAIL_SKIP=0` (see the 0.1.40-0.1.43 bullet above; upstream KL 0.003-0.006 on one GPU,
+    0.053 -> 0.115 on UD-Q4_K_XL's budget mode).
+  - Safety: NVIDIA Control Panel's `CUDA - Sysmem Fallback Policy` = `Prefer No Sysmem Fallback` for `strata.exe`
+    turns a silent WDDM spill into an error.
 
 ## Working in this repo
 
