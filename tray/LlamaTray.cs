@@ -254,12 +254,26 @@ sealed class ScriptProcess
     }
 }
 
-// tray-settings.json holds the idle-unload choices that start-router.ps1 and start-strata.ps1 read at launch.
-// Minutes of idleness before a model frees its VRAM; 0 means never.
+// tray-settings.json holds the choices that start-router.ps1 and start-strata.ps1 read at launch:
+// minutes of idleness before a model frees its VRAM (0 means never), and whether GPU 0 is reserved.
 static class TraySettings
 {
     public const string RouterIdleKey = "RouterIdleMinutes";
     public const string StrataIdleKey = "StrataIdleMinutes";
+    public const string ReserveGpu0Key = "ReserveGpu0";
+
+    public static bool GetFlag(string root, string key)
+    {
+        Dictionary<string, object> saved = Load(root);
+        return saved.ContainsKey(key) && Convert.ToBoolean(saved[key]);
+    }
+
+    public static void SetFlag(string root, string key, bool value)
+    {
+        Dictionary<string, object> saved = Load(root);
+        saved[key] = value;
+        File.WriteAllText(PathOf(root), new JavaScriptSerializer().Serialize(saved));
+    }
 
     public static int GetMinutes(string root, string key, int fallback)
     {
@@ -600,7 +614,7 @@ sealed class TrayApp : ApplicationContext
     readonly SynchronizationContext uiContext;
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
-    ToolStripMenuItem startStopItem, restartItem, autostartItem;
+    ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
@@ -687,6 +701,8 @@ sealed class TrayApp : ApplicationContext
         startStopItem = new ToolStripMenuItem("Start router", null, (s, e) => RunAction(StartOrStopAsync));
         restartItem = new ToolStripMenuItem("Restart router (reload presets.ini)", null, (s, e) => RunAction(RestartAsync));
 
+        reserveGpuItem = new ToolStripMenuItem("Reserve GPU 0 for ComfyUI (single-GPU models only)", null,
+            (s, e) => RunAction(ToggleReserveGpuAsync));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
         strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[0, 0])));
         strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[1, 0])));
@@ -710,7 +726,7 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             chatItem, logItem, presetsItem, folderItem,
             new ToolStripSeparator(),
-            startStopItem, restartItem,
+            startStopItem, restartItem, reserveGpuItem,
             new ToolStripSeparator(),
             strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             memorySaverReapplyItem,
@@ -784,14 +800,18 @@ sealed class TrayApp : ApplicationContext
         startStopItem.Text = state == RouterState.Stopped ? "Start router" : "Stop router";
         startStopItem.Enabled = state != RouterState.Stopping;
         restartItem.Enabled = answering;
+        bool reserved = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
+        reserveGpuItem.Checked = reserved;
+        reserveGpuItem.Enabled = state != RouterState.Starting && state != RouterState.Stopping;
 
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
         bool strataStopped = strataState == StrataState.Stopped && !strataStopping;
         strataStartStopItem.Text = strataStopped ? "Start Strata: Flash-Next " + StrataSizes[0, 1] : "Stop Strata";
-        strataStartStopItem.Enabled = !strataStopping;
+        // Strata splits across both GPUs, so it cannot start while GPU 0 is reserved; Stop stays available.
+        strataStartStopItem.Enabled = !strataStopping && (!strataStopped || !reserved);
         strataStartOtherItem.Text = "Start Strata: Flash-Next " + StrataSizes[1, 1];
-        strataStartOtherItem.Visible = strataStopped;
+        strataStartOtherItem.Visible = strataStopped && !reserved;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
@@ -1073,6 +1093,20 @@ sealed class TrayApp : ApplicationContext
     {
         await StopRouterAsync();
         StartRouter();
+    }
+
+    // start-router.ps1 reads the flag at launch and drops every preset without a `device` line, so a running
+    // router restarts (its model unloads) for the change to show in Load model.
+    async Task ToggleReserveGpuAsync()
+    {
+        bool reserve = !TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
+        TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, reserve);
+        if (state != RouterState.Stopped) await RestartAsync();
+        string note = reserve
+            ? "GPU 0 reserved: only single-GPU presets are listed. Strata cannot start."
+            : "GPU 0 released: all presets are listed again.";
+        if (reserve && strataState != StrataState.Stopped) note += " Strata is still running; stop it to free GPU 0.";
+        Notify(note, ToolTipIcon.Info);
     }
 
     void StartRouter()

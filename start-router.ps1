@@ -23,11 +23,20 @@ if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'server.prev.log'
 # The router's own --sleep-idle-seconds is not passed to its child servers; only a preset key is. So the idle
 # setting goes into a generated copy of presets.ini, leaving the hand-edited file untouched.
 . (Join-Path $Root 'tray-settings.ps1')
+# ReserveGpu0 (tray toggle) keeps GPU 0 free for ComfyUI: only [*] and presets that name a `device` are served.
 $IdleMinutes = Get-TraySetting 'RouterIdleMinutes'
-if ($IdleMinutes -gt 0) {
+$ReserveGpu0 = Get-TraySetting 'ReserveGpu0'
+if ($IdleMinutes -gt 0 -or $ReserveGpu0) {
     $Presets = Join-Path $LogDir 'presets.run.ini'
     $text = Get-Content (Join-Path $Root 'presets.ini') -Raw
-    $text -replace '(?m)^\[\*\]\r?$', "[*]`nsleep-idle-seconds = $($IdleMinutes * 60)" | Set-Content $Presets -NoNewline
+    if ($ReserveGpu0) {
+        $sections = $text -split '(?m)^(?=\[)' | Where-Object { $_ -match '^\[\*\]' -or $_ -match '(?m)^device\s*=' }
+        $text = $sections -join ''
+    }
+    if ($IdleMinutes -gt 0) {
+        $text = $text -replace '(?m)^\[\*\]\r?$', "[*]`nsleep-idle-seconds = $($IdleMinutes * 60)"
+    }
+    Set-Content $Presets $text -NoNewline
 }
 
 $ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host 127.0.0.1 --port 8410"
