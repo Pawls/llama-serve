@@ -79,6 +79,13 @@ Other moving parts:
   `presets.ini` with `sleep-idle-seconds` added to `[*]`, because the router's own flag does not reach its children.
   `start-strata.ps1` writes `idle_unload_s` into the Strata config JSON (keeping a `.bak`). Both apply at the next
   start.
+- **Reserve GPU 0.** The tray toggle sets `ReserveGpu0` in `tray-settings.json`; `start-router.ps1` then writes
+  `logs\presets.run.ini` with only `[*]` and the presets whose `device` and `spec-draft-device` lines are all `CUDA1`
+  (and `start-strata.ps1` refuses to run). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
+  Pi's `models.json` and VS Code's `chatLanguageModels.json` like any preset. Measured 2026-10-31 on GPU 1 alone: `gemma4-26b-a4b-single` holds
+  the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
+  the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
+  `tray-settings.json` and a router restart; the tray menu click was not driven.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata
   (measured 2026-10-19 on engine 0.1.45 with it on: 6.3-7.1 GB free on IQ2_XS, 2.5-4.1 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.

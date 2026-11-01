@@ -23,11 +23,26 @@ if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'server.prev.log'
 # The router's own --sleep-idle-seconds is not passed to its child servers; only a preset key is. So the idle
 # setting goes into a generated copy of presets.ini, leaving the hand-edited file untouched.
 . (Join-Path $Root 'tray-settings.ps1')
+# ReserveGpu0 (tray toggle) keeps GPU 0 free for ComfyUI: only [*] and presets pinned to CUDA1 are served.
 $IdleMinutes = Get-TraySetting 'RouterIdleMinutes'
-if ($IdleMinutes -gt 0) {
+$ReserveGpu0 = Get-TraySetting 'ReserveGpu0'
+if ($IdleMinutes -gt 0 -or $ReserveGpu0) {
     $Presets = Join-Path $LogDir 'presets.run.ini'
     $text = Get-Content (Join-Path $Root 'presets.ini') -Raw
-    $text -replace '(?m)^\[\*\]\r?$', "[*]`nsleep-idle-seconds = $($IdleMinutes * 60)" | Set-Content $Presets -NoNewline
+    if ($ReserveGpu0) {
+        # A preset passes only if it sets `device` and every device/spec-draft-device line is CUDA1.
+        $onlyCuda1 = {
+            param($section)
+            $devices = [regex]::Matches($section, '(?m)^(?:spec-draft-)?device\s*=\s*(\S.*?)\s*$') | ForEach-Object { $_.Groups[1].Value }
+            ($section -match '(?m)^device\s*=') -and -not ($devices | Where-Object { $_ -ne 'CUDA1' })
+        }
+        $sections = $text -split '(?m)^(?=\[)' | Where-Object { $_ -match '^\[\*\]' -or (& $onlyCuda1 $_) }
+        $text = $sections -join ''
+    }
+    if ($IdleMinutes -gt 0) {
+        $text = $text -replace '(?m)^\[\*\]\r?$', "[*]`nsleep-idle-seconds = $($IdleMinutes * 60)"
+    }
+    Set-Content $Presets $text -NoNewline
 }
 
 $ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host 127.0.0.1 --port 8410"
