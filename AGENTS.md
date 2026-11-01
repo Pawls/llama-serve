@@ -15,7 +15,7 @@ configs, launch scripts and a tray app. It does not contain any inference engine
 | Port | `http://127.0.0.1:8410` | `http://127.0.0.1:8411` |
 | Where it lives | `F:\AI\llama.cpp\b10951\llama-server.exe` (pinned build, set by `$Build` in [start-router.ps1](./start-router.ps1)) | `F:\AI\strata` (engine and server), `F:\AI\Strata-data` (`models\`, `packs\`, `mtp\`) |
 | Source | [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) release zips | [github.com/Niko1221/Strata](https://github.com/Niko1221/Strata) |
-| Loading | On demand, one model at a time (`--models-max 1`), 15-60 s | One model, ~45-90 s, ~39 GB RAM pinned |
+| Loading | On demand, one model at a time (`--models-max 1`), 15-60 s | One model, ~30-60 s, ~40 GB RAM pinned |
 | Autostart | Yes, through the tray | No, on purpose (see Strata below) |
 
 **Strata is not this repo and not llama.cpp.** `F:\AI\strata` is a clone of the upstream repo (remote
@@ -95,24 +95,23 @@ Other moving parts:
 
 ## Strata state and updating it
 
-- Installed sizes: IQ3_XXS (default since 2026-10-19) and IQ2_XS. Configs: `F:\AI\strata\strata-iq3_xxs.json`,
-  `strata-iq2_xs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
-  `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` in `args` (added 2026-10-18, see below);
-  `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value
-  its start log asked for; numbers in
-  [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). Both had `--pipeline-windows 2`
-  until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below). Both have
+- Installed sizes: IQ3_XXS (default since 2026-10-19) and Unsloth UD-Q4_K_XL (next bullet). IQ2_XS was deleted on
+  2026-11-01 (Paul's call, for disk space); its shard 2 was a hardlink of IQ3_XXS's, so only shard 1 and the pack went.
+  `F:\AI\strata\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
+  has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked
+  for; numbers in [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). It had
+  `--pipeline-windows 2` until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below), and has
   `--conversation-cache-mib 0` since 2026-11-01 (Paul's call; see the same section).
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
-  2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the other two configs
-  byte-identical. Start it with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
-  `strata-unsloth-ud-q4_k_xl.json`; it is not in the tray menu). Since engine 0.1.40 a RAM budget works on a layer
+  2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
+  installed then (IQ2_XS and IQ3_XXS) byte-identical. Start it from the tray or with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
+  `strata-unsloth-ud-q4_k_xl.json`). Since engine 0.1.40 a RAM budget works on a layer
   split: each card caches its own layers' experts and `--resident-budget-gib 36` holds the hottest of the rest, so
   only ~6 GiB of the 71.7 GiB is read from the SSD. Hand-added to setup's config: `--vram-reserve-mib 1344` (setup
   wrote 700), `--vram-reserve-later-mib 1728` (the start log asked for 1468, then 1728), `--conversation-cache-mib 0`,
   `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~3 GB, so run it with the memory saver.
   Quick check numbers in [README.md](./README.md#unsloth-ud-q4_k_xl-quick-check-2026-11-01).
-- Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
+- Strata is not started at login because loading pins ~36-40 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
   `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
@@ -169,7 +168,8 @@ Other moving parts:
   **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
-  listed under "Installed sizes" above (two for IQ2_XS, three for IQ3_XXS) and re-add any that dropped.
+  listed under "Installed sizes" above (three for IQ3_XXS, the UD-Q4_K_XL ones in its bullet) and re-add any that
+  dropped.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:
@@ -207,7 +207,8 @@ Other moving parts:
   item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
   The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
   whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
-  each client lists both ids and either works.
+  each client lists both ids (`qwen3.8-flash-next-iq3_xxs`, `qwen3.8-flash-next-unsloth-ud-q4_k_xl`; Pi's
+  `models.json`, Hermes's `config.yaml`, VS Code's `chatLanguageModels.json`) and either works.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB. The Unsloth files (UD-IQ4_XS, UD-Q4_K_XL) need 48 GB or more; on this PC's two cards the GPU caches
   hold ~29 GiB of experts beside the RAM budget, so UD-IQ4_XS (55.4 GiB of experts) should need no SSD reads at all
@@ -215,6 +216,12 @@ Other moving parts:
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`
   keeps only a fixed window in VRAM. With the memory saver on and the other apps closed, Paul measured ~53 GB used and
   ~11 GB free while serving IQ2_XS.
+- **Untried RAM lever for the ISTA sizes: `--resident-experts`.** IQ3_XXS's default mode copies all 40 GiB of experts
+  into RAM (start log: `expert arena ... 42916118528 B`) although the GPU caches already hold ~30 GiB of them. On a
+  layer split `--resident-experts` leaves every card's cache out of the RAM copy (`F:\AI\strata\docs\MULTI_GPU.md`,
+  "The resident RAM mode works on a split"; `docs\DETAILS.md` "Low-RAM modes"), so IQ3_XXS would need ~11 GiB of RAM
+  and IQ3_S ~18 GiB (estimates). Upstream #1447 ran IQ3_S this way on 2x RTX 3090 with 32 GB of RAM at 137 tok/s.
+  Not measured here; decode speed against the full copy is the open question.
 
 ## Working in this repo
 
