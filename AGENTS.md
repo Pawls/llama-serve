@@ -101,7 +101,8 @@ Other moving parts:
   `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value
   its start log asked for; numbers in
   [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). Both had `--pipeline-windows 2`
-  until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below).
+  until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below). Both have
+  `--conversation-cache-mib 0` since 2026-11-01 (Paul's call; see the same section).
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
@@ -157,7 +158,7 @@ Other moving parts:
   **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
-  listed under "Installed sizes" above (one for IQ2_XS, two for IQ3_XXS) and re-add any that dropped.
+  listed under "Installed sizes" above (two for IQ2_XS, three for IQ3_XXS) and re-add any that dropped.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:
@@ -165,7 +166,8 @@ Other moving parts:
     IQ2_XS). Copying the conversation in after each reply costs ~0.4-0.5 s at 52k and ~1 s at 128k on IQ2_XS, so
     net t/s at depth trails decode by up to 16%. `--conversation-cache-mib 0` in `args` turns it off (measured: net
     rises to decode, 1.6-2.9 GB more RAM free) but loses prompt reuse when requests alternate between conversations.
-    Left on; Paul's call.
+    Turned off in both configs on 2026-11-01 (Paul runs one conversation at a time); not yet started with it in
+    the installed configs.
   - **`--pipeline-windows 2` was removed** from both configs: within 3% on IQ3_XXS, 6% slower on IQ2_XS 2k code.
   - **Layer-major prefill (0.2.7) never runs here** (`no VRAM for a super-chunk`); prompt reads are unchanged.
   - Stage order is GPU 1 then GPU 0; the desktop card runs the head and the draft layer and has 758 MiB free with
