@@ -631,11 +631,13 @@ sealed class TrayApp : ApplicationContext
     bool memorySaverSwitching;
     bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
 
-    // start-strata.ps1's -Model values and their menu labels; the first is also the script's default.
+    // start-strata.ps1's -Model values, their menu labels, and a warning shown when a size starts with the memory saver
+    // off (null: none). The first is also the script's default.
     static readonly string[,] StrataSizes =
     {
-        { "iq3_xxs", "IQ3_XXS (fast)" },
-        { "unsloth-ud-q4_k_xl", "UD-Q4_K_XL (4-bit, more accurate, slower)" },
+        { "iq3_xxs", "IQ3_XXS (fast)", null },
+        { "unsloth-ud-q4_k_xl", "UD-Q4_K_XL (4-bit, more accurate, slower)",
+          "UD-Q4_K_XL leaves only ~3 GB of RAM free. Turn on the memory saver if other apps are open." },
     };
 
     StrataState strataState = StrataState.Stopped;
@@ -717,8 +719,8 @@ sealed class TrayApp : ApplicationContext
         reserveGpuItem = new ToolStripMenuItem("Reserve GPU 0 for ComfyUI (single-GPU models only)", null,
             (s, e) => RunAction(ToggleReserveGpuAsync));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
-        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[0, 0])));
-        strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(StrataSizes[1, 0])));
+        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(0)));
+        strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(1)));
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -1158,13 +1160,15 @@ sealed class TrayApp : ApplicationContext
         return exitCode;
     }
 
-    // While stopped, starts `size` (one of StrataSizes); otherwise stops Strata, whichever size runs.
-    async Task StrataStartOrStopAsync(string size)
+    // While stopped, starts StrataSizes row `size`; otherwise stops Strata, whichever size runs (`size` may be null).
+    async Task StrataStartOrStopAsync(int? size)
     {
         if (strataState == StrataState.Stopped)
         {
+            string ramWarning = StrataSizes[size.Value, 2];
+            if (ramWarning != null && !MemorySaver.IsOn(root)) Notify(ramWarning, ToolTipIcon.Warning);
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
-            strataProcess.Start("-Model " + size);
+            strataProcess.Start("-Model " + StrataSizes[size.Value, 0]);
             strataStartRequestedAt = DateTime.Now;
             strataState = StrataState.Starting;
             ShowState(state);

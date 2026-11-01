@@ -15,7 +15,7 @@ configs, launch scripts and a tray app. It does not contain any inference engine
 | Port | `http://127.0.0.1:8410` | `http://127.0.0.1:8411` |
 | Where it lives | `F:\AI\llama.cpp\b10951\llama-server.exe` (pinned build, set by `$Build` in [start-router.ps1](./start-router.ps1)) | `F:\AI\strata` (engine and server), `F:\AI\Strata-data` (`models\`, `packs\`, `mtp\`) |
 | Source | [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) release zips | [github.com/Niko1221/Strata](https://github.com/Niko1221/Strata) |
-| Loading | On demand, one model at a time (`--models-max 1`), 15-60 s | One model, ~45-90 s, ~39 GB RAM pinned |
+| Loading | On demand, one model at a time (`--models-max 1`), 15-60 s | One model, ~30-60 s, ~40 GB RAM pinned |
 | Autostart | Yes, through the tray | No, on purpose (see Strata below) |
 
 **Strata is not this repo and not llama.cpp.** `F:\AI\strata` is a clone of the upstream repo (remote
@@ -103,15 +103,15 @@ Other moving parts:
   `--pipeline-windows 2` until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below), and has
   `--conversation-cache-mib 0` since 2026-11-01 (Paul's call; see the same section).
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
-  2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the other two configs
-  byte-identical. Start it from the tray or with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
+  2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
+  installed then (IQ2_XS and IQ3_XXS) byte-identical. Start it from the tray or with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
   `strata-unsloth-ud-q4_k_xl.json`). Since engine 0.1.40 a RAM budget works on a layer
   split: each card caches its own layers' experts and `--resident-budget-gib 36` holds the hottest of the rest, so
   only ~6 GiB of the 71.7 GiB is read from the SSD. Hand-added to setup's config: `--vram-reserve-mib 1344` (setup
   wrote 700), `--vram-reserve-later-mib 1728` (the start log asked for 1468, then 1728), `--conversation-cache-mib 0`,
   `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~3 GB, so run it with the memory saver.
   Quick check numbers in [README.md](./README.md#unsloth-ud-q4_k_xl-quick-check-2026-11-01).
-- Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
+- Strata is not started at login because loading pins ~36-40 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
   `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
