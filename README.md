@@ -221,6 +221,23 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 - **GPU roles are as before.** The launcher logs `cards in stage order: GPU 1, then GPU 0`: the headless card runs layers 0-22, and the desktop card runs layers 23-47, the head and the draft layer. With everything loaded the start log reports 1,172 MiB of VRAM free and 758 MiB on the desktop card (installed config), with no LOW warning, so the reserves set on 2026-10-19 still fit.
 - Tool calls 3/3 on both sizes (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`), and 3/3 again on IQ3_XXS without `--pipeline-windows 2`. No engine died. Windows commit headroom stayed at 16.9 GB or more (fixed page file), and the start log reports `Windows commit: 22.8-23.3 GiB left of a 127.8 GiB limit`.
 
+### Unsloth UD-Q4_K_XL, quick check (2026-11-01)
+
+Unsloth's 4-bit file of the same model: 71.7 GiB of experts against IQ3_XXS's 43 GB, and the same top token as Q8_0 93.1% of the time against 84.5% for IQ3_XXS (Strata's `docs\QUANTS.md`, measured upstream on AMD). It runs on this PC on both GPUs: the GPU caches hold 9,867 experts (~29 GiB, about 97% of the routed mass by the profile), a 36 GiB RAM budget the next hottest, and the last ~6 GiB come from the NVMe drive. Start: `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl`, loaded in ~56 s.
+
+Engine 0.1.55, both GPUs, 262k context, images on, conversation cache off, memory saver off. `bench-depth.ps1` with 1 warm and 3 measured runs per cell, one round, no interleaving, so treat the numbers as a first reading. IQ3_XXS figures are the median rows from the 0.1.55 table above, without `--pipeline-windows 2` (at 52k, the cache-off arm of the A/B):
+
+| | Code 2k / 52k, net t/s | Essay 2k / 52k, net t/s | Cold prompt read, t/s (code, 2k / 52k) |
+|---|---|---|---|
+| IQ3_XXS | 143 / 143 | 108 / 103 | 930 / 3,020 |
+| UD-Q4_K_XL | 53 / 53 | 57 / 58 | 190 / 910 |
+
+- About 2.7x slower on code and 1.8-1.9x on prose; prompts read 3-5x slower. Draft acceptance is about the same as IQ3_XXS's, so the gap comes from where the experts sit: 97.6% of decode lookups hit the GPU caches (IQ3_XXS: 99.7%), and each reply reads a few thousand experts from the file.
+- The start log warns that the prompt path's borrowed cache slots have no RAM copy, so their experts stream from the SSD on every prompt chunk. That explains the slow 2k prompt read.
+- Free RAM while serving: ~3 GB (36 GiB budget locked). Windows commit headroom 18.4 GiB.
+- Tool calls 3/3 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`).
+- The desktop card first started with 0 MiB free (LOW); `--vram-reserve-mib 1344` plus `--vram-reserve-later-mib 1728` left 759 MiB free on it and 1,148 MiB on the other.
+
 To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on both sizes, plus `--vram-reserve-mib 1344` on IQ3_XXS (values in [AGENTS.md](./AGENTS.md)).
 
 **Sampling.** Both configs set `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.

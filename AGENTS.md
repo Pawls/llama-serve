@@ -103,6 +103,15 @@ Other moving parts:
   [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). Both had `--pipeline-windows 2`
   until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below). Both have
   `--conversation-cache-mib 0` since 2026-11-01 (Paul's call; see the same section).
+- **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
+  2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the other two configs
+  byte-identical. Start it with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
+  `strata-unsloth-ud-q4_k_xl.json`; it is not in the tray menu). Since engine 0.1.40 a RAM budget works on a layer
+  split: each card caches its own layers' experts and `--resident-budget-gib 36` holds the hottest of the rest, so
+  only ~6 GiB of the 71.7 GiB is read from the SSD. Hand-added to setup's config: `--vram-reserve-mib 1344` (setup
+  wrote 700), `--vram-reserve-later-mib 1728` (the start log asked for 1468, then 1728), `--conversation-cache-mib 0`,
+  `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~3 GB, so run it with the memory saver.
+  Quick check numbers in [README.md](./README.md#unsloth-ud-q4_k_xl-quick-check-2026-11-01).
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
@@ -198,7 +207,9 @@ Other moving parts:
   whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
   each client lists both ids and either works.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
-  IQ3_S ~55 GB, UD-IQ4_XS needs 48 GB or more and reads part of its experts from the SSD on a 64 GB PC. The KV cache
+  IQ3_S ~55 GB. The Unsloth files (UD-IQ4_XS, UD-Q4_K_XL) need 48 GB or more; on this PC's two cards the GPU caches
+  hold ~29 GiB of experts beside the RAM budget, so UD-IQ4_XS (55.4 GiB of experts) should need no SSD reads at all
+  (an estimate; not installed) and UD-Q4_K_XL reads ~6 GiB of cold experts from the SSD. The KV cache
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`
   keeps only a fixed window in VRAM. With the memory saver on and the other apps closed, Paul measured ~53 GB used and
   ~11 GB free while serving IQ2_XS.
