@@ -80,8 +80,9 @@ Other moving parts:
   `start-strata.ps1` writes `idle_unload_s` into the Strata config JSON (keeping a `.bak`). Both apply at the next
   start.
 - **Reserve GPU 0.** The tray toggle sets `ReserveGpu0` in `tray-settings.json`; `start-router.ps1` then writes
-  `logs\presets.run.ini` with only `[*]` and the presets that have a `device` line. A new single-GPU preset needs
-  `device = CUDA1` to show up. Measured 2026-10-31 on GPU 1 alone: `gemma4-26b-a4b-single` holds
+  `logs\presets.run.ini` with only `[*]` and the presets whose `device` and `spec-draft-device` lines are all `CUDA1`
+  (and `start-strata.ps1` refuses to run). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
+  Pi's `models.json` and VS Code's `chatLanguageModels.json` like any preset. Measured 2026-10-31 on GPU 1 alone: `gemma4-26b-a4b-single` holds
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
   `tray-settings.json` and a router restart; the tray menu click was not driven.

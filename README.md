@@ -36,7 +36,7 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Open chat in browser | llama.cpp's built-in chat page at `http://127.0.0.1:8410/` |
 | Open server log, Edit presets.ini, Open llama-serve folder | Opens them |
 | Stop / Start router, Restart router | Restart after editing `presets.ini` |
-| Reserve GPU 0 for ComfyUI | Serves only single-GPU presets (those with a `device` line) and blocks Strata; restarts the router. Saved as `ReserveGpu0` in `tray-settings.json`, which `start-router.ps1` reads into `logs\presets.run.ini` |
+| Reserve GPU 0 for ComfyUI | Serves only presets pinned to CUDA1, stops Strata and blocks it from starting; restarts the router. Saved as `ReserveGpu0` in `tray-settings.json`, which `start-router.ps1` reads into `logs\presets.run.ini` |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
 | Router models: free GPUs when idle, Strata: unload when idle | How long a model sits unused before it frees the GPUs: never, 15 / 30 minutes, 1 / 2 / 4 hours. Defaults: router never, Strata 15 minutes. Saved in `tray-settings.json` and used at the next router or Strata start |
@@ -104,7 +104,7 @@ Every model below was loaded and checked on 2026-09-14: correct answer, image te
 | `qwen3.8-27b-single` | The default model's Q4_K_XL on one card, text only (measured 2026-10-31: peak 21.7 GiB of 24) | 131k | no | on | ~39 t/s (30 at 52k, 22 at 120k) | GPU1 only |
 | `gemma4-26b-a4b-single` | `gemma4-26b-a4b` on one card, text only (measured 2026-10-31: peak 21.1 GiB of 24) | 262k | no | off | ~100 t/s (38 at 244k) | GPU1 only |
 
-**Keeping GPU 0 for ComfyUI:** tick **Reserve GPU 0 for ComfyUI** in the tray. The router restarts and lists only the GPU1-only presets (every preset with a `device` line in `presets.ini`), so nothing it loads can touch the desktop card. Strata cannot start while it is ticked. Untick it to get the full list back. Clients that name a hidden preset get an error until then.
+**Keeping GPU 0 for ComfyUI:** tick **Reserve GPU 0 for ComfyUI** in the tray. The router restarts and lists only the GPU1-only presets (those whose `device` and `spec-draft-device` lines all say `CUDA1` in `presets.ini`). With `muse-glimmer-30b` loaded and its image projector, GPU 0's memory did not change (4,289 to 4,276 MiB, 2026-10-31). Ticking it also stops Strata, and Strata cannot start (from the tray or `start-strata.ps1`) while it is ticked. Untick it to get the full list back. Clients that name a hidden preset get an error until then.
 
 Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small "drafter" that guesses tokens ahead for the big model to check. The output is the same model's; only speed changes. Speeds for these come from the 2026-09-14 benchmark (5 runs each, coding and essay prompts). A drafter that guesses code well can guess prose badly, so the `-dflash` coder and 26B lanes are for coding sessions.
 

@@ -262,17 +262,23 @@ static class TraySettings
     public const string StrataIdleKey = "StrataIdleMinutes";
     public const string ReserveGpu0Key = "ReserveGpu0";
 
+    // A hand-edited file that does not parse reads as "not reserved" rather than throwing out of the poll timer.
     public static bool GetFlag(string root, string key)
     {
-        Dictionary<string, object> saved = Load(root);
-        return saved.ContainsKey(key) && Convert.ToBoolean(saved[key]);
+        try
+        {
+            Dictionary<string, object> saved = Load(root);
+            return saved.ContainsKey(key) && Convert.ToBoolean(saved[key]);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     public static void SetFlag(string root, string key, bool value)
     {
-        Dictionary<string, object> saved = Load(root);
-        saved[key] = value;
-        File.WriteAllText(PathOf(root), new JavaScriptSerializer().Serialize(saved));
+        Save(root, key, value);
     }
 
     public static int GetMinutes(string root, string key, int fallback)
@@ -283,8 +289,13 @@ static class TraySettings
 
     public static void SetMinutes(string root, string key, int minutes)
     {
+        Save(root, key, minutes);
+    }
+
+    static void Save(string root, string key, object value)
+    {
         Dictionary<string, object> saved = Load(root);
-        saved[key] = minutes;
+        saved[key] = value;
         File.WriteAllText(PathOf(root), new JavaScriptSerializer().Serialize(saved));
     }
 
@@ -618,6 +629,7 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
+    bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
 
     // start-strata.ps1's -Model values and their menu labels; the first is also the script's default.
     static readonly string[,] StrataSizes =
@@ -651,6 +663,7 @@ sealed class TrayApp : ApplicationContext
         routerProcess = new ScriptProcess(root, "start-router.ps1", "stop-router.ps1");
         strataProcess = new ScriptProcess(root, "start-strata.ps1", "stop-strata.ps1");
         presetOrder = ReadPresetOrder(Path.Combine(root, "presets.ini"));
+        reserveGpu0 = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
 
         int iconSize = SystemInformation.SmallIconSize.Width;
         foreach (RouterState each in Enum.GetValues(typeof(RouterState)))
@@ -800,7 +813,7 @@ sealed class TrayApp : ApplicationContext
         startStopItem.Text = state == RouterState.Stopped ? "Start router" : "Stop router";
         startStopItem.Enabled = state != RouterState.Stopping;
         restartItem.Enabled = answering;
-        bool reserved = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
+        bool reserved = reserveGpu0;
         reserveGpuItem.Checked = reserved;
         reserveGpuItem.Enabled = state != RouterState.Starting && state != RouterState.Stopping;
 
@@ -1095,28 +1108,27 @@ sealed class TrayApp : ApplicationContext
         StartRouter();
     }
 
-    // start-router.ps1 reads the flag at launch and drops every preset without a `device` line, so a running
-    // router restarts (its model unloads) for the change to show in Load model.
+    // start-router.ps1 reads the flag at launch and keeps only presets pinned to CUDA1, so a running router
+    // restarts (its model unloads) for the change to show in Load model. Reserving also stops Strata, which
+    // would otherwise reload across both cards on its next request. The flag is saved only once the old router
+    // is gone; if it would not stop, nothing changes and the router stays stopped for the user to inspect.
     async Task ToggleReserveGpuAsync()
     {
-        bool reserve = !TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
-        TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, reserve);
-        if (state != RouterState.Stopped)
+        bool reserve = !reserveGpu0;
+        bool routerRunning = state != RouterState.Stopped;
+        if (routerRunning && await StopRouterAsync() != 0)
         {
-            if (await StopRouterAsync() != 0)
-            {
-                // The old router may still serve dual-GPU presets, so do not start another or claim the reservation.
-                TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, !reserve);
-                Notify("The router did not stop cleanly, so the GPU 0 setting was not changed. Check Task Manager.", ToolTipIcon.Error);
-                return;
-            }
-            StartRouter();
+            Notify("The router did not stop cleanly, so the GPU 0 setting was not changed. Check Task Manager, then use Start router.", ToolTipIcon.Error);
+            return;
         }
-        string note = reserve
-            ? "GPU 0 reserved: only single-GPU presets are listed. Strata cannot start."
-            : "GPU 0 released: all presets are listed again.";
-        if (reserve && strataState != StrataState.Stopped) note += " Strata is still running; stop it to free GPU 0.";
-        Notify(note, ToolTipIcon.Info);
+        TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, reserve);
+        reserveGpu0 = reserve;
+        if (routerRunning) StartRouter();
+        bool stopStrata = reserve && strataState != StrataState.Stopped && !strataStopping;
+        if (stopStrata) await StrataStartOrStopAsync(null);
+        Notify(reserve
+            ? "GPU 0 reserved: only single-GPU presets are listed" + (stopStrata ? ", and Strata was stopped." : ".") + " Strata cannot start."
+            : "GPU 0 released: all presets are listed again.", ToolTipIcon.Info);
     }
 
     void StartRouter()

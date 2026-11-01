@@ -10,10 +10,12 @@ $Log       = Join-Path $LogDir 'strata.log'
 
 if (-not (Test-Path $RunScript)) { throw "$RunScript not found. Install the model with $StrataDir\SETUP.bat first." }
 
+. (Join-Path $PSScriptRoot 'tray-settings.ps1')
+if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). Strata uses both GPUs; untick it first.' }
+
 # Strata fills both cards' VRAM with its expert caches; a router model loaded beside it fails or slows both.
 & (Join-Path $PSScriptRoot 'unload-router-model.ps1')
 
-. (Join-Path $PSScriptRoot 'tray-settings.ps1')
 $IdleMinutes = Get-TraySetting 'StrataIdleMinutes'
 if ($null -ne $IdleMinutes) {
     # Strata reads idle_unload_s from its config at start; a missing key means it never unloads.
