@@ -121,7 +121,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-<size>.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Two sizes are installed, and the tray has a start item for each. IQ3_XXS is the default since 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both on engine 0.1.45 are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Two sizes are installed, and the tray has a start item for each. IQ3_XXS is the default since 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for both are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19) and, for the installed engine, [Engine 0.1.55](#engine-0155-strata-029-measured-2026-11-01). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
@@ -189,7 +189,39 @@ Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell,
 
 **IQ3_XXS is the default from 2026-10-19.** It is the more accurate size, it stays above 95 t/s at 128k in the interleaved runs, and with the fixed page file the commit limit is no longer close. IQ2_XS is still in the tray for when speed or free RAM matters more.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. It rewrites `strata-*.json`, so add `idle_unload_s`, `before_load`, `sampling` and the extra `args` flags back afterwards: `--vram-reserve-later-mib` and `--pipeline-windows 2` on both sizes, plus `--vram-reserve-mib 1344` on IQ3_XXS (values in [AGENTS.md](./AGENTS.md)).
+### Engine 0.1.55 (Strata 0.2.9, measured 2026-11-01)
+
+`UPDATE.bat` took the install from engine 0.1.45 (code at 0.2.0-beta) to engine 0.1.55 (code at v0.2.9) on 2026-11-01. It fetched the engine from Strata's signed update feed with no workaround, and both `strata-*.json` files and both `run-*.bat` files came through byte-identical. 0.1.45 is in `F:\AI\strata\engine\.previous`.
+
+Both GPUs, 262k context, images on, `bench-depth.ps1` (5 measured runs per cell, thinking off), memory saver off (about 48 GB of RAM free before the first start). Three rounds per arm, arms interleaved with the order rotated each round, a Strata restart before every run. The 0.1.45 rows were run the same night just before the update, because that night's system state was slower than 2026-10-19's (IQ3_XXS code at 2k: 131 against 139). Median net t/s over the rounds:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code, 2k / 52k / 128k) | Free RAM while serving, median (min) |
+|---|---|---|---|---|
+| IQ3_XXS, 0.1.45 | 131 / 121 / 118 | 95 / 89 / 85 | 980 / 2,950 / 3,100 | 5.3-7.7 GB (4.9) |
+| IQ3_XXS, 0.1.55 | 144 / 127 / 135 | 106 / 98 / 100 | 920 / 3,000 / 3,100 | 5.9-6.0 GB (5.4) |
+| IQ3_XXS, 0.1.55 without `--pipeline-windows 2` (installed) | 143 / 131 / 134 | 108 / 99 / 100 | 930 / 3,020 / 3,130 | 6.0-6.1 GB (5.5) |
+| IQ2_XS, 0.1.45 | 142 / 133 / 127 | 102 / 94 / 91 | 1,200 / 3,430 / 3,400 | 11.0-11.4 GB (10.7) |
+| IQ2_XS, 0.1.55 | 149 / 142 / 126 | 114 / 103 / 94 | 1,150 / 3,450 / 3,400 | 6.9-7.0 GB (6.4) |
+| IQ2_XS, 0.1.55 without `--pipeline-windows 2` (installed) | 159 / 142 / 126 | 114 / 105 / 94 | 1,140 / 3,430 / 3,400 | 6.7-6.8 GB (6.0) |
+
+- **Decode is 12-16% faster on 0.1.55** on both sizes and both kinds (IQ3_XXS code decode 132 / 123 / 119 -> 149 / 141 / 138). The new engine and the new code came together, so this is not one variable. The likeliest source (not isolated) is the RTX 30 decode table that 0.2.0 turned on by default (the start log lists its 9 switches; `STRATA_SM86_PERF=0` turns them off).
+- **Net t/s gains less at 52k and 128k than decode does**, because the engine now keeps a conversation cache by default (next bullet).
+- **The conversation cache costs 0.4-1 s per long reply.** 0.1.55 sizes a cache in RAM from what is free at start (2,048 MiB on IQ3_XXS, 3,584 MiB on IQ2_XS) and copies each conversation into it after the reply: ~0.4-0.5 s at 52k, and on IQ2_XS ~1 s at 128k (IQ3_XXS skips the copy at 128k because the snapshot exceeds its budget). That is why IQ2_XS lost 4 GB of free RAM. It pays off when requests alternate between conversations (sub-agents, two clients): a parked 52k conversation comes back without re-reading ~17 s of prompt. A separate A/B the same night, three interleaved rounds at 52k and 128k with `--pipeline-windows 2` still set, ran `--conversation-cache-mib 0` against the default:
+
+  | | Code 52k / 128k | Essay 52k / 128k | Free RAM, median |
+  |---|---|---|---|
+  | IQ3_XXS, cache on (default) | 129 / 135 | 98 / 99 | 5.6 GB |
+  | IQ3_XXS, `--conversation-cache-mib 0` | 143 / 136 | 103 / 98 | 7.2 GB |
+  | IQ2_XS, cache on (default) | 141 / 126 | 104 / 93 | 6.8 GB |
+  | IQ2_XS, `--conversation-cache-mib 0` | 149 / 144 | 110 / 105 | 9.7 GB |
+
+  The cache is still on; whether to turn it off depends on whether you run one conversation at a time.
+- **`--pipeline-windows 2` no longer helps and was removed from both configs on 2026-11-01.** On 0.1.44.1 it added 6-11% on code; on 0.1.55 IQ3_XXS is within 3% either way, and IQ2_XS is 6% faster without it on 2k code (159 against 149, every round) and the same elsewhere. The 0.1.55 start log notes that the draft layer sits on the last card here, and that in that arrangement the pipeline lost to the serial loop on 2x R9700 before 0.1.44. Without it the expert cache gains 188 slots.
+- **Cold prompt reading did not change.** 0.2.7's layer-major prefill (upstream's 32K-prompt first token went from 141.8 to 27.7 s on 2x A4000) never runs here: every long prompt logs `layer-major off for this prompt: no VRAM for a super-chunk (1100 MiB free)`. It saves expert reads from RAM, and on this PC ~99% of routed experts are already in the GPU caches, so the expected gain is small anyway.
+- **GPU roles are as before.** The launcher logs `cards in stage order: GPU 1, then GPU 0`: the headless card runs layers 0-22, and the desktop card runs layers 23-47, the head and the draft layer. With everything loaded the start log reports 1,172 MiB of VRAM free and 758 MiB on the desktop card (installed config), with no LOW warning, so the reserves set on 2026-10-19 still fit.
+- Tool calls 3/3 on both sizes (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`), and 3/3 again on IQ3_XXS without `--pipeline-windows 2`. No engine died. Windows commit headroom stayed at 16.9 GB or more (fixed page file), and the start log reports `Windows commit: 22.8-23.3 GiB left of a 127.8 GiB limit`.
+
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-later-mib` on both sizes, plus `--vram-reserve-mib 1344` on IQ3_XXS (values in [AGENTS.md](./AGENTS.md)).
 
 **Sampling.** Both configs set `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 

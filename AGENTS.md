@@ -97,10 +97,11 @@ Other moving parts:
 
 - Installed sizes: IQ3_XXS (default since 2026-10-19) and IQ2_XS. Configs: `F:\AI\strata\strata-iq3_xxs.json`,
   `strata-iq2_xs.json`. Both run both GPUs with `layer_split: auto`, 262k context, int8 KV, images on.
-  `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` and `--pipeline-windows 2` in `args` (added
-  2026-10-18, see below); `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310`, `--pipeline-windows 2` and
-  `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked for; numbers in
-  [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)).
+  `strata-iq2_xs.json` also has `--vram-reserve-later-mib 1308` in `args` (added 2026-10-18, see below);
+  `strata-iq3_xxs.json` has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value
+  its start log asked for; numbers in
+  [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). Both had `--pipeline-windows 2`
+  until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below).
 - Strata is not started at login because loading pins ~39 GB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
@@ -113,8 +114,8 @@ Other moving parts:
   restored it to 170 / 158 / 152, and `--pipeline-windows 2` on top gave 188 / 168 / 162. Table and method in
   [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or `SETUP.bat`, read the
   `VRAM free with everything loaded` lines in the start log; a "LOW" there means the desktop card needs a larger
-  reserve.** The 0.1.43 engine is kept in `F:\AI\strata\engine\.previous`; `python setup.py --rollback-engine`
-  restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
+  reserve.** The engine an update replaced is kept in `F:\AI\strata\engine\.previous` (0.1.45 since 2026-11-01);
+  `python setup.py --rollback-engine` restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
   only when a message quotes `</tool_call>`. What 0.1.43.1-0.1.44.1 changed for this PC: Windows watchdog fixes for
   long prompts and conversation parking, that `</tool_call>` fix, fenced-JSON tool calls recovered, and the auto
   split's slow-link penalty applied only from a 4x link gap (GPU 1's x4 against GPU 0's x16 is exactly 4x).
@@ -134,7 +135,7 @@ Other moving parts:
   per arm, OS not stated, not repeated upstream): 137 tok/s decode by default, 145 with `--adapt-async 1`, prompt
   1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
   `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
-  and nothing on prose or prefill. `--adapt-async 1` is untried (it needs `--resident-experts`).
+  and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is untried (it needs `--resident-experts`).
 - **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
   `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
@@ -144,19 +145,31 @@ Other moving parts:
   router (not just unload its model) while ninfer runs, since a router load lands on GPU 1 beside it and nothing
   coordinates the two. Always set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
   when a Hugging Face login exists).
-- **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It pulls
-  the code, downloads the engine zip with a checksum, and leaves models and `strata-*.json` untouched (verified
-  2026-10-11: configs byte-identical, `idle_unload_s` and `before_load` kept). Strata must not be running. Record a
-  baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
-  **Since upstream 0.2.0-beta (2026-10-19) `UPDATE.bat` cannot fetch a Windows engine**: it looks for
-  `strata-windows-x64.zip`, which 0.2.0 no longer ships (engines are now `.tar.gz` packages for the app's signed feed),
-  so it 404s and keeps the old engine. Point it at the last release that has the zip:
-  `$env:STRATA_PREBUILT_URL='https://github.com/Niko1221/Strata/releases/download/v0.1.45/'` before `UPDATE.bat` (the
-  SHA-256 is still checked against GitHub). That is how 0.1.45 was installed on 2026-10-19, over 0.1.44.1 (now in
-  `engine\.previous`), with the code at 0.2.0-beta; configs came through byte-identical. Benched the same day (README "Engine 0.1.45").
-  Engine 0.1.45.3 (0.2.0's, with a new default sm_86 decode table) exists only as the new package.
-  **`SETUP.bat` does rewrite `strata-*.json`, so re-add `idle_unload_s`, `before_load`, `sampling` and the `args`
-  flags listed under "Installed sizes" above after it (two for IQ2_XS, three for IQ3_XXS).**
+- **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
+  `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
+  the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`
+  untouched (verified 2026-10-11, 2026-10-19 and 2026-11-01: configs and `run-*.bat` byte-identical). Strata must not
+  be running. Record a baseline first ([bench-depth.ps1](./bench-depth.ps1), or upstream `BENCH.bat` on 0.1.43+).
+  On 2026-11-01 it went from code 0.2.0-beta / engine 0.1.45 to v0.2.9 / engine 0.1.55 with no workaround (the
+  GitHub release zip 404'd and it fell back to the feed by itself); it leaves an untracked `engine-feed\` in the clone.
+  The `STRATA_PREBUILT_URL` workaround used for 0.1.45 on 2026-10-19 (0.2.0-beta's `UPDATE.bat` looked only for
+  the dropped `strata-windows-x64.zip`) is no longer needed.
+  **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
+  (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
+  `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
+  listed under "Installed sizes" above (one for IQ2_XS, two for IQ3_XXS) and re-add any that dropped.
+- **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
+  [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
+  sizes; not one variable (engine and code changed together). What changed for this PC:
+  - **A conversation cache is on by default**, sized from free RAM at start (2,048 MiB on IQ3_XXS, 3,584 MiB on
+    IQ2_XS). Copying the conversation in after each reply costs ~0.4-0.5 s at 52k and ~1 s at 128k on IQ2_XS, so
+    net t/s at depth trails decode by up to 16%. `--conversation-cache-mib 0` in `args` turns it off (measured: net
+    rises to decode, 1.6-2.9 GB more RAM free) but loses prompt reuse when requests alternate between conversations.
+    Left on; Paul's call.
+  - **`--pipeline-windows 2` was removed** from both configs: within 3% on IQ3_XXS, 6% slower on IQ2_XS 2k code.
+  - **Layer-major prefill (0.2.7) never runs here** (`no VRAM for a super-chunk`); prompt reads are unchanged.
+  - Stage order is GPU 1 then GPU 0; the desktop card runs the head and the draft layer and has 758 MiB free with
+    everything loaded on IQ3_XXS, no LOW. Tool calls 3/3 on both sizes.
 - **`start-strata.ps1` straight after `stop-strata.ps1` can fail without starting Strata** (2 of 4 back-to-back
   restarts on 2026-10-18; no engine process appeared and nothing was logged). The likely cause is the old launcher still
   holding `logs\strata.log` when `Move-Item` runs; not confirmed. After a pause (wait for the `strata` process to
@@ -175,8 +188,8 @@ Other moving parts:
   greedy decoding loops on tool calls. Both Strata configs now carry
   `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}` (set 2026-10-12, the router's
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
-  these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` drops this block
-  along with `idle_unload_s` and `before_load`.
+  these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` up to 0.2.0
+  dropped this block along with `idle_unload_s` and `before_load` (see "To update" for 0.2.9).
 - **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq3_xxs`. The tray has one start
   item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
   The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
