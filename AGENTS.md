@@ -86,8 +86,9 @@ Other moving parts:
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
   `tray-settings.json` and a router restart; the tray menu click was not driven.
-- **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata
-  (measured 2026-10-19 on engine 0.1.45 with it on: 6.3-7.1 GB free on IQ2_XS, 2.5-4.1 GB on IQ3_XXS). Ticks live in `memory-saver.choices.json` (untracked); what it
+- **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
+  Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
+  it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
 - **The tray** is one C# file, [tray/LlamaTray.cs](./tray/LlamaTray.cs), compiled with the C# compiler built into
   Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\` (untracked). After editing it, re-run
@@ -95,13 +96,25 @@ Other moving parts:
 
 ## Strata state and updating it
 
-- Installed sizes: IQ3_XXS (default since 2026-10-19) and Unsloth UD-Q4_K_XL (next bullet). IQ2_XS was deleted on
+- Installed sizes: **Swift 1.5 IQ3_S (default since 2026-11-01**, Paul's pick for its shorter thinking), IQ3_XXS
+  (default 2026-10-19 to 2026-11-01) and Unsloth UD-Q4_K_XL (bullets below). IQ2_XS was deleted on
   2026-11-01 (Paul's call, for disk space); its shard 2 was a hardlink of IQ3_XXS's, so only shard 1 and the pack went.
+  The four-arm bench that chose the default is in
+  [README.md](./README.md#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01).
   `F:\AI\strata\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
   has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked
   for; numbers in [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). It had
   `--pipeline-windows 2` until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below), and has
-  `--conversation-cache-mib 0` since 2026-11-01 (Paul's call; see the same section).
+  `--conversation-cache-mib 0` and `--resident-experts` since 2026-11-01 (see the resident-experts bullet at the end).
+- **Swift 1.5 IQ3_S** (84 GB in `F:\AI\Strata-data\models\swift-IQ3_S`, pack `packs\swift-iq3_s`) was installed on
+  2026-11-01 by `setup.py --family swift --model IQ3_S --gpus 0,1 --no-start`; config `strata-swift-iq3_s.json`,
+  model id `swift-1.5-iq3_s`. Its per-layer embedding table is in shard 1 (setup's `--ple-gguf` is right; ISTA's is
+  in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
+  (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
+  ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `idle_unload_s`, `sampling` and `before_load`. Windows refuses
+  to pin its 24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead), which is the
+  likely reason it reads prompts at a third to a half of IQ3_XXS's speed; IQ3_XXS's 17 GiB copy pins. GPU caches are pre-filled
+  from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%).
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
   installed then (IQ2_XS and IQ3_XXS) byte-identical. Start it from the tray or with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
@@ -109,9 +122,10 @@ Other moving parts:
   split: each card caches its own layers' experts and `--resident-budget-gib 36` holds the hottest of the rest, so
   only ~6 GiB of the 71.7 GiB is read from the SSD. Hand-added to setup's config: `--vram-reserve-mib 1344` (setup
   wrote 700), `--vram-reserve-later-mib 1728` (the start log asked for 1468, then 1728), `--conversation-cache-mib 0`,
-  `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~3 GB, so run it with the memory saver.
-  Quick check numbers in [README.md](./README.md#unsloth-ud-q4_k_xl-quick-check-2026-11-01).
-- Strata is not started at login because loading pins ~36-40 GB and can leave the PC unresponsive for up to a minute.
+  `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~4 GB, so run it with the memory saver.
+  Untried levers: `STRATA_ROUTE_TAIL_SKIP=0` in its `env` (upstream: the default tail skip raises its KL from 0.053 to
+  0.115 in budget mode) and a CPU picture reader to free ~1.3 GB of VRAM for experts.
+- Strata is not started at login because loading locks 17-36 GiB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
 - Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
   `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
@@ -170,8 +184,7 @@ Other moving parts:
   **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
-  listed under "Installed sizes" above (three for IQ3_XXS, the UD-Q4_K_XL ones in its bullet) and re-add any that
-  dropped.
+  listed under "Installed sizes" above and in the Swift and UD-Q4_K_XL bullets, and re-add any that dropped.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:
@@ -179,8 +192,8 @@ Other moving parts:
     IQ2_XS). Copying the conversation in after each reply costs ~0.4-0.5 s at 52k and ~1 s at 128k on IQ2_XS, so
     net t/s at depth trails decode by up to 16%. `--conversation-cache-mib 0` in `args` turns it off (measured: net
     rises to decode, 1.6-2.9 GB more RAM free) but loses prompt reuse when requests alternate between conversations.
-    Turned off in both configs on 2026-11-01 (Paul runs one conversation at a time); not yet started with it in
-    the installed configs.
+    Turned off in every config on 2026-11-01 (Paul runs one conversation at a time); the bench that night
+    confirmed it (net tracks decode at depth, no conversation-cache line in the start logs).
   - **`--pipeline-windows 2` was removed** from both configs: within 3% on IQ3_XXS, 6% slower on IQ2_XS 2k code.
   - **Layer-major prefill (0.2.7) never runs here** (`no VRAM for a super-chunk`); prompt reads are unchanged.
   - Stage order is GPU 1 then GPU 0; the desktop card runs the head and the draft layer and has 758 MiB free with
@@ -205,12 +218,14 @@ Other moving parts:
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
   these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` up to 0.2.0
   dropped this block along with `idle_unload_s` and `before_load` (see "To update" for 0.2.9).
-- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model iq3_xxs`. The tray has one start
-  item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first) and passes `-Model`.
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model swift-iq3_s`. The tray has one
+  start item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first; a new row gets a
+  menu item by itself) and passes `-Model`.
   The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
   whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
-  each client lists both ids (`qwen3.8-flash-next-iq3_xxs`, `qwen3.8-flash-next-unsloth-ud-q4_k_xl`; Pi's
-  `models.json`, Hermes's `config.yaml`, VS Code's `chatLanguageModels.json`) and either works.
+  each client lists every id (`swift-1.5-iq3_s`, `qwen3.8-flash-next-iq3_xxs`, `qwen3.8-flash-next-unsloth-ud-q4_k_xl`;
+  Pi's `models.json`, Hermes's `config.yaml` with Swift as its default, VS Code's `chatLanguageModels.json`) and any
+  works.
 - **RAM sizing** (Strata's own docs, `F:\AI\strata\docs\MODELS.md`): IQ2_XS needs ~39 GB RAM+VRAM, IQ3_XXS ~47 GB,
   IQ3_S ~55 GB. The Unsloth files (UD-IQ4_XS, UD-Q4_K_XL) need 48 GB or more; on this PC's two cards the GPU caches
   hold ~29 GiB of experts beside the RAM budget, so UD-IQ4_XS (55.4 GiB of experts) should need no SSD reads at all
@@ -218,12 +233,13 @@ Other moving parts:
   held in RAM costs ~13.7 KB per context token (~3.6 GB at 262k, ~1.8 GB at 131k) because `--kv-resident 32768`
   keeps only a fixed window in VRAM. With the memory saver on and the other apps closed, Paul measured ~53 GB used and
   ~11 GB free while serving IQ2_XS.
-- **Untried RAM lever for the ISTA sizes: `--resident-experts`.** IQ3_XXS's default mode copies all 40 GiB of experts
-  into RAM (start log: `expert arena ... 42916118528 B`) although the GPU caches already hold ~30 GiB of them. On a
-  layer split `--resident-experts` leaves every card's cache out of the RAM copy (`F:\AI\strata\docs\MULTI_GPU.md`,
-  "The resident RAM mode works on a split"; `docs\DETAILS.md` "Low-RAM modes"), so IQ3_XXS would need ~11 GiB of RAM
-  and IQ3_S ~18 GiB (estimates). Upstream #1447 ran IQ3_S this way on 2x RTX 3090 with 32 GB of RAM at 137 tok/s.
-  Not measured here; decode speed against the full copy is the open question.
+- **`--resident-experts` is on for IQ3_XXS and Swift since 2026-11-01.** The default mode copies all 40 GiB of
+  IQ3_XXS's experts into RAM (start log: `expert arena ... 42916118528 B`) although the GPU caches already hold ~30 GiB
+  of them. On a layer split `--resident-experts` leaves every card's cache out of the RAM copy
+  (`F:\AI\strata\docs\MULTI_GPU.md`, "The resident RAM mode works on a split"; `docs\DETAILS.md` "Low-RAM modes"):
+  17.05 GiB for IQ3_XXS (pinned), 24.59 GiB for Swift IQ3_S. Measured 2026-11-01, three interleaved rounds: free RAM
+  7.5 -> 28 GB on IQ3_XXS, decode within 1-4%, prompt reads 12-16% faster, load ~45 -> ~110 s. `--adapt-async 1`
+  needs this mode and is untried.
 
 ## Working in this repo
 
@@ -263,7 +279,9 @@ Logs: `logs\server.log` (router; `server.prev.log` is the previous boot), `logs\
 
 [plans/ubuntu-dual-boot.md](./plans/ubuntu-dual-boot.md), with the how-to in [docs/ubuntu-setup.md](./docs/ubuntu-setup.md):
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
-8 GiB of its ~33 GiB expert arena on a multi-GPU split; Linux pins all of it). Slices U1-U5; U1 is Paul's hands-on
+8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
+run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, Swift's 24.6 GiB copy is refused, so the Linux
+comparison should be against Swift, or against both modes. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.

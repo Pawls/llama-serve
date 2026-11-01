@@ -626,7 +626,8 @@ sealed class TrayApp : ApplicationContext
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, autostartItem;
-    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem;
+    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
+    ToolStripMenuItem[] strataStartOtherItems;   // one per StrataSizes row after the first
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
     bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
@@ -635,9 +636,10 @@ sealed class TrayApp : ApplicationContext
     // off (null: none). The first is also the script's default.
     static readonly string[,] StrataSizes =
     {
-        { "iq3_xxs", "IQ3_XXS (fast)", null },
-        { "unsloth-ud-q4_k_xl", "UD-Q4_K_XL (4-bit, more accurate, slower)",
-          "UD-Q4_K_XL leaves only ~3 GB of RAM free. Turn on the memory saver if other apps are open." },
+        { "swift-iq3_s", "Swift 1.5 IQ3_S", null },
+        { "iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null },
+        { "unsloth-ud-q4_k_xl", "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
+          "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open." },
     };
 
     StrataState strataState = StrataState.Stopped;
@@ -720,7 +722,10 @@ sealed class TrayApp : ApplicationContext
             (s, e) => RunAction(ToggleReserveGpuAsync));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
         strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(0)));
-        strataStartOtherItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(1)));
+        strataStartOtherItems = Enumerable.Range(1, StrataSizes.GetLength(0) - 1)
+            .Select(size => new ToolStripMenuItem("Start Strata: " + StrataSizes[size, 1], null,
+                (s, e) => RunAction(() => StrataStartOnlyAsync(size))))
+            .ToArray();
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -743,7 +748,12 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             startStopItem, restartItem, reserveGpuItem,
             new ToolStripSeparator(),
-            strataStatusItem, strataStartStopItem, strataStartOtherItem, strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
+            strataStatusItem, strataStartStopItem,
+        });
+        strip.Items.AddRange(strataStartOtherItems);
+        strip.Items.AddRange(new ToolStripItem[]
+        {
+            strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             memorySaverReapplyItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
@@ -822,11 +832,10 @@ sealed class TrayApp : ApplicationContext
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
         bool strataStopped = strataState == StrataState.Stopped && !strataStopping;
-        strataStartStopItem.Text = strataStopped ? "Start Strata: Flash-Next " + StrataSizes[0, 1] : "Stop Strata";
+        strataStartStopItem.Text = strataStopped ? "Start Strata: " + StrataSizes[0, 1] : "Stop Strata";
         // Strata splits across both GPUs, so it cannot start while GPU 0 is reserved; Stop stays available.
         strataStartStopItem.Enabled = !strataStopping && (!strataStopped || !reserved);
-        strataStartOtherItem.Text = "Start Strata: Flash-Next " + StrataSizes[1, 1];
-        strataStartOtherItem.Visible = strataStopped && !reserved;
+        foreach (var item in strataStartOtherItems) item.Visible = strataStopped && !reserved;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
@@ -1158,6 +1167,12 @@ sealed class TrayApp : ApplicationContext
         }
         ShowState(RouterState.Stopped);   // before the next poll, so Apply does not report a crash
         return exitCode;
+    }
+
+    // The extra size items only start: a click on a menu opened before Strata left Stopped must not stop it.
+    async Task StrataStartOnlyAsync(int size)
+    {
+        if (strataState == StrataState.Stopped && !strataStopping) await StrataStartOrStopAsync(size);
     }
 
     // While stopped, starts StrataSizes row `size`; otherwise stops Strata, whichever size runs (`size` may be null).
