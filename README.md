@@ -250,6 +250,9 @@ Four arms on engine 0.1.55, both GPUs, 262k context, images on, conversation cac
 | UD-Q4_K_XL, 36 GiB RAM budget | 60 / 62 / 61 | 62 / 61 / 60 | 210 / 980 / 1,070 | 4.2-4.4 GB (4.0) | 67-70 s |
 
 - **`--resident-experts` frees ~21 GB of RAM on IQ3_XXS at no decode cost.** The full copy keeps all 40 GiB of experts in RAM although the GPU caches already hold ~30 GiB of them; resident mode keeps only the other 17.05 GiB, all of it pinned (the full copy pins only 8 GiB under WDDM on a split). Decode is within 1-4% (inside the run-to-run spread), prompt reads are 12-16% faster, and a load takes ~110 s instead of ~45 s. Both configs carry it since 2026-11-01.
+  - *Why the full copy bought nothing.* Decode reads the GPU's copy of a cached expert, so the RAM copy of those ~30 GiB sat idle. Its one use is that an expert the adaptive tier drops from a GPU is still in RAM; in resident mode the two swap places instead (the dropped one is copied back over PCIe into the incoming one's slot), which did not show in decode. The full copy was also worse for prompts: its start log said `locked 33352 MiB via working-set minimum + VirtualLock; cudaHostRegister limited to 8 GiB by the engine (multi-GPU under WDDM ...)`, so only 8 GiB of it could reach the GPU directly, while resident mode's copy is all `page-locked and mapped`.
+  - *Windows could not take it back either.* `VirtualLock` and CUDA page-locking both keep pages in RAM; under pressure Windows pages out other programs instead, and Strata has no release-and-reload path for a locked copy. Only file-mapped experts (`--mmap-experts`, which a RAM budget uses for its cold tail) can be dropped by the OS and re-read from the SSD. The RAM comes back when the model unloads (idle unload, the tray, `stop-strata.ps1`).
+  - *Why UD-Q4_K_XL could not gain the same.* Its RAM budget mode never kept a duplicate: the start log says `RAM budget 36.00 GiB: 12339 of the 43.37 GiB of experts the GPU cache does not hold`. Its experts are about twice the size (~3.0 MiB each in VRAM against ~1.5 for IQ3_XXS and ~1.8 for Swift), so the same ~28-30 GiB of GPU cache holds half as many, and 43 GiB is left for RAM against 17 and 23. Levers, none measured: a smaller `--resident-budget-gib` (each GiB less is a GiB more read from the SSD), or UD-IQ4_XS (55.4 GiB of experts, ~26 GiB left for RAM; an estimate, not installed).
 - **Swift 1.5 IQ3_S** (84 GB, a fine-tune with shorter thinking) needs resident mode: setup warned that IQ3_S with a full copy needs ~78 GB of RAM at this context. Against IQ3_XXS in the same mode it decodes 7-9% slower on code and 8-12% on prose, because IQ3_S experts are larger (8,436 cache slots against 10,719) and its decode hit rate is 95-97% against ~99%. The GPU caches are pre-filled from `expert-profile.bin`, which was built on the original model, not Swift.
 - **Swift reads prompts at a third to a half of IQ3_XXS's speed** (36-54%; a 128k prompt takes ~78 s instead of ~36 s). Its start log says `page-locking refused (out of memory)`: the 24.59 GiB RAM copy is locked with `VirtualLock` but not pinned, and IQ3_XXS's 17 GiB copy is pinned. Unpinned copies to the GPUs are slower. `STRATA_PF_FUSED=1` (installed since 2026-11-02) makes the copy pin and reads prompts 9-22% faster; see [Swift 1.5 CPU and kernel switches](#swift-15-cpu-and-kernel-switches-measured-2026-11-02).
 - Thinking was off, so this bench does not show Swift's shorter thinking; it measures only speed per token. Quality was not compared here. Upstream's `docs\QUANTS.md` puts ISTA's IQ3_S at 87.7% same top token as Q8_0 against 84.5% for IQ3_XXS; no number for Swift.
@@ -330,6 +333,19 @@ Not installed: `strata-iq3_xxs.json` is unchanged.
 - Decode is the same in all three (70-79 t/s net). The essay at 52k reads far slower than at 128k in every arm, which suggests the bench's essay prompt at that depth is unusual, not the setting.
 
 `strata-unsloth-ud-q4_k_xl.json` has `--adapt-async 1` and `--prefill 2048` since 2026-11-02 (it had `--prefill auto`); tool calls 3/3 with each.
+
+### Swift 1.5 with `STRATA_EXCHANGE_ROTATE=1` (measured 2026-11-02)
+
+An adaptive swap hands the buffer over instead of copying the dropped expert into the RAM copy (`F:\AI\strata\docs\EXCHANGE_ROTATION.md`; upstream 164 -> 188 tok/s on an RTX 5090, never measured on a layer split). Both arms were the installed Swift config with `expert_profile_save` removed and the learned profile loaded read-only, so the bench could not change it. Three rounds, order rotated, restart before every run, median net t/s over 9 replies:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code 2k / 52k / 128k) | Free RAM while serving |
+|---|---|---|---|---|
+| Installed | 131 / 130 / 130 | 93 / 90 / 89 | 845 / 1,388 / 1,789 | 20.1-20.3 GB |
+| `STRATA_EXCHANGE_ROTATE=1` | 134 / 131 / 124 | 91 / 89 / 89 | 852 / 1,382 / 1,791 | 19.0-19.4 GB |
+
+- **No gain:** every cell is within -5% to +3%, inside the spread. The start log confirms it ran (`exchange buffer rotation enabled: 192 buffers in 7 block sizes ... 1.51 GiB page-locked`), and it costs ~1 GB of free RAM. Not installed.
+- The installed arm, now starting from the learned profile, matches the 2026-11-02 bench that started from the original-model profile (131 / 128 / 131 code, 90 / 90 / 88 prose); not a controlled comparison.
+- No errors, no LOW (578 MiB free on the desktop card with rotation), loads 121-131 s.
 
 **Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 

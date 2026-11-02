@@ -263,8 +263,9 @@ Other moving parts:
   - **Installed on Swift 2026-11-02, not benched:** `--prompt-cache-spread` and `"expert_profile_save":
     "expert-profile-swift-learned.bin"` (saved on unload and every 10 min; `stop-strata.ps1` tries an unload first, so a
     stop saves it unless a reply is still running after 15 s; to go back, stop Strata, remove the key, then delete the file).
-  - Speed, `env`: `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB
-    more pinned RAM).
+  - **Measured on Swift 2026-11-02:** `STRATA_EXCHANGE_ROTATE=1` (upstream 164 -> 188 tok/s on an RTX 5090) is within
+    the spread on the layer split and costs ~1 GB RAM; not installed
+    ([README.md](./README.md#swift-15-with-strata_exchange_rotate1-measured-2026-11-02)).
   - Hit rate: `--vision cpu` with a Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at
     ~3 s per picture (not approved by Paul). `--draft-vocab en`: ~110 MiB VRAM, English 1-2% faster, no CJK drafts.
   - Pinning: granting "Lock pages in memory" (`F:\AI\strata\tools\windows\enable_large_pages.ps1` as admin, then log
