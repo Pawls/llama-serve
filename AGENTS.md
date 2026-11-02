@@ -211,7 +211,8 @@ Other moving parts:
   stop then start at once, each start reaching `/health` loaded in 28 s): 8 of 8 restarts, stops 0.5-1.8 s, the log
   rotated every time and no fallback log was written. The first 4 found an engine still exiting after the stop
   returned (an exiting process has no `Path`, so the path filter skipped it); counted as running now, none was left
-  in the last 4.
+  in the last 4. Since 2026-11-02 `stop-strata.ps1` unloads a loaded model before the kill (so the engine saves
+  `expert_profile_save`): ~5 s on Swift, up to ~15 s more while a reply is still running, then a kill as before.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
@@ -255,7 +256,7 @@ Other moving parts:
     not installed. Not tried on UD-Q4_K_XL.
   - **Installed on Swift 2026-11-02, not benched:** `--prompt-cache-spread` and `"expert_profile_save":
     "expert-profile-swift-learned.bin"` (saved on unload and every 10 min; `stop-strata.ps1` tries an unload first, so a
-    stop saves it unless a request is running; to go back, stop Strata, remove the key, then delete the file).
+    stop saves it unless a reply is still running after 15 s; to go back, stop Strata, remove the key, then delete the file).
   - Speed, `env`: `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB
     more pinned RAM).
   - Hit rate: `--vision cpu` with a Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at
