@@ -126,7 +126,10 @@ Other moving parts:
   split: each card caches its own layers' experts and `--resident-budget-gib 36` holds the hottest of the rest, so
   only ~6 GiB of the 71.7 GiB is read from the SSD. Hand-added to setup's config: `--vram-reserve-mib 1344` (setup
   wrote 700), `--vram-reserve-later-mib 1728` (the start log asked for 1468, then 1728), `--conversation-cache-mib 0`,
-  `idle_unload_s`, `sampling` and `before_load`. Free RAM while serving is ~4 GB, so run it with the memory saver.
+  `--adapt-async 1` and `--prefill 2048` (was `auto`; both 2026-11-02,
+  [README.md](./README.md#ud-q4_k_xl-with---adapt-async-1-and-strata_mmq_kq1-measured-2026-11-02)), `idle_unload_s`,
+  `sampling` and `before_load`. Free RAM while serving is ~4 GB at load and 1.0-1.5 GB during a bench (memory saver
+  off), so run it with the memory saver.
   Untried levers: `STRATA_ROUTE_TAIL_SKIP=0` in its `env` (upstream: the default tail skip raises its KL from 0.053 to
   0.115 in budget mode) and a CPU picture reader to free ~1.3 GB of VRAM for experts.
 - Strata is not started at login because loading locks 17-36 GiB and can leave the PC unresponsive for up to a minute.
@@ -253,7 +256,10 @@ Other moving parts:
     `--host-core last` no change (host stays on 0).
   - **Measured on IQ3_XXS 2026-11-02** ([README.md](./README.md#iq3_xxs-with---adapt-async-1-and-strata_pf_fused1-measured-2026-11-02)):
     both Swift switches together leave decode unchanged and read long prompts 7-9% slower (its copy already pinned);
-    not installed. Not tried on UD-Q4_K_XL.
+    not installed.
+  - **Measured on UD-Q4_K_XL 2026-11-02** (same README section as the UD-Q4_K_XL bullet above): `--adapt-async 1`
+    +20-27% decode at every depth, installed; `STRATA_MMQ_KQ=1` (`STRATA_PF_FUSED` does not cover K-quants on CUDA)
+    +2-7% prompt reads, not installed; `--prefill 2048` +14-24% code prompt reads at depth, installed; 4096 is slower.
   - **Installed on Swift 2026-11-02, not benched:** `--prompt-cache-spread` and `"expert_profile_save":
     "expert-profile-swift-learned.bin"` (saved on unload and every 10 min; `stop-strata.ps1` tries an unload first, so a
     stop saves it unless a reply is still running after 15 s; to go back, stop Strata, remove the key, then delete the file).

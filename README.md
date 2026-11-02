@@ -259,7 +259,7 @@ Four arms on engine 0.1.55, both GPUs, 262k context, images on, conversation cac
 
 **Swift 1.5 IQ3_S is the default from 2026-11-01** (Paul's choice for its shorter thinking). It holds 125 t/s on code and 90 on prose at 128k with 21 GB of RAM free. IQ3_XXS stays in the tray for long prompts and the most speed, and UD-Q4_K_XL for the most accurate quant.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift, and on Swift `--adapt-async 1`, `--prompt-cache-spread`, the `env` key `STRATA_PF_FUSED` and the `expert_profile_save` key (values in [AGENTS.md](./AGENTS.md)).
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift, `--adapt-async 1` and `--prefill 2048` on UD-Q4_K_XL, and on Swift `--adapt-async 1`, `--prompt-cache-spread`, the `env` key `STRATA_PF_FUSED` and the `expert_profile_save` key (values in [AGENTS.md](./AGENTS.md)).
 
 ### Swift 1.5 CPU and kernel switches (measured 2026-11-02)
 
@@ -281,7 +281,7 @@ Four switches from `F:\AI\strata\docs\DETAILS.md`, tried on Swift 1.5 IQ3_S with
 - The run-to-run spread is wide: the same `--adapt-async 1` arm gave 136 and then 126 on 52k code. Each arm's own 9 replies spanned 10-20 t/s.
 - No run had an error and no start log reported LOW VRAM. Free RAM while serving was 21-24 GB on every arm, and loads took 116-137 s.
 
-The installed Swift config carries `--adapt-async 1` in `args` and `"env": {"STRATA_PF_FUSED": "1"}` since 2026-11-02. With both, the desktop card has 709 MiB free with everything loaded. On IQ3_XXS they do not help (next section); not tried on UD-Q4_K_XL.
+The installed Swift config carries `--adapt-async 1` in `args` and `"env": {"STRATA_PF_FUSED": "1"}` since 2026-11-02. With both, the desktop card has 709 MiB free with everything loaded. On IQ3_XXS they do not help; on UD-Q4_K_XL `--adapt-async 1` helps most (both in the sections below).
 
 Two more Swift extras went in on 2026-11-02, checked by a start (both reach the engine command line, no LOW, 560-568 MiB free on the desktop card, tool calls 3/3) but not benched, since a bench does not show either:
 
@@ -302,6 +302,34 @@ The two Swift switches together against the installed IQ3_XXS config (engine 0.1
 - No errors, no LOW (626 MiB free on the desktop card with both), loads 86-126 s.
 
 Not installed: `strata-iq3_xxs.json` is unchanged.
+
+### UD-Q4_K_XL with `--adapt-async 1` and `STRATA_MMQ_KQ=1` (measured 2026-11-02)
+
+`STRATA_PF_FUSED` does not cover this file's K-quant experts on CUDA (`F:\AI\strata\docs\QUANTS.md`), so the prompt lever tried instead was `STRATA_MMQ_KQ=1` (llama.cpp's MMQ kernels for the Q4_K / Q5_K experts of a prompt, instead of dequantizing to FP16; the start log says `K-quant prompt kernels from ...strata_kq.dll`). Engine 0.1.55, both GPUs, 262k, 36 GiB RAM budget, conversation cache off. Three arms, one variable each, three rounds with the order rotated and a restart before every run; median net t/s over 9 measured replies per cell:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code 2k / 52k / 128k; essay 128k) |
+|---|---|---|---|
+| Installed until 2026-11-02 | 59 / 62 / 59 | 60 / 60 / 59 | 215 / 973 / 1,058; 656 |
+| `--adapt-async 1` (installed) | 75 / 77 / 73 | 74 / 73 / 70 | 214 / 954 / 1,037; 645 |
+| `STRATA_MMQ_KQ=1` | 58 / 60 / 60 | 60 / 61 / 59 | 220 / 989 / 1,097; 696 |
+
+- **`--adapt-async 1` decodes 20-27% faster at every depth**, on code and prose alike, three times its gain on Swift. Probably because this file has the most experts outside the GPU caches (71.7 GiB against ~29 GiB cached), so the adaptive tier swaps the most, and asynchronous swaps no longer hold up decode (not checked with `--stats`). Prompt reads are unchanged.
+- **`STRATA_MMQ_KQ=1` reads prompts 2-7% faster** at the same decode speed, close to the spread, and it rounds differently from the FP16 path. Not installed.
+- No errors, no LOW (904-923 MiB free on the desktop card), loads 66-71 s. **Free RAM while serving had a median of 1.0-1.5 GB** (minimum 0.7 GB, on the `--adapt-async` arm), with the memory saver off and 49.5 GB free before the first start.
+
+**Prompt chunk size.** Every UD-Q4_K_XL start logs `WARNING: a prompt chunk of 8192 tokens lends 1269 cache slots to the prompt path, but only 0 of their experts fit in RAM: the others are read from the SSD on every chunk ... a smaller --prefill keeps them all in RAM`. Upstream's planner that picks a chunk from the host's memory runs on Linux only. A second bench, with `--adapt-async 1` in every arm, compared `--prefill auto` (8192 here) with 4096 and 2048: three rounds, one measured reply per cell, one cold prompt read per cell per round (t/s, round 1 / 2 / 3):
+
+| Cold prompt read | Code 52k | Code 128k | Essay 52k | Essay 128k |
+|---|---|---|---|---|
+| `--prefill auto` (8192) | 956 / 972 / 973 | 1,044 / 1,057 / 1,054 | 268 / 267 / 268 | 651 / 656 / 655 |
+| `--prefill 4096` | 638 / 637 / 638 | 638 / 635 / 639 | 266 / 271 / 267 | 479 / 478 / 478 |
+| `--prefill 2048` (installed) | 1,074 / 1,216 / 1,208 | 1,107 / 1,210 / 1,204 | 725 / 203 / 206 | 547 / 841 / 835 |
+
+- **2048 reads code 14-24% faster at depth** and prose at 128k 28% faster (rounds 2-3). Prose at 52k was 23% slower in 2 of 3 rounds; why is not known. 2k prompts are a single chunk and read the same (216-226 t/s) in every arm.
+- **4096 is 35-40% slower than both**, so the chunk size is not "smaller is better"; the warning stays at every size (501 slots at 2048, 757 at 4096).
+- Decode is the same in all three (70-79 t/s net). The essay at 52k reads far slower than at 128k in every arm, which suggests the bench's essay prompt at that depth is unusual, not the setting.
+
+`strata-unsloth-ud-q4_k_xl.json` has `--adapt-async 1` and `--prefill 2048` since 2026-11-02 (it had `--prefill auto`); tool calls 3/3 with each.
 
 **Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 
