@@ -23,6 +23,13 @@ function Get-StrataLaunchers {
 $servers = Get-StrataServers
 if (-not $servers) { Write-Host 'Strata is not running.'; return }
 
+# taskkill skips the engine's QUIT, which is when it saves expert_profile_save; an unload first sends it.
+# Best effort: a busy (409) or silent server is killed as before.
+try {
+    Invoke-RestMethod http://127.0.0.1:8411/unload -Method Post -ContentType application/json -Body '{}' -TimeoutSec 30 |
+        Out-Null
+} catch {}
+
 # Both the redirector and its child match; killing the first tree can take the second with it.
 foreach ($server in $servers) { taskkill /T /F /PID $server.ProcessId 2>$null | Out-Null }
 
