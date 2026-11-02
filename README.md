@@ -365,12 +365,12 @@ From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the
 
 ## ninfer-3090 (measured 2026-10-18)
 
-Don-Chad/ninfer-3090 v0.16.1 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. It is not wired into the tray, the router or any client. Nothing here starts it at login. To run Qwen3.8-27B on the headless card, first stop Strata and stop the router with `stop-router.ps1`. Unloading the router's model is not enough: any request from Pi or VS Code reloads a two-GPU preset onto GPU 1 beside ninfer, both slow down, and the tray unloads only Strata.
+ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Two builds sit side by side there: Don-Chad's v0.16.1 (measured below) and ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)); the launch block uses v0.17.1. It is not wired into the tray, the router or any client. Nothing here starts it at login. To run Qwen3.8-27B on the headless card, first stop Strata and stop the router with `stop-router.ps1`. Unloading the router's model is not enough: any request from Pi or VS Code reloads a two-GPU preset onto GPU 1 beside ninfer, both slow down, and the tray unloads only Strata.
 
 ```powershell
 $env:CUDA_DEVICE_ORDER='PCI_BUS_ID'; $env:CUDA_VISIBLE_DEVICES='1'; $env:NINFER_GRAFTS='off'
 $env:NINFER_PORT='8412'; $env:NINFER_MODEL_DIR='F:\AI\ninfer-3090\models'
-& 'F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.16.1-rtx3090\run.bat' qwen38-27b
+& 'F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090\run.bat' qwen38-27b
 # After ninfer stops: these variables persist in the shell, and CUDA_VISIBLE_DEVICES=1 would hide GPU 0 from a router or Strata started from it.
 Remove-Item Env:CUDA_DEVICE_ORDER, Env:CUDA_VISIBLE_DEVICES, Env:NINFER_GRAFTS, Env:NINFER_PORT, Env:NINFER_MODEL_DIR
 ```
@@ -404,13 +404,31 @@ The two rows are not the same model file:
 **Where the code comes from (checked 2026-11-01 against GitHub and the installed binary).** Don-Chad's v0.16.1 (`BUILD_INFO.json`: source commit `8d509ae`) is ashalliants/ninfer-3090 at `931bd49b` (2026-10-15), adopted whole, plus MSVC/CUDA 13 fixes, and it was run on a 3090 before release. On GitHub ashalliants/ninfer-3090 is a fork *of* Don-Chad's repo (made 2026-08-29), but its code has since run far ahead, and Don-Chad's adoption commit `1418aca` (2026-10-16) copied it back whole. Today ashalliants is where the work happens (490 commits ahead of Don-Chad master on 2026-11-01). It has its own, later v0.16.1 (2026-10-22), then v0.16.2, v0.17.0 and v0.17.1 (2026-10-29), each with a Windows zip that its notes say was **built on a machine with no NVIDIA GPU and never run**. Those notes call v0.16.0 (2026-10-14) the last ashalliants Windows build run on a card; the installed one is a day newer in code and was run by Don-Chad. Known issues, by build:
 
 - **Single lane by default.** The v0.16.1 notes say several simultaneous requests need a different multi-lane profile, so two clients at once (Pi plus VS Code, or subagents) queue or fail. The router has no such limit.
-- **JSON `response_format` garbled** (Don-Chad #36, open; upstream #392): the grammar forbids whitespace. Present in the installed build. Fixed in ashalliants v0.16.1 and later (its PR #335) and upstream (`9822c38`); we said so on Don-Chad #36 on 2026-11-01.
-- **`worker crash: target returned a token outside the public token domain`** (upstream #426, closed with no linked fix): one out-of-vocabulary token fails every request and the server exits. The message is in the installed binary. No fix in upstream or ashalliants (still in ashalliants master `f5cec0a`); the only one found is in a separate engine, Brontir/NInferno PR #217, which ends just that request. We asked ashalliants to port it: [ashalliants/ninfer-3090#410](https://github.com/ashalliants/ninfer-3090/issues/410) (2026-11-01). The #426 report saw 7 exits in 27 hours of continuous agent traffic on 4 lanes; a single lane should hit it less often (an estimate).
-- **Concurrent same-prefix requests crash the engine** (upstream #414, open): the regression range starts at upstream `48d8d185` (2026-10-14), which the installed build does not contain and ashalliants v0.16.1+ does. It needs `--max-concurrency` above 1. #434 (stalls until a restart) is not confirmed on any 3090 build.
-- **Reasoning effort** (Don-Chad #20, open PR): stale. The installed binary accepts all seven values, `none` to `max`.
-- Don-Chad #37 (closed, no explanation in the thread): the 27B looped in its thinking at 234k context. The installed build has a `--reasoning-loop` flag; untried.
+- **JSON `response_format` garbled** (Don-Chad #36, open; upstream #392): the grammar forbids whitespace. Present in Don-Chad's v0.16.1. Fixed in ashalliants v0.16.1 and later (its PR #335) and upstream (`9822c38`); we said so on Don-Chad #36 on 2026-11-01. Confirmed fixed in ashalliants v0.17.1 on 2026-11-02 (3/3 `json_object` replies parse).
+- **`worker crash: target returned a token outside the public token domain`** (upstream #426, closed with no linked fix): one out-of-vocabulary token fails every request and the server exits. Present in both installed builds. We asked ashalliants to port Brontir/NInferno PR #217's fix ([ashalliants/ninfer-3090#410](https://github.com/ashalliants/ninfer-3090/issues/410), 2026-11-01); their PR #412 ("Out-of-vocabulary token ends its request, not the Engine") merged on 2026-11-02, after v0.17.1, so no release has it yet. The #426 report saw 7 exits in 27 hours of continuous agent traffic on 4 lanes; a single lane should hit it less often (an estimate).
+- **Concurrent same-prefix requests crash the engine** (upstream #414, open): the regression range starts at upstream `48d8d185` (2026-10-14), which Don-Chad's v0.16.1 does not contain and ashalliants v0.16.1+ (so the installed v0.17.1) does. It needs `--max-concurrency` above 1; the `qwen38-27b` profile runs 1. #434 (stalls until a restart) is not confirmed on any 3090 build.
+- **Reasoning effort** (Don-Chad #20, open PR): stale. Don-Chad's v0.16.1 binary accepts all seven values, `none` to `max`.
+- Don-Chad #37 (closed, no explanation in the thread): the 27B looped in its thinking at 234k context. Both installed builds have a `--reasoning-loop` flag; untried.
 - Models must be converted to ninfer's own `.ninfer` v3 container. It cannot load GGUFs, so a new Qwen3.8 fine-tune (fork #34 asks about Swift 1.5) waits on someone converting it. Our 17.7 GB file is the maintainers' pinned download.
 - The release notes say distinct-GPU execution and Flash-Next were not part of their benchmark; they qualified one desktop-attached 3090 at a 16K context cap (116.7 tok/s median decode, 52-token prompts).
+
+### ashalliants v0.17.1 on Windows (measured 2026-11-02)
+
+ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine with no NVIDIA GPU and never run, runs here. It is installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090` (CUDA 12.8 libraries, against CUDA 13 in Don-Chad's build); the zip's SHA-256 and all 21 inner checksums matched. With the launch block above it reaches `/health` 200 in 8-13 s on GPU 1, loads the existing `models\qwen3_8_27b.ninfer` without a download, and starts with the same profile as v0.16.1 (188k context, rk4v4, DFlash2 K=7, 22.1 GiB on the card).
+
+- **Tool calls** 5/5 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8412 -Model qwen3.8-27b -Runs 5`; with the router stopped, `-Model` is required). **JSON mode** works: 3/3 `json_object` replies parse.
+- **Speed is the same as v0.16.1.** `bench-depth.ps1`, thinking off, 3 rounds per build interleaved (0.17.1 first), 5 measured runs per cell; net t/s, median of the three round medians:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k |
+|---|---|---|
+| ashalliants v0.17.1 | 198 / 168 / 144 | 98 / 88 / 76 |
+| Don-Chad v0.16.1 | 198 / 169 / 138 | 96 / 88 / 75 |
+
+- **Spread:** the round ranges overlap in every cell (128k code: 136-150 against 138-146). Prompt reads are about 1% faster on v0.17.1 at 128k (1,703-1,724 tok/s against 1,684-1,702) with no overlap, too small to matter. Logs: `logs\bench-depth-20261102-1520` to `-1607`, `logs\ninfer-0.17.1-*.log`, `logs\ninfer-0.16.1-r*.log`.
+- **`NINFER_<FLAG>` pass-through (#403) works**: `NINFER_PREFILL_STALL_BUDGET_MS=50` and `NINFER_CORS=on` reached `ninfer-serve`'s command line as `--prefill-stall-budget-ms "50" --cors`, and `NINFER_CORS=maybe` stopped the launcher with exit 2 and `NINFER_CORS must be on or off`.
+- **`run.bat` prints `FINDSTR: Cannot open >nul` 84 times at every start** (stderr, harmless), and its guard against a double quote in a `NINFER_*` value never fires. Line 864, `set NINFER_%~1 2>nul | findstr /b /c:"NINFER_%~1=" | findstr /c:"\"" >nul`, has two faults: cmd does not read `\"` as an escape, so `>nul` lands inside quotes and becomes a file name for findstr; and in a pipe the left side runs in a child cmd where `2>nul` leaves a trailing space on the name, so `set` matches nothing. Tested in cmd: `2>nul set NINFER_%~1 | findstr /b /c:"NINFER_%~1=" | >nul findstr /c:"\""` catches `a"b`, passes `50`, and prints nothing. Still on ashalliants master `d0ff053`.
+- Not tested: images, streaming, a client (Pi, Hermes, VS Code), long sessions, more than one lane, and the cache fixes the release is about (#401, #404, #405), which need a full Host cache.
+- **Which to run:** v0.17.1. Same speed, JSON mode fixed, and the long-prompt stall fix. Neither build has the out-of-vocabulary fix (#412); move to the first release that does.
 
 ## Changing things
 

@@ -178,7 +178,12 @@ Other moving parts:
   download and `_download\ninfer.zip` are deleted; only the engine folder and `models\qwen3_8_27b.ninfer` (17.7 GB)
   remain. **ashalliants/ninfer-3090 is a GitHub fork of Don-Chad's repo, but the work now happens there**: Don-Chad's
   v0.16.1 is ashalliants's code at `931bd49b` (2026-10-15), copied back whole, plus Windows build fixes. ashalliants
-  is at v0.17.1 (2026-10-29), with Windows zips its author built but never ran on a card. Upstream status, known bugs and which build has which fix are in the README section.
+  is at v0.17.1 (2026-10-29), whose Windows zip its author built but never ran on a card. **It runs here** (2026-11-02,
+  `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090`, now the README's launch line): same model file,
+  same speed as Don-Chad's v0.16.1 over 3 interleaved rounds each, tool calls 5/5, JSON mode fixed. Its `run.bat`
+  prints `FINDSTR: Cannot open >nul` 84 times at start (harmless; line 864's double-quote guard is dead). The
+  out-of-vocabulary crash fix we asked for in #410 merged as ashalliants PR #412 after v0.17.1, so no build here has
+  it. Upstream status, known bugs and which build has which fix are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
   the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`
