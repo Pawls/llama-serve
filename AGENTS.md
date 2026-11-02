@@ -111,9 +111,11 @@ Other moving parts:
   model id `swift-1.5-iq3_s`. Its per-layer embedding table is in shard 1 (setup's `--ple-gguf` is right; ISTA's is
   in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
   (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
-  ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `idle_unload_s`, `sampling` and `before_load`. Windows refuses
-  to pin its 24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead), which is the
-  likely reason it reads prompts at a third to a half of IQ3_XXS's speed; IQ3_XXS's 17 GiB copy pins. GPU caches are pre-filled
+  ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `--adapt-async 1` (2026-11-02), `"env": {"STRATA_PF_FUSED":
+  "1"}` (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
+  24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead) and it reads prompts at
+  a third to a half of IQ3_XXS's speed; with it the copy is 23.15 GiB, fully page-locked, and prompts read 9-22% faster
+  ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches are pre-filled
   from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%).
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
@@ -158,7 +160,7 @@ Other moving parts:
   per arm, OS not stated, not repeated upstream): 137 tok/s decode by default, 145 with `--adapt-async 1`, prompt
   1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
   `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
-  and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is untried (see "Untried levers" below).
+  and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is on Swift since 2026-11-02 (see "Untried levers" below).
 - **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
   `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
@@ -240,15 +242,14 @@ Other moving parts:
   17.05 GiB for IQ3_XXS (pinned), 24.59 GiB for Swift IQ3_S. Measured 2026-11-01, three interleaved rounds: free RAM
   7.5 -> 28 GB on IQ3_XXS, decode within 1-4%, prompt reads 12-16% faster, load ~45 -> ~110 s.
 - **Untried levers from `F:\AI\strata\docs\DETAILS.md`** (read in full 2026-11-01; upstream figures, none measured
-  here). What the start logs show about this PC: 9 CPU workers on logical processors 2,4,...,12,13,14,15 (P-cores
-  and E-cores mixed; i5-12600K is 6P+4E), host thread on 0, `large pages refused`, Swift's RAM copy `pinned 0.00 GiB`.
-  - Speed, flags in `args`: `--pool-affinity p-cores` or `measure` (13700K, Swift IQ3_XXS: 148 -> 188 tok/s; Swift
-    misses the GPU cache 3-5% of the time, so the CPU pool matters more than on IQ3_XXS); `--host-core last` (a
-    layer-split box: +8%, steady); `--adapt-async 1` (resident mode; RTX 3090 + 5600X: decode x1.07-1.11, #1447 on
-    2x 3090: 137 -> 145).
-  - Speed, `env`: `STRATA_PF_FUSED=1` (fused int8 prompt kernels for IQ3_S/IQ3_XXS, default only on gfx12 and big
-    sm_120 cards; may help Swift's slow prompts; unverified on Ampere); `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an
-    RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB more pinned RAM).
+  here unless marked). What the start logs show about this PC: 9 CPU workers on logical processors 2,4,...,12,13,14,15
+  (P-cores and E-cores mixed; i5-12600K is 6P+4E), host thread on 0, `large pages refused`.
+  - **Measured on Swift 2026-11-02** ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)):
+    `--adapt-async 1` +6-9% code decode and `STRATA_PF_FUSED=1` +9-22% prompt reads (the RAM copy then pins), both
+    installed on Swift; `--pool-affinity p-cores` 10-17% slower (5 P-core workers against 9 mixed);
+    `--host-core last` no change (host stays on 0). Neither installed switch tried on IQ3_XXS or UD-Q4_K_XL.
+  - Speed, `env`: `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB
+    more pinned RAM).
   - Hit rate: `"expert_profile_save": "expert-profile-swift-learned.bin"` (config key) keeps what the cache learned
     across restarts; Swift's cache is pre-filled from a profile built on the original model. `--vision cpu` with a
     Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at ~3 s per picture.
@@ -301,8 +302,8 @@ Logs: `logs\server.log` (router; `server.prev.log` is the previous boot), `logs\
 [plans/ubuntu-dual-boot.md](./plans/ubuntu-dual-boot.md), with the how-to in [docs/ubuntu-setup.md](./docs/ubuntu-setup.md):
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
 8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
-run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, Swift's 24.6 GiB copy is refused, so the Linux
-comparison should be against Swift, or against both modes. Slices U1-U5; U1 is Paul's hands-on
+run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, and since 2026-11-02 (`STRATA_PF_FUSED=1`) so
+does Swift's 23.15 GiB copy, so pinning alone no longer argues for Linux; the full-copy mode is the remaining case. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.

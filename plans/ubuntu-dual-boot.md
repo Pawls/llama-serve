@@ -4,8 +4,11 @@
 > split across both GPUs, Strata pins only 8 GiB of its ~33 GiB expert arena; Linux pins all of it. Strata's docs
 > measured +40% to 3x prompt speed from that on other two-card rigs. Since 2026-11-01 the installed configs run
 > `--resident-experts` (see [AGENTS.md](../AGENTS.md)): IQ3_XXS's 17 GiB RAM copy then pins fully on Windows, but the
-> default, Swift 1.5 IQ3_S, has its 24.6 GiB copy refused and reads prompts at a third to a half of IQ3_XXS's speed.
-> Compare Swift first; for IQ3_XXS, measure the full-copy mode as well. Windows stays the main OS. Ubuntu goes on the
+> default, Swift 1.5 IQ3_S, had its 24.6 GiB copy refused. Since 2026-11-02 Swift runs `STRATA_PF_FUSED=1`, which makes
+> its copy 23.15 GiB and fully page-locked on Windows, with prompt reads 9-22% faster
+> ([README.md](../README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). So in resident mode both sizes now
+> pin on Windows, and the Linux gain to look for is in the full-copy mode and in anything besides pinning.
+> Compare Swift as installed; for IQ3_XXS, measure the full-copy mode as well. Windows stays the main OS. Ubuntu goes on the
 > spare 477 GB NVMe (Windows disk 3), with its own boot loader.
 >
 > **Done means:** Ubuntu boots next to Windows and Windows is unchanged. F: is read-write from Linux. Strata runs on

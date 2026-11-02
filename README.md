@@ -251,7 +251,7 @@ Four arms on engine 0.1.55, both GPUs, 262k context, images on, conversation cac
 
 - **`--resident-experts` frees ~21 GB of RAM on IQ3_XXS at no decode cost.** The full copy keeps all 40 GiB of experts in RAM although the GPU caches already hold ~30 GiB of them; resident mode keeps only the other 17.05 GiB, all of it pinned (the full copy pins only 8 GiB under WDDM on a split). Decode is within 1-4% (inside the run-to-run spread), prompt reads are 12-16% faster, and a load takes ~110 s instead of ~45 s. Both configs carry it since 2026-11-01.
 - **Swift 1.5 IQ3_S** (84 GB, a fine-tune with shorter thinking) needs resident mode: setup warned that IQ3_S with a full copy needs ~78 GB of RAM at this context. Against IQ3_XXS in the same mode it decodes 7-9% slower on code and 8-12% on prose, because IQ3_S experts are larger (8,436 cache slots against 10,719) and its decode hit rate is 95-97% against ~99%. The GPU caches are pre-filled from `expert-profile.bin`, which was built on the original model, not Swift.
-- **Swift reads prompts at a third to a half of IQ3_XXS's speed** (36-54%; a 128k prompt takes ~78 s instead of ~36 s). Its start log says `page-locking refused (out of memory)`: the 24.59 GiB RAM copy is locked with `VirtualLock` but not pinned, and IQ3_XXS's 17 GiB copy is pinned. Unpinned copies to the GPUs are slower. Untried levers: a smaller context, or the pin settings in `F:\AI\strata\docs\DETAILS.md`.
+- **Swift reads prompts at a third to a half of IQ3_XXS's speed** (36-54%; a 128k prompt takes ~78 s instead of ~36 s). Its start log says `page-locking refused (out of memory)`: the 24.59 GiB RAM copy is locked with `VirtualLock` but not pinned, and IQ3_XXS's 17 GiB copy is pinned. Unpinned copies to the GPUs are slower. `STRATA_PF_FUSED=1` (installed since 2026-11-02) makes the copy pin and reads prompts 9-22% faster; see [Swift 1.5 CPU and kernel switches](#swift-15-cpu-and-kernel-switches-measured-2026-11-02).
 - Thinking was off, so this bench does not show Swift's shorter thinking; it measures only speed per token. Quality was not compared here. Upstream's `docs\QUANTS.md` puts ISTA's IQ3_S at 87.7% same top token as Q8_0 against 84.5% for IQ3_XXS; no number for Swift.
 - **UD-Q4_K_XL** confirms the quick check: ~60 t/s at every depth, about 2.3x slower than IQ3_XXS on code and 1.7x on prose, with ~4 GB of RAM free.
 - Every arm passed tool calls 3/3 at its first start (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411`), no run had an error, and no start log reported LOW VRAM. VRAM with everything loaded was ~23.5 / 22.6 GiB on every arm.
@@ -259,7 +259,29 @@ Four arms on engine 0.1.55, both GPUs, 262k context, images on, conversation cac
 
 **Swift 1.5 IQ3_S is the default from 2026-11-01** (Paul's choice for its shorter thinking). It holds 125 t/s on code and 90 on prose at 128k with 21 GB of RAM free. IQ3_XXS stays in the tray for long prompts and the most speed, and UD-Q4_K_XL for the most accurate quant.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift (values in [AGENTS.md](./AGENTS.md)).
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift, and on Swift `--adapt-async 1` and the `env` key `STRATA_PF_FUSED` (values in [AGENTS.md](./AGENTS.md)).
+
+### Swift 1.5 CPU and kernel switches (measured 2026-11-02)
+
+Four switches from `F:\AI\strata\docs\DETAILS.md`, tried on Swift 1.5 IQ3_S with engine 0.1.55, both GPUs, 262k context, images on, `--resident-experts`, conversation cache off, memory saver off, Firefox closed. `bench-depth.ps1` with 1 warm and 3 measured runs per cell, thinking off; three rounds with the arm order rotated and a Strata restart before every run. Two benches: the first set four arms against each other, the second set `STRATA_PF_FUSED=1` against the first bench's winner. Median net t/s over all 9 measured replies per cell:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code, 2k / 52k / 128k) |
+|---|---|---|---|
+| Baseline (installed until 2026-11-02) | 127 / 126 / 123 | 90 / 92 / 87 | 660 / 1,280 / 1,640 |
+| `--pool-affinity p-cores` | 109 / 105 / 102 | 83 / 84 / 80 | 660 / 1,280 / 1,650 |
+| `--host-core last` | 127 / 124 / 128 | 89 / 91 / 87 | 670 / 1,280 / 1,640 |
+| `--adapt-async 1` | 137 / 136 / 131 | 91 / 93 / 89 | 660 / 1,290 / 1,650 |
+| `--adapt-async 1`, second bench | 137 / 126 / 131 | 92 / 91 / 88 | 640 / 1,280 / 1,630 |
+| `--adapt-async 1` + `STRATA_PF_FUSED=1` (installed) | 131 / 128 / 131 | 90 / 90 / 88 | 780 / 1,390 / 1,800 |
+
+- **`--adapt-async 1` adds 6-9% on code** and 1-2% on prose; prompt reads are unchanged. The start log says `adaptive tier asynchronous (--adapt-async 1): up to 96 swaps per round, a round every 4 windows`. It is not bit-exact from run to run, which does not matter at temperature 1.0.
+- **`STRATA_PF_FUSED=1` reads prompts 9-22% faster** (code 2k 642 -> 781 t/s, 128k 1,633 -> 1,796; prose 11-20%) at the same decode speed, within the spread except 2k code (131 against 137, ranges overlap). It also changes the RAM copy: 23.15 GiB, and Windows page-locks all of it (`page-locked and mapped`, in 28-30 s), where every start without it logged `page-locking refused (out of memory)` for the 24.59 GiB copy. That is probably most of the prompt gain. It changes rounding; tool calls passed 3/3.
+- **`--pool-affinity p-cores` is 10-17% slower here.** On the i5-12600K it leaves 5 pool workers on the P-cores, against 9 by default on P- and E-cores together. Upstream's gain (148 -> 188 tok/s) was on a 13700K with 8 E-cores.
+- **`--host-core last` does nothing here.** The start log still puts the host thread on logical processor 0, and the numbers are within the spread.
+- The run-to-run spread is wide: the same `--adapt-async 1` arm gave 136 and then 126 on 52k code. Each arm's own 9 replies spanned 10-20 t/s.
+- No run had an error and no start log reported LOW VRAM. Free RAM while serving was 21-24 GB on every arm, and loads took 116-137 s.
+
+The installed Swift config carries `--adapt-async 1` in `args` and `"env": {"STRATA_PF_FUSED": "1"}` since 2026-11-02. With both, the desktop card has 709 MiB free with everything loaded. Neither was tried on IQ3_XXS or UD-Q4_K_XL.
 
 **Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 
