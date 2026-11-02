@@ -991,7 +991,8 @@ sealed class TrayApp : ApplicationContext
             return;
         }
         // Once per router load: a Strata busy answering refuses (409), and retrying every poll only repeats the toast.
-        if (strataState != StrataState.Loaded || strataUnloading || strataYieldedTo == activeModel.Id) return;
+        // stop-strata.ps1 unloads first; a second unload in that window would get 409 and toast a false error.
+        if (strataState != StrataState.Loaded || strataUnloading || strataStopping || strataYieldedTo == activeModel.Id) return;
         string routerModel = activeModel.Id;
         strataYieldedTo = routerModel;
         RunAction(() => UnloadStrataAsync(routerModel + " is loading in the router"));

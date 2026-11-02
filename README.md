@@ -259,7 +259,7 @@ Four arms on engine 0.1.55, both GPUs, 262k context, images on, conversation cac
 
 **Swift 1.5 IQ3_S is the default from 2026-11-01** (Paul's choice for its shorter thinking). It holds 125 t/s on code and 90 on prose at 128k with 21 GB of RAM free. IQ3_XXS stays in the tray for long prompts and the most speed, and UD-Q4_K_XL for the most accurate quant.
 
-To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift, and on Swift `--adapt-async 1` and the `env` key `STRATA_PF_FUSED` (values in [AGENTS.md](./AGENTS.md)).
+To change size, context or GPUs, run `F:\AI\strata\SETUP.bat`. Up to 0.2.0 it rewrote `strata-*.json` and dropped what had been added by hand. The 0.2.9 setup code keeps every key it does not write (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` flags into a `user_args` list; that is from reading upstream `setup.py`, not yet seen on this PC. After a setup run, check that those keys and flags are still there: `--vram-reserve-mib`, `--vram-reserve-later-mib` and `--conversation-cache-mib 0` on every size, plus `--resident-experts` on IQ3_XXS and Swift, and on Swift `--adapt-async 1`, `--prompt-cache-spread`, the `env` key `STRATA_PF_FUSED` and the `expert_profile_save` key (values in [AGENTS.md](./AGENTS.md)).
 
 ### Swift 1.5 CPU and kernel switches (measured 2026-11-02)
 
@@ -281,7 +281,27 @@ Four switches from `F:\AI\strata\docs\DETAILS.md`, tried on Swift 1.5 IQ3_S with
 - The run-to-run spread is wide: the same `--adapt-async 1` arm gave 136 and then 126 on 52k code. Each arm's own 9 replies spanned 10-20 t/s.
 - No run had an error and no start log reported LOW VRAM. Free RAM while serving was 21-24 GB on every arm, and loads took 116-137 s.
 
-The installed Swift config carries `--adapt-async 1` in `args` and `"env": {"STRATA_PF_FUSED": "1"}` since 2026-11-02. With both, the desktop card has 709 MiB free with everything loaded. Neither was tried on IQ3_XXS or UD-Q4_K_XL.
+The installed Swift config carries `--adapt-async 1` in `args` and `"env": {"STRATA_PF_FUSED": "1"}` since 2026-11-02. With both, the desktop card has 709 MiB free with everything loaded. On IQ3_XXS they do not help (next section); not tried on UD-Q4_K_XL.
+
+Two more Swift extras went in on 2026-11-02, checked by a start (both reach the engine command line, no LOW, 560-568 MiB free on the desktop card, tool calls 3/3) but not benched, since a bench does not show either:
+
+- `--prompt-cache-spread` in `args`: when the cache drops a checkpoint it drops the one that leaves the smallest gap, so an agent that rewrites its history a few turns back resumes near the edit instead of at the system prompt. Upstream (Pi on a layer split): 10.2 s against 40.0 s for an 82k conversation. Same RAM.
+- `"expert_profile_save": "expert-profile-swift-learned.bin"`: the engine saves what its GPU cache learned to `F:\AI\strata\expert-profile-swift-learned.bin` (196 KB) on a clean exit and every 10 minutes between requests, and the next start pre-fills from it instead of the profile built on the original model. A clean exit is an unload (tray, idle unload, or `stop-strata.ps1`, which now tries an unload before it kills the server); a bare kill skips the save, and so does a stop while a reply is still running after 15 s (the unload answers 409, the script says so and kills as before). The first start from it chose a slightly different split (CUDA0 layers 0-20 against 0-21). Upstream warns a profile learned from one kind of text can slow other kinds; this one learns from whatever Swift serves. To go back to the original-model profile, stop Strata, remove the `expert_profile_save` key from the config (otherwise the next save writes the file again), and delete the file.
+
+### IQ3_XXS with `--adapt-async 1` and `STRATA_PF_FUSED=1` (measured 2026-11-02)
+
+The two Swift switches together against the installed IQ3_XXS config (engine 0.1.55, both GPUs, 262k, images on, `--resident-experts`, conversation cache off). Same method as above: three rounds, arm order rotated, a restart before every run, median net t/s over 9 measured replies per cell.
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code 2k / 52k / 128k; essay 128k) | Free RAM while serving |
+|---|---|---|---|---|
+| Installed | 143 / 139 / 131 | 107 / 103 / 100 | 1,100 / 3,410 / 3,500; 2,070 | 24.0-24.7 GB |
+| Both switches | 141 / 143 / 133 | 106 / 101 / 98 | 1,150 / 3,130 / 3,200; 1,910 | 25.8-26.1 GB |
+
+- **Decode does not change** (every cell within 3%, inside the spread). `--adapt-async 1`'s 6-9% on Swift code does not show on IQ3_XXS.
+- **Long prompts read 7-9% slower** with both, 2k prompts 4-5% faster. IQ3_XXS's RAM copy was already fully page-locked without `STRATA_PF_FUSED`, so it does not get the pinning gain Swift got; the fused layout only shrinks the copy (15.61 against 17.05 GiB, about 1.5 GB more free RAM). Why long reads get slower is not known.
+- No errors, no LOW (626 MiB free on the desktop card with both), loads 86-126 s.
+
+Not installed: `strata-iq3_xxs.json` is unchanged.
 
 **Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
 

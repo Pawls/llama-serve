@@ -112,11 +112,13 @@ Other moving parts:
   in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
   (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
   ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `--adapt-async 1` (2026-11-02), `"env": {"STRATA_PF_FUSED":
-  "1"}` (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
+  "1"}` (2026-11-02), `--prompt-cache-spread` and `"expert_profile_save": "expert-profile-swift-learned.bin"`
+  (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
   24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead) and it reads prompts at
   a third to a half of IQ3_XXS's speed; with it the copy is 23.15 GiB, fully page-locked, and prompts read 9-22% faster
-  ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches are pre-filled
-  from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%).
+  ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
+  from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
+  since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
   installed then (IQ2_XS and IQ3_XXS) byte-identical. Start it from the tray or with `.\start-strata.ps1 -Model unsloth-ud-q4_k_xl` (config
@@ -209,7 +211,8 @@ Other moving parts:
   stop then start at once, each start reaching `/health` loaded in 28 s): 8 of 8 restarts, stops 0.5-1.8 s, the log
   rotated every time and no fallback log was written. The first 4 found an engine still exiting after the stop
   returned (an exiting process has no `Path`, so the path filter skipped it); counted as running now, none was left
-  in the last 4.
+  in the last 4. Since 2026-11-02 `stop-strata.ps1` unloads a loaded model before the kill (so the engine saves
+  `expert_profile_save`): ~5 s on Swift, up to ~15 s more while a reply is still running, then a kill as before.
 - **Upstream rewrote its git history** between 2026-10-04 and 2026-10-11 (the clone had no common ancestor with
   `origin/main`, though the trees were identical). `git pull --ff-only` then fails. When the clone is clean and
   `git diff HEAD <upstream commit with the same subject>` is empty, `git reset <that commit>` (mixed; the working tree is
@@ -247,15 +250,17 @@ Other moving parts:
   - **Measured on Swift 2026-11-02** ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)):
     `--adapt-async 1` +6-9% code decode and `STRATA_PF_FUSED=1` +9-22% prompt reads (the RAM copy then pins), both
     installed on Swift; `--pool-affinity p-cores` 10-17% slower (5 P-core workers against 9 mixed);
-    `--host-core last` no change (host stays on 0). Neither installed switch tried on IQ3_XXS or UD-Q4_K_XL.
+    `--host-core last` no change (host stays on 0).
+  - **Measured on IQ3_XXS 2026-11-02** ([README.md](./README.md#iq3_xxs-with---adapt-async-1-and-strata_pf_fused1-measured-2026-11-02)):
+    both Swift switches together leave decode unchanged and read long prompts 7-9% slower (its copy already pinned);
+    not installed. Not tried on UD-Q4_K_XL.
+  - **Installed on Swift 2026-11-02, not benched:** `--prompt-cache-spread` and `"expert_profile_save":
+    "expert-profile-swift-learned.bin"` (saved on unload and every 10 min; `stop-strata.ps1` tries an unload first, so a
+    stop saves it unless a reply is still running after 15 s; to go back, stop Strata, remove the key, then delete the file).
   - Speed, `env`: `STRATA_EXCHANGE_ROTATE=1` (Swift IQ3_S on an RTX 5090 under Windows: 164 -> 188 tok/s; ~1.4 GiB
     more pinned RAM).
-  - Hit rate: `"expert_profile_save": "expert-profile-swift-learned.bin"` (config key) keeps what the cache learned
-    across restarts; Swift's cache is pre-filled from a profile built on the original model. `--vision cpu` with a
-    Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at ~3 s per picture.
-    `--draft-vocab en`: ~110 MiB VRAM, English 1-2% faster, no CJK drafts.
-  - Agents: `--prompt-cache-spread` (an agent that rewrites history a few turns back resumes near the edit: 10 s
-    against 40 s upstream; same RAM).
+  - Hit rate: `--vision cpu` with a Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at
+    ~3 s per picture (not approved by Paul). `--draft-vocab en`: ~110 MiB VRAM, English 1-2% faster, no CJK drafts.
   - Pinning: granting "Lock pages in memory" (`F:\AI\strata\tools\windows\enable_large_pages.ps1` as admin, then log
     off and on) is what large pages need; whether it helps Swift's refused pin is unknown.
   - Quality: `STRATA_ROUTE_TAIL_SKIP=0` (see the 0.1.40-0.1.43 bullet above; upstream KL 0.003-0.006 on one GPU,
