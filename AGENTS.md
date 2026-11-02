@@ -181,7 +181,7 @@ Other moving parts:
   is at v0.17.1 (2026-10-29), whose Windows zip its author built but never ran on a card. **It runs here** (2026-11-02,
   `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090`, now the README's launch line): same model file,
   same speed as Don-Chad's v0.16.1 over 3 interleaved rounds each, tool calls 5/5, JSON mode fixed. Its `run.bat`
-  prints `FINDSTR: Cannot open >nul` 84 times at start (harmless; line 864's double-quote guard is dead). The
+  prints `FINDSTR: Cannot open >nul` 84 times at start (harmless; line 864's double-quote guard is dead; reported as ashalliants#434). The
   out-of-vocabulary crash fix we asked for in #410 merged as ashalliants PR #412 after v0.17.1, so no build here has
   it. Upstream status, known bugs and which build has which fix are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
