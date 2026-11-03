@@ -973,17 +973,24 @@ sealed class TrayApp : ApplicationContext
         {
             Task<List<ModelInfo>> routerQuery = client.GetModelsAsync();
             Task<bool?> strataQuery = strata.GetLoadedAsync();
-            Task<bool> ninferQuery = ninfer.IsAnsweringAsync();
+            // A connect to a closed local port takes ~2 s to fail on Windows, longer than a poll, so probe ninfer
+            // only while its process exists.
+            bool ninferRunning = ServerProcesses.NinferRunning();
+            Task<bool> ninferQuery = ninferRunning ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
             List<ModelInfo> latest = await routerQuery;
             bool? strataLoaded = await strataQuery;
             bool ninferAnswering = await ninferQuery;
             if (quitting) return;
             strataState = ClassifyStrata(strataLoaded);
-            NinferState previousNinfer = ninferState;
-            ninferState = ClassifyNinfer(ninferAnswering);
+            ninferState = ClassifyNinfer(ninferAnswering, ninferRunning);
             Apply(latest);
             KeepGpusExclusive();
-            RestoreRouterAfterNinfer(previousNinfer);
+            // ninfer exited without the menu's Stop (it crashed, or a script stopped it).
+            if (ninferState == NinferState.Stopped && !ninferStopping && routerYieldedToNinfer)
+            {
+                Notify("ninfer stopped. Starting the router again.", ToolTipIcon.Warning);
+                RestoreRouterAfterNinfer();
+            }
         }
         finally
         {
@@ -1050,14 +1057,14 @@ sealed class TrayApp : ApplicationContext
     }
 
     // A busy ninfer can miss the 5 s health timeout, so only a gone process counts as stopped.
-    NinferState ClassifyNinfer(bool answering)
+    NinferState ClassifyNinfer(bool answering, bool processRunning)
     {
         if (answering)
         {
             ninferStartRequestedAt = null;
             return NinferState.Ready;
         }
-        if (ServerProcesses.NinferRunning())
+        if (processRunning)
             return ninferState == NinferState.Ready ? NinferState.Ready : NinferState.Starting;
         bool starting = StillStarting(ref ninferStartRequestedAt, ninferProcess, NinferStartGracePeriod,
             "ninfer did not start. Open the ninfer log for details.");
@@ -1075,14 +1082,12 @@ sealed class TrayApp : ApplicationContext
         return false;
     }
 
-    // ninfer exited without the menu's Stop (it crashed, or a script stopped it): bring back the router it displaced.
-    void RestoreRouterAfterNinfer(NinferState previous)
+    // Once ninfer has stopped: starts the router again if the tray stopped it for ninfer.
+    void RestoreRouterAfterNinfer()
     {
-        bool justStopped = previous != NinferState.Stopped && ninferState == NinferState.Stopped;
-        if (!justStopped || ninferStopping || !routerYieldedToNinfer) return;
-        Notify("ninfer stopped. Starting the router again.", ToolTipIcon.Warning);
-        if (state == RouterState.Stopped) StartRouter();
+        if (!routerYieldedToNinfer) return;
         routerYieldedToNinfer = false;
+        if (state == RouterState.Stopped) StartRouter();
     }
 
     // The router has no hook before it loads a model, so a load Pi asks the router for while Strata holds the
@@ -1355,10 +1360,8 @@ sealed class TrayApp : ApplicationContext
         }
         if (exitCode != 0) Notify("ninfer did not stop cleanly; it may still hold GPU 1. Check Task Manager.", ToolTipIcon.Error);
         ninferState = NinferState.Stopped;
-        if (routerYieldedToNinfer && state == RouterState.Stopped)
-            StartRouter();
-        else
-            ShowState(state);
+        RestoreRouterAfterNinfer();
+        ShowState(state);
     }
 
     // `reason` names what needs the GPUs, for the notification; null when the user asked from the menu.
