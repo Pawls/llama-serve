@@ -10,6 +10,9 @@ $Presets = Join-Path $Root 'presets.ini'
 $LogDir  = Join-Path $Root 'logs'
 $Log     = Join-Path $LogDir 'server.log'
 
+# ninfer holds GPU 1, where any model the router loads would land beside it.
+& (Join-Path $Root 'stop-ninfer.ps1')
+
 # CUDA's default order is fastest-first; two identical 3090s tie, so tensor-split could land reversed.
 $env:CUDA_DEVICE_ORDER = 'PCI_BUS_ID'
 

@@ -63,9 +63,13 @@ Windows logon task "llama-router"
   -> tray\bin\LlamaTray.exe (single instance, polls every 2 s)
        -> start-router.ps1 -> llama-server router :8410 -> child llama-server per model (presets.ini)
        -> start-strata.ps1 -> F:\AI\strata\run-<size>.bat -> Strata server :8411 (user starts it by hand)
+       -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 (user starts it by hand)
 ```
 
-**Only one engine may hold the GPUs at a time.** Two hooks enforce it:
+**Only one engine may hold the GPUs at a time.** For ninfer the scripts enforce it: `start-ninfer.ps1` stops Strata
+and the router (the router itself, since any client request would load a two-GPU preset onto GPU 1), and
+`start-router.ps1` and `start-strata.ps1` run `stop-ninfer.ps1` first. The tray starts the router again when ninfer
+stops, if the tray had stopped it for ninfer. Between the router and Strata, two hooks enforce it:
 
 - Strata to router: `before_load` in `F:\AI\strata\strata-<size>.json` runs [unload-router-model.ps1](./unload-router-model.ps1)
   before Strata loads, and waits until the router child is gone.
@@ -171,19 +175,21 @@ Other moving parts:
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
   router's `qwen3.8-27b-dflash2`, on a ~4-bit conversion (17.2 GiB) against UD-Q5_K_XL; quality was not compared.
   Flash-Next does not start on this PC (it must pin 34.7 GiB of host memory, which Windows maps into a GPU address
-  space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Stop the
-  router (not just unload its model) while ninfer runs, since a router load lands on GPU 1 beside it and nothing
-  coordinates the two. Always set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader fetches a private graft
-  when a Hugging Face login exists). Cleaned up 2026-11-01: the Flash-Next conversion, its `.ngram` file, a partial
+  space with 18.9 GiB free). Details in [README.md](./README.md#ninfer-3090-measured-2026-10-18). Start it
+  from the tray or `start-ninfer.ps1` (see "How the pieces fit" for how it shares the GPUs); a hand launch must stop
+  the router itself and set `NINFER_PORT` (the default 8080 is signal-cli's) and `NINFER_GRAFTS=off` (the downloader
+  fetches a private graft when a Hugging Face login exists), as the script does. Verified 2026-11-02 by driving the
+  tray menu: start, stop with the router restarted, Start router stopping ninfer, ninfer killed (router back in
+  2 s), and a tray restart adopting a running ninfer. Strata starting over a running ninfer was not run. Cleaned up 2026-11-01: the Flash-Next conversion, its `.ngram` file, a partial
   download and `_download\ninfer.zip` are deleted; only the engine folder and `models\qwen3_8_27b.ninfer` (17.7 GB)
   remain. **ashalliants/ninfer-3090 is a GitHub fork of Don-Chad's repo, but the work now happens there**: Don-Chad's
   v0.16.1 is ashalliants's code at `931bd49b` (2026-10-15), copied back whole, plus Windows build fixes. ashalliants
   is at v0.17.1 (2026-10-29), whose Windows zip its author built but never ran on a card. **It runs here** (2026-11-02,
-  `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090`, now the README's launch line): same model file,
+  `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090`, `$Build` in `start-ninfer.ps1`): same model file,
   same speed as Don-Chad's v0.16.1 over 3 interleaved rounds each, tool calls 5/5, JSON mode fixed. Its `run.bat`
   prints `FINDSTR: Cannot open >nul` 84 times at start (harmless; line 864's double-quote guard is dead; reported as ashalliants#434). The
   out-of-vocabulary crash fix we asked for in #410 merged as ashalliants PR #412 after v0.17.1, so no build here has
-  it. Upstream status, known bugs and which build has which fix are in the README section.
+  it. `start-ninfer.ps1` drops those `FINDSTR` lines from `logs\ninfer.log`. Upstream status, known bugs and which build has which fix are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
   the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`

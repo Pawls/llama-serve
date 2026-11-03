@@ -1,4 +1,4 @@
-# Starts Strata (Qwen3.8-Flash-Next) on 127.0.0.1:8411 after freeing the GPUs from the router's model.
+# Starts Strata (Qwen3.8-Flash-Next) on 127.0.0.1:8411 after freeing the GPUs from ninfer and the router's model.
 # Strata's own flags live in the run-<model>.bat its setup wrote; this script only picks and launches it.
 param([string]$Model = 'swift-iq3_s')
 $ErrorActionPreference = 'Stop'
@@ -13,7 +13,8 @@ if (-not (Test-Path $RunScript)) { throw "$RunScript not found. Install the mode
 . (Join-Path $PSScriptRoot 'tray-settings.ps1')
 if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). Strata uses both GPUs; untick it first.' }
 
-# Strata fills both cards' VRAM with its expert caches; a router model loaded beside it fails or slows both.
+# Strata fills both cards' VRAM with its expert caches; a router model or ninfer beside it fails or slows both.
+& (Join-Path $PSScriptRoot 'stop-ninfer.ps1')
 & (Join-Path $PSScriptRoot 'unload-router-model.ps1')
 
 $IdleMinutes = Get-TraySetting 'StrataIdleMinutes'
