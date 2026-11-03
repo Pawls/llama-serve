@@ -39,9 +39,10 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Reserve GPU 0 for ComfyUI | Serves only presets pinned to CUDA1, stops Strata and blocks it from starting; restarts the router. Saved as `ReserveGpu0` in `tray-settings.json`, which `start-router.ps1` reads into `logs\presets.run.ini` |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
+| ninfer status, Start / Stop ninfer, Open ninfer log | Qwen3.8-27B on GPU 1 alone through ninfer-3090; starting it stops the router and Strata, and stopping it starts the router again. See [ninfer-3090](#ninfer-3090-measured-2026-10-18) |
 | Router models: free GPUs when idle, Strata: unload when idle | How long a model sits unused before it frees the GPUs: never, 15 / 30 minutes, 1 / 2 / 4 hours. Defaults: router never, Strata 15 minutes. Saved in `tray-settings.json` and used at the next router or Strata start |
 | Start with Windows | Turns the logon task on or off |
-| Quit | Stops the router and closes the tray |
+| Quit | Stops the router, Strata and ninfer, and closes the tray |
 
 If the router is already running when the tray starts (for example in a window), the tray uses it instead of starting another.
 
@@ -365,17 +366,15 @@ From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the
 
 ## ninfer-3090 (measured 2026-10-18)
 
-ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Two builds sit side by side there: Don-Chad's v0.16.1 (measured below) and ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)); the launch block uses v0.17.1. It is not wired into the tray, the router or any client. Nothing here starts it at login. To run Qwen3.8-27B on the headless card, first stop Strata and stop the router with `stop-router.ps1`. Unloading the router's model is not enough: any request from Pi or VS Code reloads a two-GPU preset onto GPU 1 beside ninfer, both slow down, and the tray unloads only Strata.
+ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Two builds sit side by side there: Don-Chad's v0.16.1 (measured below) and ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)); `start-ninfer.ps1` runs v0.17.1 (`$Build` in the script). No client is configured for it, and nothing starts it at login.
 
-```powershell
-$env:CUDA_DEVICE_ORDER='PCI_BUS_ID'; $env:CUDA_VISIBLE_DEVICES='1'; $env:NINFER_GRAFTS='off'
-$env:NINFER_PORT='8412'; $env:NINFER_MODEL_DIR='F:\AI\ninfer-3090\models'
-& 'F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090\run.bat' qwen38-27b
-# After ninfer stops: these variables persist in the shell, and CUDA_VISIBLE_DEVICES=1 would hide GPU 0 from a router or Strata started from it.
-Remove-Item Env:CUDA_DEVICE_ORDER, Env:CUDA_VISIBLE_DEVICES, Env:NINFER_GRAFTS, Env:NINFER_PORT, Env:NINFER_MODEL_DIR
-```
+**Start it** from the tray (**Start ninfer: Qwen3.8-27B on GPU 1**) or with `F:\AI\llama-serve\start-ninfer.ps1`; stop it with **Stop ninfer** or `stop-ninfer.ps1`. Only one engine holds the GPUs at a time:
 
-Set `NINFER_PORT` every time: the default, 8080, belongs to signal-cli. `NINFER_GRAFTS=off` stops the downloader from fetching a private graft through the Hugging Face login. The server is ready in about 10 s (`/health` answers 200), speaks the OpenAI API at `http://127.0.0.1:8412/v1`, and returns llama.cpp-style `timings`, so `bench-depth.ps1 -BaseUrl http://127.0.0.1:8412` works unchanged.
+- Starting ninfer stops Strata and the router. Unloading the router's model is not enough: any request from Pi or VS Code would load a two-GPU preset onto GPU 1 beside ninfer, and both would slow down. While ninfer runs, the router's clients get no answer.
+- Starting the router (`start-router.ps1`, or the tray's **Start router (stops ninfer)**) or Strata (`start-strata.ps1`) stops ninfer first.
+- When the tray stopped the router for ninfer, it starts the router again once ninfer stops, whether from the menu or because ninfer exited by itself. A tray restarted while ninfer runs adopts it, but leaves the router stopped after **Stop ninfer**; use **Start router**.
+
+The script sets `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `CUDA_VISIBLE_DEVICES=1`, `NINFER_PORT=8412` (the default, 8080, belongs to signal-cli), `NINFER_GRAFTS=off` (stops the downloader from fetching a private graft through the Hugging Face login) and `NINFER_MODEL_DIR`, for its own process only, and logs to `logs\ninfer.log` (the previous run's in `ninfer.prev.log`). The server is ready in about 10 s (`/health` answers 200), speaks the OpenAI API at `http://127.0.0.1:8412/v1`, and returns llama.cpp-style `timings`, so `bench-depth.ps1 -BaseUrl http://127.0.0.1:8412` works unchanged.
 
 `bench-depth.ps1`, thinking off, 5 measured runs per cell, one round each, not interleaved (a second, swapped round was cut short when the PC was needed), so read it as an estimate. Net t/s:
 
@@ -414,7 +413,7 @@ The two rows are not the same model file:
 
 ### ashalliants v0.17.1 on Windows (measured 2026-11-02)
 
-ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine with no NVIDIA GPU and never run, runs here. It is installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090` (CUDA 12.8 libraries, against CUDA 13 in Don-Chad's build); the zip's SHA-256 and all 21 inner checksums matched. With the launch block above it reaches `/health` 200 in 8-13 s on GPU 1, loads the existing `models\qwen3_8_27b.ninfer` without a download, and starts with the same profile as v0.16.1 (188k context, rk4v4, DFlash2 K=7, 22.1 GiB on the card).
+ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine with no NVIDIA GPU and never run, runs here. It is installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090` (CUDA 12.8 libraries, against CUDA 13 in Don-Chad's build); the zip's SHA-256 and all 21 inner checksums matched. Launched with the environment `start-ninfer.ps1` now sets, it reaches `/health` 200 in 8-13 s on GPU 1, loads the existing `models\qwen3_8_27b.ninfer` without a download, and starts with the same profile as v0.16.1 (188k context, rk4v4, DFlash2 K=7, 22.1 GiB on the card).
 
 - **Tool calls** 5/5 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8412 -Model qwen3.8-27b -Runs 5`; with the router stopped, `-Model` is required). **JSON mode** works: 3/3 `json_object` replies parse.
 - **Speed is the same as v0.16.1.** `bench-depth.ps1`, thinking off, 3 rounds per build interleaved (0.17.1 first), 5 measured runs per cell; net t/s, median of the three round medians:
@@ -475,12 +474,13 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | File | Purpose |
 |---|---|
 | `presets.ini` | The model list and each model's settings. |
-| `start-router.ps1` | Starts the router: pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
-| `stop-router.ps1` | Stops the router and any loaded model. |
-| `start-strata.ps1` / `stop-strata.ps1` | Start Strata on port 8411 (after unloading the router's model), logging to `logs\strata.log`, and stop it. |
+| `start-router.ps1` | Starts the router (after stopping ninfer): pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
+| `stop-router.ps1` | Stops the router and any loaded model, and waits until their processes have exited. |
+| `start-strata.ps1` / `stop-strata.ps1` | Start Strata on port 8411 (after stopping ninfer and unloading the router's model), logging to `logs\strata.log`, and stop it. |
+| `start-ninfer.ps1` / `stop-ninfer.ps1` | Start ninfer-3090 (Qwen3.8-27B) on GPU 1 and port 8412 after stopping Strata and the router, logging to `logs\ninfer.log`, and stop it. |
 | `memory-saver.ps1` | Lists, closes and reopens background apps for the tray's Memory saver. |
 | `unload-router-model.ps1` | Unloads the router's model and waits until its VRAM is free. Strata runs it before every load. |
-| `tray\LlamaTray.cs` | The tray app. It starts and stops the router and Strata through the scripts above, and unloads Strata when a router model loads. |
+| `tray\LlamaTray.cs` | The tray app. It starts and stops the router, Strata and ninfer through the scripts above, and unloads Strata when a router model loads. |
 | `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing `LlamaTray.cs`. |
 | `bench-depth.ps1` | Speed bench at ~2k / 52k / 128k context, for choosing between drafter lanes. Results in `logs\bench-depth-*.txt`. |
 | `bench-thinking.ps1` | Thinking-token and accuracy A/B of logit-bias arms (`bench\logit-bias-arms.json`) on math and code tasks (`bench\tasks-*.jsonl`). Results in `logs\bench-thinking-*.txt`. |

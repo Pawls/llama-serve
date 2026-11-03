@@ -82,11 +82,32 @@ sealed class ModelInfo
     public string Status;   // the router's status.value: "unloaded", "loading", "loaded", ...
 }
 
+// The status queries every server client polls with.
+static class StatusQuery
+{
+    static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
+
+    // The body of a 2xx answer to GET `path`; null when the server does not answer in time or answers an error.
+    public static async Task<string> GetBodyAsync(HttpClient http, string path)
+    {
+        try
+        {
+            using (var cancel = new CancellationTokenSource(QueryTimeout))
+            using (var response = await http.GetAsync(path, cancel.Token))
+            {
+                if (!response.IsSuccessStatusCode) return null;
+                return await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (HttpRequestException) { return null; }
+        catch (TaskCanceledException) { return null; }
+    }
+}
+
 sealed class RouterClient
 {
     public const string BaseUrl = "http://127.0.0.1:8410";
 
-    static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
     // A load that replaces a running model unloads it first, before answering.
     static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(60);
 
@@ -96,18 +117,8 @@ sealed class RouterClient
     // Returns null when the router is not answering.
     public async Task<List<ModelInfo>> GetModelsAsync()
     {
-        string body;
-        try
-        {
-            using (var cancel = new CancellationTokenSource(QueryTimeout))
-            using (var response = await http.GetAsync("/models", cancel.Token))
-            {
-                if (!response.IsSuccessStatusCode) return null;
-                body = await response.Content.ReadAsStringAsync();
-            }
-        }
-        catch (HttpRequestException) { return null; }
-        catch (TaskCanceledException) { return null; }
+        string body = await StatusQuery.GetBodyAsync(http, "/models");
+        if (body == null) return null;
 
         var models = new List<ModelInfo>();
         var root = (Dictionary<string, object>)json.DeserializeObject(body);
@@ -163,7 +174,6 @@ sealed class StrataClient
 {
     public const string BaseUrl = "http://127.0.0.1:8411";
 
-    static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
     static readonly TimeSpan UnloadTimeout = TimeSpan.FromSeconds(30);
 
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
@@ -175,19 +185,11 @@ sealed class StrataClient
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
     public async Task<bool?> GetLoadedAsync()
     {
-        try
-        {
-            using (var cancel = new CancellationTokenSource(QueryTimeout))
-            using (var response = await http.GetAsync("/health", cancel.Token))
-            {
-                if (!response.IsSuccessStatusCode) return null;
-                var root = (Dictionary<string, object>)json.DeserializeObject(await response.Content.ReadAsStringAsync());
-                Model = root.ContainsKey("model") ? root["model"] as string : null;
-                return root.ContainsKey("loaded") && (bool)root["loaded"];
-            }
-        }
-        catch (HttpRequestException) { return null; }
-        catch (TaskCanceledException) { return null; }
+        string body = await StatusQuery.GetBodyAsync(http, "/health");
+        if (body == null) return null;
+        var root = (Dictionary<string, object>)json.DeserializeObject(body);
+        Model = root.ContainsKey("model") ? root["model"] as string : null;
+        return root.ContainsKey("loaded") && (bool)root["loaded"];
     }
 
     // Null when the model is now unloaded; otherwise why not. Strata answers 409 while a request runs.
@@ -209,7 +211,22 @@ sealed class StrataClient
     }
 }
 
-// Both servers start and stop through the repo's own scripts, so their flags stay in one place.
+// ninfer-3090 runs Qwen3.8-27B on GPU 1 alone. It answers HTTP only once its weights are on the card.
+enum NinferState { Stopped, Starting, Ready }
+
+sealed class NinferClient
+{
+    public const string BaseUrl = "http://127.0.0.1:8412";   // NINFER_PORT in start-ninfer.ps1
+
+    readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
+
+    public async Task<bool> IsAnsweringAsync()
+    {
+        return await StatusQuery.GetBodyAsync(http, "/health") != null;
+    }
+}
+
+// Every server starts and stops through the repo's own scripts, so their flags stay in one place.
 sealed class ScriptProcess
 {
     readonly string root;
@@ -519,18 +536,21 @@ sealed class MemorySaverPicker : Form
     }
 }
 
-static class RouterProcess
+// Whether a server process is up, even if it is not answering HTTP yet. The folders are the stop scripts' filters.
+static class ServerProcesses
 {
-    const string LlamaCppDir = @"F:\AI\llama.cpp\";   // same filter as stop-router.ps1
+    // A router or one of its model processes.
+    public static bool RouterRunning() { return AnyRunning("llama-server", @"F:\AI\llama.cpp\"); }
 
-    // True when a router or model process is up, even if the router is not answering HTTP yet.
-    public static bool AnyServerRunning()
+    public static bool NinferRunning() { return AnyRunning("ninfer-serve", @"F:\AI\ninfer-3090\"); }
+
+    static bool AnyRunning(string processName, string exeDir)
     {
-        foreach (Process process in Process.GetProcessesByName("llama-server"))
+        foreach (Process process in Process.GetProcessesByName(processName))
         {
             try
             {
-                if (process.MainModule.FileName.StartsWith(LlamaCppDir, StringComparison.OrdinalIgnoreCase)) return true;
+                if (process.MainModule.FileName.StartsWith(exeDir, StringComparison.OrdinalIgnoreCase)) return true;
             }
             catch (Exception) { }   // exited meanwhile, or not ours to inspect
             finally { process.Dispose(); }
@@ -608,6 +628,11 @@ sealed class TrayApp : ApplicationContext
     static readonly TimeSpan StartGracePeriod = TimeSpan.FromSeconds(60);
     // Strata answers HTTP only once its model is in RAM: 1-3 minutes, longer on a cold file cache.
     static readonly TimeSpan StrataStartGracePeriod = TimeSpan.FromMinutes(10);
+    // Consulted only while no ninfer-serve.exe exists (run.bat takes a few seconds before starting it): a running
+    // process says by itself that ninfer is still loading.
+    static readonly TimeSpan NinferStartGracePeriod = TimeSpan.FromMinutes(1);
+    // ninfer answers 8-13 s after its start; a cold model file read from disk can take longer.
+    static readonly TimeSpan NinferLoadWarning = TimeSpan.FromMinutes(3);
 
     static readonly MethodInfo ShowContextMenu =
         typeof(NotifyIcon).GetMethod("ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -617,6 +642,8 @@ sealed class TrayApp : ApplicationContext
     readonly ScriptProcess routerProcess;
     readonly StrataClient strata = new StrataClient();
     readonly ScriptProcess strataProcess;
+    readonly NinferClient ninfer = new NinferClient();
+    readonly ScriptProcess ninferProcess;
     readonly List<string> presetOrder;
     readonly Dictionary<RouterState, Icon> stateIcons = new Dictionary<RouterState, Icon>();
     readonly NotifyIcon tray;
@@ -628,6 +655,7 @@ sealed class TrayApp : ApplicationContext
     ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem[] strataStartOtherItems;   // one per StrataSizes row after the first
+    ToolStripMenuItem ninferStatusItem, ninferStartStopItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
     bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
@@ -648,6 +676,12 @@ sealed class TrayApp : ApplicationContext
     bool strataStopping;                // stop-strata.ps1 is running
     string strataYieldedTo;             // the router model Strata was last unloaded for
 
+    NinferState ninferState = NinferState.Stopped;
+    DateTime? ninferStartRequestedAt;   // set while the tray waits for a ninfer it started
+    bool ninferStopping;                // stop-ninfer.ps1 is running
+    bool ninferLaunching;               // a menu Start is stopping Strata and the router before it launches ninfer
+    bool routerYieldedToNinfer;         // the tray stopped the router to start ninfer; it starts again when ninfer stops
+
     RouterState state = RouterState.Stopped;
     List<ModelInfo> models = new List<ModelInfo>();
     ModelInfo activeModel;          // the model that is loaded, loading or unloading
@@ -666,6 +700,7 @@ sealed class TrayApp : ApplicationContext
         this.root = root;
         routerProcess = new ScriptProcess(root, "start-router.ps1", "stop-router.ps1");
         strataProcess = new ScriptProcess(root, "start-strata.ps1", "stop-strata.ps1");
+        ninferProcess = new ScriptProcess(root, "start-ninfer.ps1", "stop-ninfer.ps1");
         presetOrder = ReadPresetOrder(Path.Combine(root, "presets.ini"));
         reserveGpu0 = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
 
@@ -691,8 +726,9 @@ sealed class TrayApp : ApplicationContext
     async void StartUp()
     {
         List<ModelInfo> current = await client.GetModelsAsync();
-        // Adopt a router that is already up (started in a window, or left behind by a crashed tray).
-        if (current == null && !RouterProcess.AnyServerRunning()) StartRouter();
+        // Adopt a router that is already up (started in a window, or left behind by a crashed tray). A running ninfer
+        // is adopted too: start-router.ps1 would stop it.
+        if (current == null && !ServerProcesses.RouterRunning() && !ServerProcesses.NinferRunning()) StartRouter();
         await RefreshAsync();
         pollTimer.Start();
     }
@@ -732,11 +768,14 @@ sealed class TrayApp : ApplicationContext
         memorySaverItem = new ToolStripMenuItem("Memory saver", null, (s, e) => RunAction(ToggleMemorySaverAsync));
         memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close apps again...", null,
             (s, e) => RunAction(ReapplyMemorySaverAsync));
+        ninferStatusItem = new ToolStripMenuItem { Enabled = false };
+        ninferStartStopItem = new ToolStripMenuItem("Start ninfer", null, (s, e) => RunAction(NinferStartOrStopAsync));
+        var ninferLogItem = new ToolStripMenuItem("Open ninfer log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "ninfer.log")));
         routerIdleMenu = BuildIdleMenu("Router models: free GPUs when idle", TraySettings.RouterIdleKey, 0, "router");
         strataIdleMenu = BuildIdleMenu("Strata: unload when idle", TraySettings.StrataIdleKey, 15, "Strata");
 
         autostartItem = new ToolStripMenuItem("Start with Windows", null, (s, e) => ToggleAutostart());
-        var quitItem = new ToolStripMenuItem("Quit (stops the router and Strata)", null, (s, e) => Quit());
+        var quitItem = new ToolStripMenuItem("Quit (stops the router, Strata and ninfer)", null, (s, e) => Quit());
 
         strip.Items.AddRange(new ToolStripItem[]
         {
@@ -755,6 +794,8 @@ sealed class TrayApp : ApplicationContext
         {
             strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             memorySaverReapplyItem,
+            new ToolStripSeparator(),
+            ninferStatusItem, ninferStartStopItem, ninferLogItem,
             new ToolStripSeparator(),
             routerIdleMenu, strataIdleMenu,
             new ToolStripSeparator(),
@@ -822,8 +863,10 @@ sealed class TrayApp : ApplicationContext
         unloadItem.Enabled = answering && activeModel != null;
         chatItem.Enabled = answering;
 
-        startStopItem.Text = state == RouterState.Stopped ? "Start router" : "Stop router";
-        startStopItem.Enabled = state != RouterState.Stopping;
+        bool ninferStopped = ninferState == NinferState.Stopped && !ninferStopping;
+        if (state != RouterState.Stopped) startStopItem.Text = "Stop router";
+        else startStopItem.Text = ninferStopped ? "Start router" : "Start router (stops ninfer)";
+        startStopItem.Enabled = state != RouterState.Stopping && !ninferStopping;
         restartItem.Enabled = answering;
         bool reserved = reserveGpu0;
         reserveGpuItem.Checked = reserved;
@@ -838,6 +881,11 @@ sealed class TrayApp : ApplicationContext
         foreach (var item in strataStartOtherItems) item.Visible = strataStopped && !reserved;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
+
+        ninferStatusItem.Text = NinferStatusText();
+        if (ninferStopped) ninferStartStopItem.Text = "Start ninfer: Qwen3.8-27B on GPU 1 (stops the router and Strata)";
+        else ninferStartStopItem.Text = routerYieldedToNinfer ? "Stop ninfer and restart the router" : "Stop ninfer";
+        ninferStartStopItem.Enabled = !ninferStopping && !ninferLaunching;
 
         bool saverOn = MemorySaver.IsOn(root);
         memorySaverItem.Checked = saverOn;
@@ -857,6 +905,18 @@ sealed class TrayApp : ApplicationContext
             case StrataState.Starting: return "Strata starting (1-3 min)...";
             case StrataState.Unloaded: return "Strata ready, model unloaded (loads on use)";
             default: return "Strata loaded: " + (strata.Model ?? "Qwen3.8-Flash-Next");
+        }
+    }
+
+    string NinferStatusText()
+    {
+        if (ninferStopping) return "ninfer stopping...";
+        if (ninferLaunching) return "ninfer starting: stopping the router and Strata first...";
+        switch (ninferState)
+        {
+            case NinferState.Stopped: return "ninfer stopped";
+            case NinferState.Starting: return "ninfer starting (about 10 s)...";
+            default: return "ninfer ready: Qwen3.8-27B on GPU 1, port 8412";
         }
     }
 
@@ -910,12 +970,25 @@ sealed class TrayApp : ApplicationContext
         {
             Task<List<ModelInfo>> routerQuery = client.GetModelsAsync();
             Task<bool?> strataQuery = strata.GetLoadedAsync();
+            // A connect to a closed local port takes ~2 s to fail on Windows, longer than a poll, so probe ninfer
+            // only while its process exists.
+            Task<bool> ninferQuery = ServerProcesses.NinferRunning() ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
             List<ModelInfo> latest = await routerQuery;
             bool? strataLoaded = await strataQuery;
+            bool ninferAnswering = await ninferQuery;
             if (quitting) return;
             strataState = ClassifyStrata(strataLoaded);
+            bool ninferStartPending = ninferStartRequestedAt.HasValue;   // a failed start has its own notice
+            // Checked again: a menu Stop or Start can finish while the queries above wait.
+            ninferState = ClassifyNinfer(ninferAnswering, ServerProcesses.NinferRunning());
             Apply(latest);
             KeepGpusExclusive();
+            // ninfer exited without the menu's Stop (it crashed, failed to start, or a script stopped it).
+            if (ninferState == NinferState.Stopped && !ninferStopping && routerYieldedToNinfer)
+            {
+                if (!ninferStartPending) Notify("ninfer stopped. Starting the router again.", ToolTipIcon.Warning);
+                RestoreRouterAfterNinfer();
+            }
         }
         finally
         {
@@ -945,7 +1018,7 @@ sealed class TrayApp : ApplicationContext
     void ShowState(RouterState newState)
     {
         state = newState;
-        // With no router model on the GPUs, the icon and tooltip follow Strata.
+        // With no router model on the GPUs, the icon and tooltip follow Strata or ninfer.
         bool routerHoldsGpus = state == RouterState.Loading || state == RouterState.Loaded;
         RouterState iconState = state;
         string tooltip = StatusText();
@@ -959,6 +1032,11 @@ sealed class TrayApp : ApplicationContext
             iconState = RouterState.Loading;
             tooltip = StrataStatusText();
         }
+        else if (!routerHoldsGpus && ninferState != NinferState.Stopped)
+        {
+            iconState = ninferState == NinferState.Ready ? RouterState.Loaded : RouterState.Loading;
+            tooltip = NinferStatusText();
+        }
         tray.Icon = stateIcons[iconState];
         tray.Text = TrimTooltip(AppName + ": " + tooltip);
         UpdateMenu();
@@ -971,14 +1049,52 @@ sealed class TrayApp : ApplicationContext
             strataStartRequestedAt = null;
             return loaded.Value ? StrataState.Loaded : StrataState.Unloaded;
         }
-        if (!strataStartRequestedAt.HasValue) return StrataState.Stopped;
+        bool starting = StillStarting(ref strataStartRequestedAt, strataProcess, StrataStartGracePeriod,
+            "Strata did not start. Open the Strata log for details.");
+        return starting ? StrataState.Starting : StrataState.Stopped;
+    }
 
-        bool launcherAlive = strataProcess.Launcher != null;
-        bool withinGrace = DateTime.Now - strataStartRequestedAt.Value < StrataStartGracePeriod;
-        if (launcherAlive && withinGrace) return StrataState.Starting;
-        strataStartRequestedAt = null;
-        Notify("Strata did not start. Open the Strata log for details.", ToolTipIcon.Error);
-        return StrataState.Stopped;
+    // A busy ninfer can miss the 5 s health timeout, so only a gone process counts as stopped.
+    NinferState ClassifyNinfer(bool answering, bool processRunning)
+    {
+        if (answering)
+        {
+            ninferStartRequestedAt = null;
+            return NinferState.Ready;
+        }
+        if (processRunning)
+        {
+            // A load stuck on GPU 1 keeps the process up without ever answering: say so once.
+            if (ninferStartRequestedAt.HasValue && DateTime.Now - ninferStartRequestedAt.Value > NinferLoadWarning)
+            {
+                ninferStartRequestedAt = null;
+                Notify("ninfer has not answered for " + NinferLoadWarning.TotalMinutes
+                    + " minutes. Open the ninfer log, or use Stop ninfer.", ToolTipIcon.Warning);
+            }
+            return ninferState == NinferState.Ready ? NinferState.Ready : NinferState.Starting;
+        }
+        bool starting = StillStarting(ref ninferStartRequestedAt, ninferProcess, NinferStartGracePeriod,
+            "ninfer did not start. Open the ninfer log for details.");
+        return starting ? NinferState.Starting : NinferState.Stopped;
+    }
+
+    // Whether a server this tray launched may still come up: its launcher is alive and the grace period has not
+    // passed. Otherwise clears `requestedAt` and, if a start was pending, shows `failure`.
+    bool StillStarting(ref DateTime? requestedAt, ScriptProcess process, TimeSpan grace, string failure)
+    {
+        if (!requestedAt.HasValue) return false;
+        if (process.Launcher != null && DateTime.Now - requestedAt.Value < grace) return true;
+        requestedAt = null;
+        Notify(failure, ToolTipIcon.Error);
+        return false;
+    }
+
+    // Once ninfer has stopped: starts the router again if the tray stopped it for ninfer.
+    void RestoreRouterAfterNinfer()
+    {
+        if (!routerYieldedToNinfer) return;
+        routerYieldedToNinfer = false;
+        if (state == RouterState.Stopped) StartRouter();
     }
 
     // The router has no hook before it loads a model, so a load Pi asks the router for while Strata holds the
@@ -1009,15 +1125,9 @@ sealed class TrayApp : ApplicationContext
     bool IsStarting()
     {
         if (startRequestedAt.HasValue)
-        {
-            bool launcherAlive = routerProcess.Launcher != null;
-            bool withinGrace = DateTime.Now - startRequestedAt.Value < StartGracePeriod;
-            if (launcherAlive && withinGrace) return true;
-            startRequestedAt = null;
-            Notify("The router did not start. Open the server log for details.", ToolTipIcon.Error);
-            return false;
-        }
-        return RouterProcess.AnyServerRunning();
+            return StillStarting(ref startRequestedAt, routerProcess, StartGracePeriod,
+                "The router did not start. Open the server log for details.");
+        return ServerProcesses.RouterRunning();
     }
 
     void FollowRequestedLoad()
@@ -1107,11 +1217,16 @@ sealed class TrayApp : ApplicationContext
         if (error != null) Notify("Could not unload " + activeModel.Id + ": " + error, ToolTipIcon.Error);
     }
 
-    Task StartOrStopAsync()
+    async Task StartOrStopAsync()
     {
-        if (state != RouterState.Stopped) return StopRouterAsync();
-        StartRouter();
-        return Task.FromResult(0);
+        if (state != RouterState.Stopped)
+        {
+            await StopRouterAsync();
+            return;
+        }
+        // Stopping ninfer can already start the router (when the tray stopped it for ninfer).
+        if (ninferState != NinferState.Stopped) await StopNinferAsync();
+        if (state == RouterState.Stopped) StartRouter();
     }
 
     async Task RestartAsync()
@@ -1145,6 +1260,7 @@ sealed class TrayApp : ApplicationContext
 
     void StartRouter()
     {
+        routerYieldedToNinfer = false;   // start-router.ps1 stops ninfer
         routerProcess.Start();
         startRequestedAt = DateTime.Now;
         ShowState(RouterState.Starting);
@@ -1183,6 +1299,8 @@ sealed class TrayApp : ApplicationContext
         {
             string ramWarning = StrataSizes[size.Value, 2];
             if (ramWarning != null && !MemorySaver.IsOn(root)) Notify(ramWarning, ToolTipIcon.Warning);
+            // start-strata.ps1 would stop ninfer too; stopping it here first brings back the router it displaced.
+            if (ninferState != NinferState.Stopped) await StopNinferAsync();
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
             strataProcess.Start("-Model " + StrataSizes[size.Value, 0]);
             strataStartRequestedAt = DateTime.Now;
@@ -1190,6 +1308,12 @@ sealed class TrayApp : ApplicationContext
             ShowState(state);
             return;
         }
+        await StopStrataAsync("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.");
+    }
+
+    // Returns the stop script's exit code, showing `failure` when it is non-zero.
+    async Task<int> StopStrataAsync(string failure)
+    {
         strataStartRequestedAt = null;
         strataStopping = true;
         UpdateMenu();
@@ -1202,8 +1326,72 @@ sealed class TrayApp : ApplicationContext
         {
             strataStopping = false;
         }
-        if (exitCode != 0) Notify("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.", ToolTipIcon.Error);
+        if (exitCode != 0) Notify(failure, ToolTipIcon.Error);
         strataState = StrataState.Stopped;
+        ShowState(state);
+        return exitCode;
+    }
+
+    // ninfer needs GPU 1 to itself. The router is stopped, not just unloaded, because any client request would load a
+    // two-GPU preset beside it; Strata is stopped because it reloads across both cards on its next request.
+    async Task NinferStartOrStopAsync()
+    {
+        if (ninferState != NinferState.Stopped)
+        {
+            await StopNinferAsync();
+            return;
+        }
+        if (ninferLaunching) return;
+        ninferLaunching = true;
+        UpdateMenu();
+        try
+        {
+            await StopOthersAndLaunchNinferAsync();
+        }
+        finally
+        {
+            ninferLaunching = false;
+            ShowState(state);
+        }
+    }
+
+    async Task StopOthersAndLaunchNinferAsync()
+    {
+        if (strataState != StrataState.Stopped && !strataStopping
+            && await StopStrataAsync("Strata did not stop cleanly, so ninfer was not started. Check Task Manager.") != 0)
+            return;
+        if (state != RouterState.Stopped)
+        {
+            if (await StopRouterAsync() != 0)
+            {
+                Notify("The router did not stop cleanly, so ninfer was not started. Check Task Manager.", ToolTipIcon.Error);
+                return;
+            }
+            routerYieldedToNinfer = true;
+        }
+        ninferProcess.Start();
+        ninferStartRequestedAt = DateTime.Now;
+        ninferState = NinferState.Starting;
+    }
+
+    // Starts the router again when the tray stopped it for ninfer.
+    async Task StopNinferAsync()
+    {
+        ninferStartRequestedAt = null;
+        ninferStopping = true;
+        UpdateMenu();
+        int exitCode;
+        try
+        {
+            exitCode = await ninferProcess.StopAsync();
+        }
+        finally
+        {
+            ninferStopping = false;
+        }
+        if (exitCode != 0) Notify("ninfer did not stop cleanly; it may still hold GPU 1. Check Task Manager.", ToolTipIcon.Error);
+        ninferState = NinferState.Stopped;
+        RestoreRouterAfterNinfer();
         ShowState(state);
     }
 
@@ -1304,7 +1492,7 @@ sealed class TrayApp : ApplicationContext
         tray.Visible = false;
         try
         {
-            await Task.WhenAll(routerProcess.StopAsync(), strataProcess.StopAsync());
+            await Task.WhenAll(routerProcess.StopAsync(), strataProcess.StopAsync(), ninferProcess.StopAsync());
         }
         catch (Exception) { }   // exiting either way; the stop scripts can finish the job
         tray.Dispose();
