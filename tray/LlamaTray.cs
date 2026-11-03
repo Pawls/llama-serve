@@ -975,14 +975,14 @@ sealed class TrayApp : ApplicationContext
             Task<bool?> strataQuery = strata.GetLoadedAsync();
             // A connect to a closed local port takes ~2 s to fail on Windows, longer than a poll, so probe ninfer
             // only while its process exists.
-            bool ninferRunning = ServerProcesses.NinferRunning();
-            Task<bool> ninferQuery = ninferRunning ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
+            Task<bool> ninferQuery = ServerProcesses.NinferRunning() ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
             List<ModelInfo> latest = await routerQuery;
             bool? strataLoaded = await strataQuery;
             bool ninferAnswering = await ninferQuery;
             if (quitting) return;
             strataState = ClassifyStrata(strataLoaded);
-            ninferState = ClassifyNinfer(ninferAnswering, ninferRunning);
+            // Checked again: a menu Stop or Start can finish while the queries above wait.
+            ninferState = ClassifyNinfer(ninferAnswering, ServerProcesses.NinferRunning());
             Apply(latest);
             KeepGpusExclusive();
             // ninfer exited without the menu's Stop (it crashed, or a script stopped it).
