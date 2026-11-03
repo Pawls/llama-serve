@@ -1,14 +1,19 @@
 # Stops ninfer-serve, freeing GPU 1 and the 8 GiB of RAM it pins. Returns once the server and the start-ninfer.ps1
 # launcher that logs it have exited; exits 1 if either is still running after its wait.
 $ErrorActionPreference = 'Stop'
+$StartScript = Join-Path $PSScriptRoot 'start-ninfer.ps1'
 
 function Get-NinferServers {
     Get-Process ninfer-serve -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'F:\AI\ninfer-3090\*' }
 }
+# Shells running start-ninfer.ps1 as a script (the tray's launch), and the run.bat that starts ninfer-serve however
+# it was launched. A shell that only mentions the script on its command line is not one.
 function Get-NinferLaunchers {
-    Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe'" | Where-Object { $_.CommandLine -like '*start-ninfer.ps1*' }
+    Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe' OR Name = 'powershell.exe'" |
+        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like "*-File*$StartScript*" }
+    Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" |
+        Where-Object { $_.CommandLine -like '*F:\AI\ninfer-3090\*run.bat*' }
 }
-
 # Wait-Process cannot find a process that is already exiting (it errors at once), so wait on process objects.
 function Wait-Exit([System.Diagnostics.Process[]]$processes) {
     $processes | ForEach-Object { $null = $_.WaitForExit(30000) }
@@ -31,5 +36,5 @@ if ($servers) {
 # The launcher's Tee-Object holds logs\ninfer.log until it exits, and the next start moves that file.
 if ($launchers) { Wait-Exit @(Get-Process -Id $launchers.ProcessId -ErrorAction SilentlyContinue) }
 if (Get-NinferServers) { throw 'ninfer-serve is still running 30 s after it was stopped.' }
-if (Get-NinferLaunchers) { throw 'The start-ninfer.ps1 launcher is still running 30 s after ninfer stopped.' }
+if (Get-NinferLaunchers) { throw 'A ninfer launcher is still running 30 s after ninfer stopped.' }
 Write-Host 'Stopped ninfer.'

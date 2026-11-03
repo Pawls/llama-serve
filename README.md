@@ -475,7 +475,7 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 |---|---|
 | `presets.ini` | The model list and each model's settings. |
 | `start-router.ps1` | Starts the router (after stopping ninfer): pinned llama.cpp build, port 8410, logs to `logs\server.log`. |
-| `stop-router.ps1` | Stops the router and any loaded model. |
+| `stop-router.ps1` | Stops the router and any loaded model, and waits until their processes have exited. |
 | `start-strata.ps1` / `stop-strata.ps1` | Start Strata on port 8411 (after stopping ninfer and unloading the router's model), logging to `logs\strata.log`, and stop it. |
 | `start-ninfer.ps1` / `stop-ninfer.ps1` | Start ninfer-3090 (Qwen3.8-27B) on GPU 1 and port 8412 after stopping Strata and the router, logging to `logs\ninfer.log`, and stop it. |
 | `memory-saver.ps1` | Lists, closes and reopens background apps for the tray's Memory saver. |

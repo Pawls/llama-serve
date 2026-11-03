@@ -1,6 +1,8 @@
-# Starts ninfer-3090 (Qwen3.8-27B) on GPU 1 alone at 127.0.0.1:8412, after stopping Strata and the router.
+# Starts ninfer-3090 on GPU 1 alone at 127.0.0.1:8412, after stopping Strata and the router. Ready in 8-13 s.
+#   .\start-ninfer.ps1                  Qwen3.8-27B (run.bat's qwen38-27b profile)
+#   .\start-ninfer.ps1 -Model <name>    another run.bat model; its .ninfer file must be in F:\AI\ninfer-3090\models
 # The router must be stopped, not just unloaded: any client request would load a two-GPU preset beside ninfer.
-# ninfer reads its own .ninfer weights from F:\AI\ninfer-3090\models; see README § ninfer-3090.
+# See README § ninfer-3090.
 param([string]$Model = 'qwen38-27b')
 $ErrorActionPreference = 'Stop'
 
