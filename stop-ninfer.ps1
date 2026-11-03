@@ -9,20 +9,27 @@ function Get-NinferLaunchers {
     Get-CimInstance Win32_Process -Filter "Name = 'pwsh.exe'" | Where-Object { $_.CommandLine -like '*start-ninfer.ps1*' }
 }
 
-$servers = @(Get-NinferServers)
-if (-not $servers) { Write-Host 'ninfer is not running.'; return }
+# Wait-Process cannot find a process that is already exiting (it errors at once), so wait on process objects.
+function Wait-Exit([System.Diagnostics.Process[]]$processes) {
+    $processes | ForEach-Object { $null = $_.WaitForExit(30000) }
+}
 
-# Only the server is killed: run.bat then finishes on its own and deletes the temporary log it keeps in %TEMP%.
-# It takes about a second to exit, and Wait-Process cannot find a process that is already exiting (it errors at
-# once), so wait on the process objects themselves.
-$servers | Stop-Process -Force
-$servers | ForEach-Object { $null = $_.WaitForExit(30000) }
-if (Get-NinferServers) { throw 'ninfer-serve is still running 30 s after it was killed.' }
+$servers = @(Get-NinferServers)
+$launchers = @(Get-NinferLaunchers)
+if (-not $servers -and -not $launchers) { Write-Host 'ninfer is not running.'; return }
+
+if ($servers) {
+    # Only the server is killed: run.bat then finishes on its own and deletes the temporary log it keeps in %TEMP%.
+    $servers | Stop-Process -Force
+    Wait-Exit $servers
+} else {
+    # A launcher with no server is still starting (stopping Strata and the router, or in run.bat) and would start
+    # ninfer-serve after this script returned. Killing its tree prevents that; run.bat's %TEMP% log stays behind.
+    foreach ($launcher in $launchers) { taskkill /T /F /PID $launcher.ProcessId 2>$null | Out-Null }
+}
 
 # The launcher's Tee-Object holds logs\ninfer.log until it exits, and the next start moves that file.
-$launchers = @(Get-NinferLaunchers)
-if ($launchers) {
-    Wait-Process -Id $launchers.ProcessId -Timeout 30 -ErrorAction SilentlyContinue
-    if (Get-NinferLaunchers) { throw 'The start-ninfer.ps1 launcher is still running 30 s after ninfer stopped.' }
-}
+if ($launchers) { Wait-Exit @(Get-Process -Id $launchers.ProcessId -ErrorAction SilentlyContinue) }
+if (Get-NinferServers) { throw 'ninfer-serve is still running 30 s after it was stopped.' }
+if (Get-NinferLaunchers) { throw 'The start-ninfer.ps1 launcher is still running 30 s after ninfer stopped.' }
 Write-Host 'Stopped ninfer.'
