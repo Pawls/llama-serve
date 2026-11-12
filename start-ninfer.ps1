@@ -1,4 +1,4 @@
-# Starts ninfer-3090 on GPU 1 alone at 127.0.0.1:8412, after stopping Strata and the router. Ready in 8-13 s.
+# Starts ninfer-3090 on GPU 1 alone at 127.0.0.1:8412, after stopping Strata and the router. Ready in 8-15 s.
 #   .\start-ninfer.ps1                  Qwen3.8-27B (run.bat's qwen38-27b profile)
 #   .\start-ninfer.ps1 -Model <name>    another run.bat model; its .ninfer file must be in F:\AI\ninfer-3090\models
 # The router must be stopped, not just unloaded: any client request would load a two-GPU preset beside ninfer.
@@ -6,7 +6,7 @@
 param([string]$Model = 'qwen38-27b')
 $ErrorActionPreference = 'Stop'
 
-$Build     = 'ninfer-rtx3090-windows-x64-0.17.1-rtx3090'
+$Build     = 'ninfer-rtx3090-windows-x64-0.18.0-rtx3090'
 $NinferDir = 'F:\AI\ninfer-3090'
 $RunScript = Join-Path $NinferDir "$Build\run.bat"
 $LogDir    = Join-Path $PSScriptRoot 'logs'
@@ -29,8 +29,5 @@ $env:NINFER_MODEL_DIR = Join-Path $NinferDir 'models'
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'ninfer.prev.log') }
 
-# stdin from nul: run.bat must never wait on a prompt while it runs hidden. v0.17.1's run.bat prints
-# "FINDSTR: Cannot open >nul" once per NINFER_* variable it checks (ashalliants/ninfer-3090#434); those lines are dropped.
-cmd /c "`"$RunScript`" $Model < nul 2>&1" |
-    Where-Object { $_ -notlike 'FINDSTR: Cannot open >nul*' } |
-    Tee-Object -FilePath $Log
+# stdin from nul: run.bat must never wait on a prompt while it runs hidden.
+cmd /c "`"$RunScript`" $Model < nul 2>&1" | Tee-Object -FilePath $Log
