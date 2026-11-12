@@ -80,9 +80,11 @@ Strata, 93.7 GB). It is not part of this work.
 
 ## Traps
 
-- **Strata has no separate `xhigh`.** Its docs (`F:\AI\strata\docs\DETAILS.md`, the `reasoning.effort` row) treat
-  `xhigh` as `high`. bench-thinking sends the level inside `chat_template_kwargs`, which Strata may ignore and fall
-  back to its default (`high`). Confirm which level reached the engine, and state it in the table.
+- **Effort reaches Strata as `xhigh`.** Qwen3.8's template knows only `low`, `medium` and `xhigh`, so Strata maps
+  `high`, `xhigh` and `max` all to `xhigh` (`F:\AI\strata\serve\frontend.py` near line 132; `docs\AI_SETUP.md` § 6:
+  "`high` maps to `xhigh`"). `xhigh` is also the default when a request names no level. bench-thinking's
+  `chat_template_kwargs.reasoning_effort` is read (`frontend.py` near line 612). To confirm in the start log or a
+  rendered prompt, look for the sentence "Reasoning effort is set to xhigh."
 - **The bench-thinking summary may not total wall time.** Its `.txt` summary may not include `wall_s`. Add it if it
   is missing (a code change: branch, then a PR).
 - **Disk:** both of UD-IQ3_XXS's shard 4 and ISTA IQ3_XXS's shard 2 are 28,800,138,432 bytes. If their SHA-256
