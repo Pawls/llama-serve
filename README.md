@@ -366,7 +366,7 @@ From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the
 
 ## ninfer-3090 (measured 2026-10-18)
 
-ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Two builds sit side by side there: Don-Chad's v0.16.1 (measured below) and ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)); `start-ninfer.ps1` runs v0.17.1 (`$Build` in the script). No client is configured for it, and nothing starts it at login.
+ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Three builds sit side by side there: Don-Chad's v0.16.1 (measured below), ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)) and ashalliants's v0.18.0 (added 2026-11-12, [below](#ashalliants-v0180-on-windows-measured-2026-11-12)); `start-ninfer.ps1` runs v0.18.0 (`$Build` in the script). No client is configured for it, and nothing starts it at login.
 
 **Start it** from the tray (**Start ninfer: Qwen3.8-27B on GPU 1**) or with `F:\AI\llama-serve\start-ninfer.ps1`; stop it with **Stop ninfer** or `stop-ninfer.ps1`. Only one engine holds the GPUs at a time:
 
@@ -428,6 +428,23 @@ ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine wi
 - **`run.bat` prints `FINDSTR: Cannot open >nul` 84 times at every start** (stderr, harmless), and its guard against a double quote in a `NINFER_*` value never fires. Line 864, `set NINFER_%~1 2>nul | findstr /b /c:"NINFER_%~1=" | findstr /c:"\"" >nul`, has two faults: cmd does not read `\"` as an escape, so `>nul` lands inside quotes and becomes a file name for findstr; and in a pipe the left side runs in a child cmd where `2>nul` leaves a trailing space on the name, so `set` matches nothing. Tested in cmd: `2>nul set NINFER_%~1 | findstr /b /c:"NINFER_%~1=" | >nul findstr /c:"\""` catches `a"b`, passes `50`, and prints nothing. Still on ashalliants master `d0ff053`; reported with this run's results as [ashalliants/ninfer-3090#434](https://github.com/ashalliants/ninfer-3090/issues/434) (2026-11-02).
 - Not tested: images, streaming, a client (Pi, Hermes, VS Code), long sessions, more than one lane, and the cache fixes the release is about (#401, #404, #405), which need a full Host cache.
 - **Which to run:** v0.17.1. Same speed, JSON mode fixed, and the long-prompt stall fix. Neither build has the out-of-vocabulary fix (#412); move to the first release that does.
+
+### ashalliants v0.18.0 on Windows (measured 2026-11-12)
+
+v0.18.0 (2026-11-12) is the first release with both of our reports fixed: the out-of-vocabulary crash (#412, shipped in v0.17.2: the request that hits it gets HTTP 500 `numerical_failure` and the server keeps running) and the `run.bat` `FINDSTR` noise and dead quote guard (#434, closed 2026-11-07). As before, its notes say the Windows zip was built on a machine with no NVIDIA GPU and never run. The zip's SHA-256 and all 29 inner checksums matched. It is installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.18.0-rtx3090`, and `start-ninfer.ps1` no longer filters `FINDSTR` lines (the log had none).
+
+- **Starts** in 14 s (`/health` 200) on GPU 1 with the same profile, now read from `profiles\qwen38-27b-tuned-dflash2.json`: 188k context, rk4v4, DFlash2 K=7, 1.40 GiB free on the card.
+- **Tool calls** 5/5 and **JSON mode** 3/3 (same commands as v0.17.1 below).
+- **Speed matches v0.17.1.** One round of `bench-depth.ps1` (thinking off, 5 measured runs per cell). This was an update check, not an interleaved A/B, so read it against the v0.17.1 medians: every cell is within 2%. Log: `logs\bench-depth-20261112-1557`.
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k |
+|---|---|---|
+| ashalliants v0.18.0 (1 round) | 198 / 170 / 143 | 99 / 86 / 73 |
+| ashalliants v0.17.1 (3 rounds) | 198 / 168 / 144 | 98 / 88 / 76 |
+
+- **New Host and Origin check:** with no `--api-key`, a request with a foreign `Origin` header gets 403. `127.0.0.1` and `localhost` both pass. A name such as a LAN alias needs `NINFER_ALLOWED_HOST`. `GET /slots` answers again.
+- Not tested: images, streaming, a client, and long sessions. The concurrent same-prefix crash (upstream #414) is still open, and the `qwen38-27b` profile still runs one lane.
+- **Which to run:** v0.18.0.
 
 ## Changing things
 
