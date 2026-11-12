@@ -186,10 +186,11 @@ Other moving parts:
   v0.16.1 is ashalliants's code at `931bd49b` (2026-10-15), copied back whole, plus Windows build fixes. ashalliants
   ships Windows zips its author builds but never runs on a card. **v0.18.0 (2026-11-12) runs here** since 2026-11-12
   (`F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.18.0-rtx3090`, `$Build` in `start-ninfer.ps1`; v0.17.1 and
-  Don-Chad's v0.16.1 stay beside it for rollback): same model file and profile, tool calls 5/5, JSON mode 3/3. It
+  Don-Chad's v0.16.1 stay beside it for rollback; their `run.bat` prints `FINDSTR: Cannot open >nul` ~84 times per
+  start, which `start-ninfer.ps1` no longer filters): same model file and profile, tool calls 5/5, JSON mode 3/3. It
   has the out-of-vocabulary crash fix we asked for in #410 (PR #412: the request fails, the server stays up) and the
-  `run.bat` `FINDSTR` fix (#434). New in v0.18.0: without `--api-key` the server refuses a foreign `Origin` (403) and
-  Host names other than an IP or its own (`localhost` passes); add others with `NINFER_ALLOWED_HOST`. Upstream
+  `run.bat` `FINDSTR` fix (ashalliants#434). New in v0.18.0: without `--api-key` a foreign `Origin` gets 403
+  (tested; `127.0.0.1` and `localhost` pass); per its release notes other Host names need `NINFER_ALLOWED_HOST`. Upstream
   status, known bugs and which build has which fix are in the README section.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
