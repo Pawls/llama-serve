@@ -324,6 +324,9 @@ Logs: `logs\server.log` (router; `server.prev.log` is the previous boot), `logs\
 
 ## Plans in flight
 
+Open handoffs live in [dev-notes/handoffs/](./dev-notes/handoffs/), one file per piece of work. Move a file to
+`dev-notes/archive/` when its work is done.
+
 [plans/ubuntu-dual-boot.md](./plans/ubuntu-dual-boot.md), with the how-to in [docs/ubuntu-setup.md](./docs/ubuntu-setup.md):
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
 8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
