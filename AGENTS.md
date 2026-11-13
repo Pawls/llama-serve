@@ -201,10 +201,30 @@ Other moving parts:
   GitHub release zip 404'd and it fell back to the feed by itself); it leaves an untracked `engine-feed\` in the clone.
   The `STRATA_PREBUILT_URL` workaround used for 0.1.45 on 2026-10-19 (0.2.0-beta's `UPDATE.bat` looked only for
   the dropped `strata-windows-x64.zip`) is no longer needed.
+  **Since 0.2.10 `UPDATE.bat` no longer brings a newer engine**: setup fetches one only when the installed engine is
+  older than `MIN_ENGINE`, which stayed at 0.1.46. On 2026-11-13 it moved the code from v0.2.11-4 to
+  v0.2.13.1-160 and left engine 0.1.57. To install the feed's newest engine the way setup does (test start, old
+  engine kept in `engine\.previous`), run with `F:\AI\strata\.venv\Scripts\python.exe`:
+  `import sys; sys.path.insert(0, r'F:\AI\strata'); import setup; from pathlib import Path;
+  setup.engine_from_feed(Path(r'F:\AI\strata\engine'), updating=True)`. `strata.py update --check --no-control`
+  shows what the feed offers. **Every `setup.py --update` rewrites a `--prefill 2048` to `auto`**
+  (`upgrade_config`), so UD-Q4_K_XL's must be put back after each update.
   **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
   listed under "Installed sizes" above and in the Swift and UD-Q4_K_XL bullets, and re-add any that dropped.
+- **Engine 0.1.59 (code v0.2.13.1-160) is installed since 2026-11-13**; 0.1.57 (installed 2026-11-05 with
+  UD-IQ3_XXS, never benched) is in `engine\.previous`. Swift on 0.1.59 decodes within one run's spread of 0.1.57
+  ([README.md](./README.md#engine-0159-strata-0213-measured-2026-11-13)). **Swift's RAM copy has not pinned on
+  0.1.57 or 0.1.59** (`page-locking refused (out of memory)`, 23.41 GiB) and prompts read at the unpinned speed;
+  whether the engine or that night's lower free RAM caused it is open. Since 0.2.13 the engine reads the
+  hyper-connection weights as Q8_0 for Unsloth UD files by default, which UD-IQ3_XXS's `STRATA_HC_Q8=1` also sets.
+- **Unsloth 3.1 UD-IQ3_XXS** (83.6 GB in `F:\AI\Strata-data\models\unsloth-UD-IQ3_XXS`, pack
+  `packs\unsloth-ud-iq3_xxs`, config `strata-unsloth-ud-iq3_xxs.json`, model id
+  `qwen3.8-flash-next-unsloth-ud-iq3_xxs`) was installed 2026-11-05 and compared with Swift on 2026-11-13
+  ([README.md](./README.md#swift-15-iq3_s-against-unsloth-31-ud-iq3_xxs-measured-2026-11-13)): Swift finished the
+  50-task xhigh set 1.6x sooner and solved all of it. Not in the tray or any client config; one of the two is to be
+  deleted once Paul approves. Its `run-*.bat` had `--port 8080 --open` from setup; fixed to `--port 8411`.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:

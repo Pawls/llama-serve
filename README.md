@@ -122,7 +122,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 - Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-<size>.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
-Swift 1.5 IQ3_S, IQ3_XXS and Unsloth's UD-Q4_K_XL are installed, and the tray has a start item for each. **Swift 1.5 IQ3_S is the default since 2026-11-01**; the reasons and the numbers for all three are in [Swift 1.5, resident experts and UD-Q4_K_XL](#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01). IQ2_XS was deleted on 2026-11-01 to free disk space; its numbers below are kept for comparison. IQ3_XXS was the default from 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for IQ3_XXS and IQ2_XS are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19) and, for the installed engine, [Engine 0.1.55](#engine-0155-strata-029-measured-2026-11-01). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
+Swift 1.5 IQ3_S, IQ3_XXS and Unsloth's UD-Q4_K_XL are installed, and the tray has a start item for each. Unsloth 3.1 UD-IQ3_XXS is installed too, without a tray item, for the comparison in [Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS](#swift-15-iq3_s-against-unsloth-31-ud-iq3_xxs-measured-2026-11-13). **Swift 1.5 IQ3_S is the default since 2026-11-01**; the reasons and the numbers for all three are in [Swift 1.5, resident experts and UD-Q4_K_XL](#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01). IQ2_XS was deleted on 2026-11-01 to free disk space; its numbers below are kept for comparison. IQ3_XXS was the default from 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for IQ3_XXS and IQ2_XS are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19) and, for the installed engine, [Engine 0.1.55](#engine-0155-strata-029-measured-2026-11-01). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
 
 | Check | IQ2_XS | IQ3_XXS |
 |---|---|---|
@@ -348,7 +348,43 @@ An adaptive swap hands the buffer over instead of copying the dropped expert int
 - The installed arm, now starting from the learned profile, matches the 2026-11-02 bench that started from the original-model profile (131 / 128 / 131 code, 90 / 90 / 88 prose); not a controlled comparison.
 - No errors, no LOW (578 MiB free on the desktop card with rotation), loads 121-131 s.
 
-**Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the engine.
+### Engine 0.1.59 (Strata 0.2.13, measured 2026-11-13)
+
+`UPDATE.bat` took the code from v0.2.11-4 to v0.2.13.1-160 but left the engine at 0.1.57, which setup had installed on 2026-11-05 when it set up UD-IQ3_XXS. Since 0.2.10 setup fetches an engine only when the installed one is older than its `MIN_ENGINE` (still 0.1.46), so 0.1.59 was installed by hand from the signed feed (the command is in [AGENTS.md](./AGENTS.md)). 0.1.57 is in `F:\AI\strata\engine\.previous`. The update reset UD-Q4_K_XL's `--prefill 2048` to `auto`; it was put back. Every other config and `run-*.bat` came through byte-identical.
+
+Swift 1.5 IQ3_S, one `bench-depth.ps1` run on each engine (5 measured replies per cell), same night, a restart before each:
+
+| | Code 2k / 52k / 128k | Essay 2k / 52k / 128k | Cold prompt read, t/s (code 2k / 52k / 128k) |
+|---|---|---|---|
+| Engine 0.1.57 | 143 / 133 / 130 | 93 / 93 / 90 | 625 / 1,247 / 1,586 |
+| Engine 0.1.59 | 132 / 133 / 129 | 91 / 94 / 91 | 638 / 1,254 / 1,582 |
+
+The two engines are within one run's spread; the 2k code gap is not repeated in the three later 0.1.59 runs below (133-138).
+
+**Swift's RAM copy no longer pins.** On 0.1.57 and 0.1.59 its start log says `page-locking refused (out of memory)` for the 23.41 GiB copy, locked with `VirtualLock` instead. On 0.1.55 with `STRATA_PF_FUSED=1` the 23.15 GiB copy pinned (2026-11-02). The start logs also show less available RAM at that point: 14.4 GiB against 21.2 GiB on the last pinned start, with 13-16 GB free while serving against 20-24 GB on 2026-11-02. Which of the two (engine or what else held RAM that night) refused the pin is not known. Prompt reads match the unpinned 2026-11-02 numbers (660 / 1,280 / 1,640), not the pinned ones (780 / 1,390 / 1,800).
+
+### Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS (measured 2026-11-13)
+
+Swift 1.5 GSQ-RCO IQ3_S (84 GB, the default) against Unsloth's Dynamic 3.1 UD-IQ3_XXS (83.6 GB, installed 2026-11-05, first started for this test), the same size. Engine 0.1.59, both GPUs, 262k context, images on, `--resident-experts`, conversation cache off, memory saver off, Firefox open (see the LOW bullet below). Three rounds, the arm order swapped each round, a Strata restart before every arm, then a short warm-up reply and 30 s of settle. Each arm per round ran `test-tool-calls.ps1` (3 runs), `bench-depth.ps1` and `bench-thinking.ps1 -Arms off -Effort xhigh` (20 HumanEval and 30 MATH tasks, 32,768-token cap).
+
+| | Solved, math / code | Wall s per task, median | Wall s per 50-task round, median (range) | Thinking tokens, median | Net t/s, code 2k / 52k / 128k | Net t/s, essay 2k / 52k / 128k | Cold prompt read, t/s (code 2k / 52k / 128k) | Load | Free RAM while serving | Tool calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Swift 1.5 IQ3_S | 90/90, 60/60 | 6.5 | 948 (815-1,062) | 347 | 137 / 135 / 130 | 92 / 95 / 89 | 666 / 1,259 / 1,584 | 115-132 s | 13.2-13.8 GB | 9/9 |
+| Unsloth 3.1 UD-IQ3_XXS | 90/90, 58/60 | 6.8 | 1,547 (1,524-1,569) | 444 | 145 / 138 / 132 | 107 / 101 / 96 | 627 / 2,148 / 2,267 | 125-136 s | 7.9-8.9 GB | 8/9 |
+
+- **Swift finishes the 50 tasks 1.6x sooner** (948 s against 1,547 s per round) and solved every task in every round. On the 148 task-rounds both arms solved, UD-IQ3_XXS thought a median 1.39x as many tokens per task and took a median 1.15x as long (+0.8 s); Swift was faster on 100 of the 148, and their summed time was 2,653 s against 4,181 s. The totals gap is wider than the median gap because UD-IQ3_XXS thinks much longer on the hard tasks.
+- **UD-IQ3_XXS hits the thinking limit more often.** With a 32,768-token cap Strata closes the thinking at 24,576 tokens so the answer has room (`thinking limited to 24576 of max_tokens 32768` in the server log). UD-IQ3_XXS reached that limit 5 times in 150 tasks (HumanEval/32 in all three rounds, HumanEval/47 once, one math task); Swift reached it once (HumanEval/32). Both UD-IQ3_XXS code failures, HumanEval/32 and /47 in round 1, came after the limit.
+- **UD-IQ3_XXS is faster per token**: 1-6% on code, 8-16% on prose, and it reads long prompts 70% faster (2,148 against 1,259 t/s at 52k; a 128k prompt in ~57 s against ~81 s). Neither arm's RAM copy pinned (`page-locking refused`, 24.63 GiB for UD-IQ3_XXS). Its config sets `STRATA_HC_Q8=1`, which 0.2.13 made the engine's default for Unsloth UD files on CUDA.
+- **UD-IQ3_XXS leaves ~5 GB less RAM free** (7.9-8.9 GB against 13.2-13.8 GB). Its load is about the same.
+- Tool calls: one UD-IQ3_XXS run failed the second turn (the answer lacked the tool result's value), as did one of 3 at its first start (10/12 in all); Swift passed 9/9.
+- The thinking per task varies more than the speed between rounds: Swift's round totals span 815-1,062 s, mostly from HumanEval/32 (167, 32 and 252 s).
+- Swift's GPU caches start from its own learned expert profile, which kept learning between rounds; UD-IQ3_XXS's start from `expert-profile.bin`, built on the original model.
+- **Rounds 2 and 3 started with LOW VRAM on the desktop card**: Swift 314 MiB both times (the learned profile moved its split from layers 0-19 / 20-47 to 0-18 / 19-47, one more layer on the desktop card; the log asked for `--vram-reserve-later-mib 1764`), UD-IQ3_XXS 446 and then 183 MiB with the split unchanged (it asked for 1632, then 1895). The first UD-IQ3_XXS start had opened Firefox on the desktop card (its `run-*.bat`, see below) and Firefox stayed open through all three rounds, which probably explains UD-IQ3_XXS's free VRAM falling round by round (723, 690, 577, 446, 183 MiB). No round got slower: per-round code t/s at 2k were 133 / 137 / 138 for Swift and 145 / 147 / 144 for UD-IQ3_XXS. No request failed.
+- UD-IQ3_XXS's `run-*.bat`, written by setup on 2026-11-05, started the server on port 8080 (signal-cli's) with `--open`, unlike the other sizes. Its first start answered on 8080 and opened a browser; the script now passes `--port 8411` without `--open`, as the others do.
+- No request errors. UD-IQ3_XXS's shard 4 has the same size as IQ3_XXS's shard 2 but a different SHA-256, so the two cannot share a hardlink.
+- Logs: `logs\compare-20261113.console.txt`, `logs\compare-20261113.aggregate.txt`, `logs\bench-thinking-cmp-*`, `logs\bench-depth-cmp-*`, `logs\tool-calls-cmp-*`.
+
+**Sampling.** Every config sets `"sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0}`, the values the router's Qwen3.8 presets use. Without that block Strata decodes greedy (temperature 0) when a client sends no temperature, and greedy decoding is reported to loop on tool calls. A client that sends its own values, such as Pi, still wins. `F:\AI\strata\UPDATE.bat` updates the code; since 0.2.10 a newer engine needs the extra step in [AGENTS.md](./AGENTS.md).
 
 ### Memory saver
 
