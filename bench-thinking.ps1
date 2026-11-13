@@ -239,6 +239,8 @@ function Get-ArmSummary($Rows, $Baseline) {
         pass        = '{0}/{1}' -f @($done | Where-Object ok).Count, $done.Count
         med_think   = $counted.Count ? [int](Get-Median ($counted | ForEach-Object reasoning_tokens)) : $null
         mean_think  = $counted.Count ? [int]($counted | Measure-Object reasoning_tokens -Average).Average : $null
+        med_wall_s  = $done.Count ? [math]::Round((Get-Median ($done | ForEach-Object wall_s)), 1) : $null
+        total_wall_s = $done.Count ? [math]::Round(($done | Measure-Object wall_s -Sum).Sum) : $null
         truncated   = @($done | Where-Object finish -eq 'length').Count
         errors      = $Rows.Count - $done.Count
         narrow_per_k = $null
@@ -284,7 +286,7 @@ function Write-Summary {
         }
     }
     $header = "bench-thinking $(Split-Path $Jsonl -Leaf)  max_tokens $MaxTokens`n" +
-        "think = reasoning tokens; *_per_k = marker words per 1k reasoning tokens; vs_off = median per-task change in reasoning tokens; flips = +gained / -lost passes vs off`n"
+        "think = reasoning tokens; *_wall_s = request seconds per task (median, sum); *_per_k = marker words per 1k reasoning tokens; vs_off = median per-task change in reasoning tokens; flips = +gained / -lost passes vs off`n"
     $text = $header + ($table | Format-Table -Property * -AutoSize | Out-String -Width 300)
     [IO.File]::WriteAllText($Txt, $text, [Text.UTF8Encoding]::new($false))
     $text
