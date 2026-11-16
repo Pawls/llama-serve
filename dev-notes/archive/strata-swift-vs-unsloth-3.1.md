@@ -1,9 +1,7 @@
 # Handoff: Strata to v0.2.13, then Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS · Opus 5.5 / high
 
-**Status:** open. Written 2026-11-12. Move to `dev-notes/archive/` when done.
-**Progress (2026-11-13):** steps 1-5 done on branch `feat/strata-0.2.13-swift-vs-unsloth31` (engine 0.1.59,
-results in README § "Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS"; Swift won on time to completion and
-accuracy). The shard hashes differ, so no hardlink. Waiting on step 6: Paul's approval to delete the loser.
+**Status:** done 2026-11-16 (Paul approved deleting UD-IQ3_XXS; folder, pack, config, `run-*.bat` and log removed, 78 GB freed). Written 2026-11-12.
+**Result (2026-11-13):** Swift won on time to completion and accuracy; see README § "Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS".
 **Repo:** `F:\AI\llama-serve` @ `main`. Use a branch for code changes (tray, scripts). `F:\AI\strata` is upstream's
 clone: never commit there or edit its source ([AGENTS.md](../../AGENTS.md#what-this-repo-is)).
 

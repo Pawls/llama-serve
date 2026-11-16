@@ -219,12 +219,11 @@ Other moving parts:
   0.1.57 or 0.1.59** (`page-locking refused (out of memory)`, 23.41 GiB) and prompts read at the unpinned speed;
   whether the engine or that night's lower free RAM caused it is open. Since 0.2.13 the engine reads the
   hyper-connection weights as Q8_0 for Unsloth UD files by default, which UD-IQ3_XXS's `STRATA_HC_Q8=1` also sets.
-- **Unsloth 3.1 UD-IQ3_XXS** (83.6 GB in `F:\AI\Strata-data\models\unsloth-UD-IQ3_XXS`, pack
-  `packs\unsloth-ud-iq3_xxs`, config `strata-unsloth-ud-iq3_xxs.json`, model id
-  `qwen3.8-flash-next-unsloth-ud-iq3_xxs`) was installed 2026-11-05 and compared with Swift on 2026-11-13
+- **Unsloth 3.1 UD-IQ3_XXS was deleted on 2026-11-16** (Paul's call, 78 GB freed: model folder, pack, config, `run-*.bat`
+  and log). Installed 2026-11-05 and compared with Swift on 2026-11-13
   ([README.md](./README.md#swift-15-iq3_s-against-unsloth-31-ud-iq3_xxs-measured-2026-11-13)): Swift finished the
-  50-task xhigh set 1.6x sooner and solved all of it. Not in the tray or any client config; one of the two is to be
-  deleted once Paul approves. Its `run-*.bat` had `--port 8080 --open` from setup; fixed to `--port 8411`.
+  50-task xhigh set 1.6x sooner and solved all of it. A later `setup.py --family unsloth --model UD-IQ3_XXS` would
+  recreate it, with a `run-*.bat` that starts on port 8080 (signal-cli's) with `--open`; change that to `--port 8411`.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:
