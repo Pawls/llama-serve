@@ -173,17 +173,38 @@ enum StrataState { Stopped, Starting, Unloaded, Loaded }
 // One installed Strata size. A server serves one size, fixed when it starts.
 sealed class StrataSize
 {
+    const string StrataDir = @"F:\AI\strata";   // start-strata.ps1's $StrataDir
+
     public readonly string Script;       // start-strata.ps1's -Model value
-    public readonly string ModelId;      // /health's "model" while this size runs
     public readonly string Label;
     public readonly string RamWarning;   // shown when it starts with the memory saver off; null: none
+    string modelId;
 
-    public StrataSize(string script, string modelId, string label, string ramWarning)
+    public StrataSize(string script, string label, string ramWarning)
     {
         Script = script;
-        ModelId = modelId;
         Label = label;
         RamWarning = ramWarning;
+    }
+
+    // /health's "model" while this size runs: "model_name" in the size's own config, read once. Null when the
+    // config is missing or has none; the size then never shows as running.
+    public string ModelId
+    {
+        get
+        {
+            if (modelId == null)
+            {
+                try
+                {
+                    string text = File.ReadAllText(Path.Combine(StrataDir, "strata-" + Script + ".json"));
+                    var config = (Dictionary<string, object>)new JavaScriptSerializer().DeserializeObject(text);
+                    modelId = config.ContainsKey("model_name") ? config["model_name"] as string : null;
+                }
+                catch (Exception) { }   // unreadable config: the size is simply not marked as running
+            }
+            return modelId;
+        }
     }
 }
 
@@ -192,12 +213,12 @@ sealed class StrataClient
     public const string BaseUrl = "http://127.0.0.1:8411";
 
     static readonly TimeSpan UnloadTimeout = TimeSpan.FromSeconds(30);
-    static readonly TimeSpan LoadTimeout = TimeSpan.FromMinutes(5);   // Swift and IQ3_XXS take 1.5-2 min, plus before_load
 
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
-    // /health's "model" (the configured one, also while unloaded) from the last answer, e.g. "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
+    // /health's "model" (the configured one, also while unloaded) from the last answer, e.g.
+    // "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
     public string Model { get; private set; }
 
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
@@ -213,11 +234,12 @@ sealed class StrataClient
     // Null when the model is now unloaded; otherwise why not.
     public Task<string> UnloadAsync() { return PostControlAsync("/unload", UnloadTimeout); }
 
-    // Null when the model is now loaded; otherwise why not. POST /load answers once the engine is up.
-    public Task<string> LoadAsync() { return PostControlAsync("/load", LoadTimeout); }
+    // Null when the model is now loaded; otherwise why not. POST /load answers once the engine is up (1.5-2 min,
+    // plus before_load), so it has no timeout: giving up would leave the load running unseen.
+    public Task<string> LoadAsync() { return PostControlAsync("/load", Timeout.InfiniteTimeSpan); }
 
-    // Strata answers 409 while a request runs. Its control endpoints take JSON only and refuse a foreign Origin,
-    // which this client never sends.
+    // Its control endpoints take JSON only and refuse a foreign Origin, which this client never sends. /unload
+    // answers 409 while a request runs; a refused /load answers 503 with the reason in error.message.
     async Task<string> PostControlAsync(string path, TimeSpan timeout)
     {
         try
@@ -227,11 +249,24 @@ sealed class StrataClient
             using (var response = await http.PostAsync(path, content, cancel.Token))
             {
                 if (response.IsSuccessStatusCode) return null;
+                string reason = ErrorMessage(await response.Content.ReadAsStringAsync());
+                if (reason != null) return reason;
                 return (int)response.StatusCode == 409 ? "Strata is answering a request." : "Strata answered HTTP " + (int)response.StatusCode + ".";
             }
         }
         catch (HttpRequestException ex) { return ex.Message; }
         catch (TaskCanceledException) { return "Strata did not answer in time."; }
+    }
+
+    // {"error": {"message": ...}}, or null for any other body.
+    string ErrorMessage(string body)
+    {
+        try
+        {
+            var error = ((Dictionary<string, object>)json.DeserializeObject(body))["error"] as Dictionary<string, object>;
+            return error == null ? null : error["message"] as string;
+        }
+        catch (Exception) { return null; }
     }
 }
 
@@ -686,15 +721,16 @@ sealed class TrayApp : ApplicationContext
     // The first is also start-strata.ps1's default.
     static readonly StrataSize[] StrataSizes =
     {
-        new StrataSize("swift-iq3_s", "swift-1.5-iq3_s", "Swift 1.5 IQ3_S", null),
-        new StrataSize("iq3_xxs", "qwen3.8-flash-next-iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null),
-        new StrataSize("unsloth-ud-q4_k_xl", "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+        new StrataSize("swift-iq3_s", "Swift 1.5 IQ3_S", null),
+        new StrataSize("iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null),
+        new StrataSize("unsloth-ud-q4_k_xl",
             "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
             "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open."),
     };
 
     StrataState strataState = StrataState.Stopped;
     bool strataLoading;                 // a load the tray sent is in flight
+    bool strataLaunching;               // a menu Start is stopping ninfer before it launches Strata
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
     bool strataStopping;                // stop-strata.ps1 is running
@@ -922,7 +958,7 @@ sealed class TrayApp : ApplicationContext
     void UpdateStrataModelsMenu(bool strataStopped, bool reserved)
     {
         strataModelsMenu.Text = strataStopped ? "Start Strata" : "Strata model";
-        strataModelsMenu.Enabled = !strataStopping && !strataLoading && strataState != StrataState.Starting
+        strataModelsMenu.Enabled = !strataStopping && !strataLoading && !strataLaunching && strataState != StrataState.Starting
             && !(strataStopped && reserved);
         foreach (ToolStripMenuItem item in strataModelsMenu.DropDownItems)
         {
@@ -1067,7 +1103,7 @@ sealed class TrayApp : ApplicationContext
             iconState = RouterState.Loaded;
             tooltip = StrataStatusText();
         }
-        else if (!routerHoldsGpus && strataState == StrataState.Starting)
+        else if (!routerHoldsGpus && (strataState == StrataState.Starting || strataLoading))
         {
             iconState = RouterState.Loading;
             tooltip = StrataStatusText();
@@ -1240,6 +1276,11 @@ sealed class TrayApp : ApplicationContext
     async Task LoadAsync(string id)
     {
         if (activeModel != null && activeModel.Id == id) return;
+        if (strataLoading)
+        {
+            Notify("Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
+            return;
+        }
         if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for")) return;
         requestedModel = id;
         requestedModelSeenLoading = false;
@@ -1332,14 +1373,14 @@ sealed class TrayApp : ApplicationContext
     // stopped starts that size; the size that runs loads its model if it is unloaded; another size replaces it.
     async Task StrataSelectAsync(StrataSize size)
     {
-        if (strataStopping || strataLoading || strataState == StrataState.Starting) return;
+        if (strataStopping || strataLoading || strataLaunching || strataState == StrataState.Starting) return;
         if (strataState == StrataState.Stopped)
         {
             await StrataStartAsync(size);
         }
         else if (strata.Model == size.ModelId)
         {
-            if (strataState == StrataState.Unloaded) await StrataLoadAsync();
+            if (strataState == StrataState.Unloaded) await StrataLoadAsync(size);
         }
         else if (await StopStrataAsync(StrataStopFailure) == 0)
         {
@@ -1347,34 +1388,58 @@ sealed class TrayApp : ApplicationContext
         }
     }
 
-    async Task StrataStartAsync(StrataSize size)
+    // The ~4 GB-free size takes its RAM at every load, not only at server start.
+    void WarnIfLowOnRam(StrataSize size)
     {
         if (size.RamWarning != null && !MemorySaver.IsOn(root)) Notify(size.RamWarning, ToolTipIcon.Warning);
-        // start-strata.ps1 would stop ninfer too; stopping it here first brings back the router it displaced.
-        if (ninferState != NinferState.Stopped) await StopNinferAsync();
-        // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
-        strataProcess.Start("-Model " + size.Script);
-        strataStartRequestedAt = DateTime.Now;
-        strataState = StrataState.Starting;
+    }
+
+    async Task StrataStartAsync(StrataSize size)
+    {
+        WarnIfLowOnRam(size);
+        // Holds the menu until Starting is set: stopping ninfer takes several seconds, and a second click would
+        // launch a second start script.
+        strataLaunching = true;
+        try
+        {
+            // start-strata.ps1 would stop ninfer too; stopping it here first brings back the router it displaced.
+            if (ninferState != NinferState.Stopped) await StopNinferAsync();
+            // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
+            strataProcess.Start("-Model " + size.Script);
+            strataStartRequestedAt = DateTime.Now;
+            strataState = StrataState.Starting;
+        }
+        finally
+        {
+            strataLaunching = false;
+        }
         ShowState(state);
     }
 
     // Loads the running size's model ahead of a request; Strata's before_load hook unloads the router's model first.
-    async Task StrataLoadAsync()
+    async Task StrataLoadAsync(StrataSize size)
     {
-        strataLoading = true;
-        UpdateMenu();
-        string error;
+        WarnIfLowOnRam(size);
+        string error = await SendStrataControlAsync(strata.LoadAsync, busy => strataLoading = busy);
+        // A Stop clicked meanwhile kills the engine, which fails the pending load; that is not an error to report.
+        if (error != null && !strataStopping && strataState != StrataState.Stopped)
+            Notify("Could not load Strata's model: " + error, ToolTipIcon.Error);
+    }
+
+    // Returns the error from `send` (a load or unload), or null. `setBusy` raises and lowers the flag that keeps
+    // the menu, tooltip and GPU guards aware of it meanwhile.
+    async Task<string> SendStrataControlAsync(Func<Task<string>> send, Action<bool> setBusy)
+    {
+        setBusy(true);
+        ShowState(state);
         try
         {
-            error = await strata.LoadAsync();
+            return await send();
         }
         finally
         {
-            strataLoading = false;
+            setBusy(false);
         }
-        if (error != null) Notify("Could not load Strata's model: " + error, ToolTipIcon.Error);
-        await RefreshAsync();
     }
 
     // Returns the stop script's exit code, showing `failure` when it is non-zero.
@@ -1465,17 +1530,7 @@ sealed class TrayApp : ApplicationContext
     // Returns whether the model is unloaded now.
     async Task<bool> UnloadStrataAsync(string reason)
     {
-        strataUnloading = true;
-        UpdateMenu();
-        string error;
-        try
-        {
-            error = await strata.UnloadAsync();
-        }
-        finally
-        {
-            strataUnloading = false;
-        }
+        string error = await SendStrataControlAsync(strata.UnloadAsync, busy => strataUnloading = busy);
         if (error != null)
         {
             Notify("Could not unload Strata's model: " + error, ToolTipIcon.Error);
