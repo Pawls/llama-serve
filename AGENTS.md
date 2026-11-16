@@ -74,7 +74,10 @@ stops, if the tray had stopped it for ninfer. Between the router and Strata, two
 - Strata to router: `before_load` in `F:\AI\strata\strata-<size>.json` runs [unload-router-model.ps1](./unload-router-model.ps1)
   before Strata loads, and waits until the router child is gone.
 - Router to Strata: the router has no such hook. The **tray** notices a router model loading while Strata is loaded
-  and unloads Strata. With the tray not running, a router load fails or crawls while Strata is up.
+  and unloads Strata. While Strata is mid-load (its engine process is up but `/health` still says not loaded, or the
+  tray started the load), the router model is unloaded instead, once per model (2026-11-16: a Pi prompt loaded a 27B
+  router model during a Strata reload, the Windows commit limit ran out and the PC froze for minutes). With the tray
+  not running, nothing stops a router load beside Strata: it fails or crawls.
 
 Other moving parts:
 

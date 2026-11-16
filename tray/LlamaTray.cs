@@ -603,6 +603,9 @@ static class ServerProcesses
 
     public static bool NinferRunning() { return AnyRunning("ninfer-serve", @"F:\AI\ninfer-3090\"); }
 
+    // Strata's engine, which exists only while a model is loading or loaded (it exits on unload).
+    public static bool StrataEngineRunning() { return AnyRunning("strata", @"F:\AI\strata\engine\"); }
+
     static bool AnyRunning(string processName, string exeDir)
     {
         foreach (Process process in Process.GetProcessesByName(processName))
@@ -735,6 +738,7 @@ sealed class TrayApp : ApplicationContext
     bool strataUnloading;               // an unload the tray sent is in flight
     bool strataStopping;                // stop-strata.ps1 is running
     string strataYieldedTo;             // the router model Strata was last unloaded for
+    string routerYieldedToStrata;       // the router model last unloaded because Strata was loading
 
     NinferState ninferState = NinferState.Stopped;
     DateTime? ninferStartRequestedAt;   // set while the tray waits for a ninfer it started
@@ -1173,13 +1177,29 @@ sealed class TrayApp : ApplicationContext
         if (state == RouterState.Stopped) StartRouter();
     }
 
+    // Strata is starting, or a request or menu click is loading its model: its engine is filling the GPUs and
+    // locking ~24 GB of RAM but /health still says "loaded": false.
+    bool StrataLoadingNow()
+    {
+        return strataState == StrataState.Starting || strataLoading
+            || (strataState == StrataState.Unloaded && ServerProcesses.StrataEngineRunning());
+    }
+
     // The router has no hook before it loads a model, so a load Pi asks the router for while Strata holds the
     // GPUs is caught here, on the next poll. Strata's own reloads unload the router first (its before_load).
+    // Strata loaded: it yields. Strata mid-load: the router model yields, since a graceful Strata unload is not
+    // possible yet and two 20-40 GB loads at once exhausted the Windows commit limit and froze the PC (2026-11-16).
     void KeepGpusExclusive()
     {
         if (activeModel == null)
         {
             strataYieldedTo = null;
+            routerYieldedToStrata = null;
+            return;
+        }
+        if (StrataLoadingNow())
+        {
+            YieldRouterModelToStrata();
             return;
         }
         // Once per router load: a Strata busy answering refuses (409), and retrying every poll only repeats the toast.
@@ -1188,6 +1208,20 @@ sealed class TrayApp : ApplicationContext
         string routerModel = activeModel.Id;
         strataYieldedTo = routerModel;
         RunAction(() => UnloadStrataAsync(routerModel + " is loading in the router"));
+    }
+
+    // Once per router model: the client that asked for it sees an error, and retrying every poll only repeats the toast.
+    void YieldRouterModelToStrata()
+    {
+        if (routerYieldedToStrata == activeModel.Id) return;
+        string routerModel = activeModel.Id;
+        routerYieldedToStrata = routerModel;
+        Notify("Strata is loading its model, so " + routerModel + " was unloaded to keep the two from loading at once. Ask for it again once Strata is ready.", ToolTipIcon.Warning);
+        RunAction(async () =>
+        {
+            string error = await client.UnloadAsync(routerModel);
+            if (error != null) Notify("Could not unload " + routerModel + ": " + error, ToolTipIcon.Error);
+        });
     }
 
     RouterState Classify(List<ModelInfo> latest)
@@ -1276,7 +1310,7 @@ sealed class TrayApp : ApplicationContext
     async Task LoadAsync(string id)
     {
         if (activeModel != null && activeModel.Id == id) return;
-        if (strataLoading)
+        if (StrataLoadingNow())
         {
             Notify("Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
             return;
