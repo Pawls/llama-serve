@@ -784,11 +784,10 @@ sealed class TrayApp : ApplicationContext
         strataModelsMenu = new ToolStripMenuItem("Start Strata");
         foreach (StrataSize size in StrataSizes)
         {
-            StrataSize target = size;
-            strataModelsMenu.DropDownItems.Add(new ToolStripMenuItem(size.Label, null, (s, e) => RunAction(() => StrataSelectAsync(target))) { Tag = size });
+            strataModelsMenu.DropDownItems.Add(new ToolStripMenuItem(size.Label, null, (s, e) => RunAction(() => StrataSelectAsync(size))) { Tag = size });
         }
         strataStopItem = new ToolStripMenuItem("Stop Strata", null,
-            (s, e) => RunAction(() => StopStrataAsync("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.")));
+            (s, e) => RunAction(() => StopStrataAsync(StrataStopFailure)));
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -930,9 +929,9 @@ sealed class TrayApp : ApplicationContext
             var size = (StrataSize)item.Tag;
             bool running = !strataStopped && strata.Model == size.ModelId;
             item.Checked = running;
-            item.Text = !running ? size.Label
-                : strataState == StrataState.Loaded ? size.Label + "  (loaded)"
-                : size.Label + "  (unloaded, click to load)";
+            string suffix = "";
+            if (running) suffix = strataState == StrataState.Loaded ? "  (loaded)" : "  (unloaded, click to load)";
+            item.Text = size.Label + suffix;
         }
     }
 
