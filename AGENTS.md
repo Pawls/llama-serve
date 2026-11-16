@@ -239,9 +239,11 @@ Other moving parts:
   `qwen3.8-27b` values), so every client gets that by default; a request's own fields always win. Pi's `models.json` also sends
   these. Strata's validator accepted the block; no request has been run against it yet. `SETUP.bat` up to 0.2.0
   dropped this block along with `idle_unload_s` and `before_load` (see "To update" for 0.2.9).
-- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model swift-iq3_s`. The tray has one
-  start item per size (`StrataSizes` in [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first; a new row gets a
-  menu item by itself) and passes `-Model`.
+- **Which size starts:** [start-strata.ps1](./start-strata.ps1) defaults to `-Model swift-iq3_s`. The tray has a
+  "Start Strata" / "Strata model" submenu with one item per size (`StrataSizes` in
+  [tray/LlamaTray.cs](./tray/LlamaTray.cs), the default first; a new row gets an item by itself) and passes `-Model`.
+  It reads the running size from `/health`, so it marks that size, sends `POST /load` when it is clicked while the
+  model is unloaded, and restarts Strata when another size is clicked.
   The router has no size choice; it serves only `presets.ini` models. Strata answers with whichever size is loaded,
   whatever `model` a request names (checked 2026-10-19: an `iq2_xs` request to IQ3_XXS was answered as `iq3_xxs`), so
   each client lists every id (`swift-1.5-iq3_s`, `qwen3.8-flash-next-iq3_xxs`, `qwen3.8-flash-next-unsloth-ud-q4_k_xl`;

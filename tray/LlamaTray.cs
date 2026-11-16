@@ -170,16 +170,34 @@ sealed class RouterClient
 // Strata (Qwen3.8-Flash-Next) runs as its own server beside the router; the router cannot host it.
 enum StrataState { Stopped, Starting, Unloaded, Loaded }
 
+// One installed Strata size. A server serves one size, fixed when it starts.
+sealed class StrataSize
+{
+    public readonly string Script;       // start-strata.ps1's -Model value
+    public readonly string ModelId;      // /health's "model" while this size runs
+    public readonly string Label;
+    public readonly string RamWarning;   // shown when it starts with the memory saver off; null: none
+
+    public StrataSize(string script, string modelId, string label, string ramWarning)
+    {
+        Script = script;
+        ModelId = modelId;
+        Label = label;
+        RamWarning = ramWarning;
+    }
+}
+
 sealed class StrataClient
 {
     public const string BaseUrl = "http://127.0.0.1:8411";
 
     static readonly TimeSpan UnloadTimeout = TimeSpan.FromSeconds(30);
+    static readonly TimeSpan LoadTimeout = TimeSpan.FromMinutes(5);   // Swift and IQ3_XXS take 1.5-2 min, plus before_load
 
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
-    // /health's "model" from the last answer, e.g. "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
+    // /health's "model" (the configured one, also while unloaded) from the last answer, e.g. "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
     public string Model { get; private set; }
 
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
@@ -192,15 +210,21 @@ sealed class StrataClient
         return root.ContainsKey("loaded") && (bool)root["loaded"];
     }
 
-    // Null when the model is now unloaded; otherwise why not. Strata answers 409 while a request runs.
-    // Its control endpoints take JSON only and refuse a foreign Origin, which this client never sends.
-    public async Task<string> UnloadAsync()
+    // Null when the model is now unloaded; otherwise why not.
+    public Task<string> UnloadAsync() { return PostControlAsync("/unload", UnloadTimeout); }
+
+    // Null when the model is now loaded; otherwise why not. POST /load answers once the engine is up.
+    public Task<string> LoadAsync() { return PostControlAsync("/load", LoadTimeout); }
+
+    // Strata answers 409 while a request runs. Its control endpoints take JSON only and refuse a foreign Origin,
+    // which this client never sends.
+    async Task<string> PostControlAsync(string path, TimeSpan timeout)
     {
         try
         {
-            using (var cancel = new CancellationTokenSource(UnloadTimeout))
+            using (var cancel = new CancellationTokenSource(timeout))
             using (var content = new StringContent("{}", Encoding.UTF8, "application/json"))
-            using (var response = await http.PostAsync("/unload", content, cancel.Token))
+            using (var response = await http.PostAsync(path, content, cancel.Token))
             {
                 if (response.IsSuccessStatusCode) return null;
                 return (int)response.StatusCode == 409 ? "Strata is answering a request." : "Strata answered HTTP " + (int)response.StatusCode + ".";
@@ -653,24 +677,24 @@ sealed class TrayApp : ApplicationContext
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
     ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, autostartItem;
-    ToolStripMenuItem strataStatusItem, strataStartStopItem, strataUnloadItem, strataAppItem;
-    ToolStripMenuItem[] strataStartOtherItems;   // one per StrataSizes row after the first
+    ToolStripMenuItem strataStatusItem, strataModelsMenu, strataStopItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem ninferStatusItem, ninferStartStopItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
     bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
 
-    // start-strata.ps1's -Model values, their menu labels, and a warning shown when a size starts with the memory saver
-    // off (null: none). The first is also the script's default.
-    static readonly string[,] StrataSizes =
+    // The first is also start-strata.ps1's default.
+    static readonly StrataSize[] StrataSizes =
     {
-        { "swift-iq3_s", "Swift 1.5 IQ3_S", null },
-        { "iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null },
-        { "unsloth-ud-q4_k_xl", "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
-          "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open." },
+        new StrataSize("swift-iq3_s", "swift-1.5-iq3_s", "Swift 1.5 IQ3_S", null),
+        new StrataSize("iq3_xxs", "qwen3.8-flash-next-iq3_xxs", "Flash-Next IQ3_XXS (fastest)", null),
+        new StrataSize("unsloth-ud-q4_k_xl", "qwen3.8-flash-next-unsloth-ud-q4_k_xl",
+            "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
+            "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open."),
     };
 
     StrataState strataState = StrataState.Stopped;
+    bool strataLoading;                 // a load the tray sent is in flight
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
     bool strataStopping;                // stop-strata.ps1 is running
@@ -757,11 +781,14 @@ sealed class TrayApp : ApplicationContext
         reserveGpuItem = new ToolStripMenuItem("Reserve GPU 0 for ComfyUI (single-GPU models only)", null,
             (s, e) => RunAction(ToggleReserveGpuAsync));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
-        strataStartStopItem = new ToolStripMenuItem("Start Strata", null, (s, e) => RunAction(() => StrataStartOrStopAsync(0)));
-        strataStartOtherItems = Enumerable.Range(1, StrataSizes.GetLength(0) - 1)
-            .Select(size => new ToolStripMenuItem("Start Strata: " + StrataSizes[size, 1], null,
-                (s, e) => RunAction(() => StrataStartOnlyAsync(size))))
-            .ToArray();
+        strataModelsMenu = new ToolStripMenuItem("Start Strata");
+        foreach (StrataSize size in StrataSizes)
+        {
+            StrataSize target = size;
+            strataModelsMenu.DropDownItems.Add(new ToolStripMenuItem(size.Label, null, (s, e) => RunAction(() => StrataSelectAsync(target))) { Tag = size });
+        }
+        strataStopItem = new ToolStripMenuItem("Stop Strata", null,
+            (s, e) => RunAction(() => StopStrataAsync("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.")));
         strataUnloadItem = new ToolStripMenuItem("Unload Strata model (free GPUs)", null, (s, e) => RunAction(() => UnloadStrataAsync(null)));
         strataAppItem = new ToolStripMenuItem("Open Strata app", null, (s, e) => OpenPath(StrataClient.BaseUrl + "/"));
         var strataLogItem = new ToolStripMenuItem("Open Strata log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "strata.log")));
@@ -787,11 +814,7 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             startStopItem, restartItem, reserveGpuItem,
             new ToolStripSeparator(),
-            strataStatusItem, strataStartStopItem,
-        });
-        strip.Items.AddRange(strataStartOtherItems);
-        strip.Items.AddRange(new ToolStripItem[]
-        {
+            strataStatusItem, strataModelsMenu, strataStopItem,
             strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
             memorySaverReapplyItem,
             new ToolStripSeparator(),
@@ -875,10 +898,9 @@ sealed class TrayApp : ApplicationContext
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
         bool strataStopped = strataState == StrataState.Stopped && !strataStopping;
-        strataStartStopItem.Text = strataStopped ? "Start Strata: " + StrataSizes[0, 1] : "Stop Strata";
-        // Strata splits across both GPUs, so it cannot start while GPU 0 is reserved; Stop stays available.
-        strataStartStopItem.Enabled = !strataStopping && (!strataStopped || !reserved);
-        foreach (var item in strataStartOtherItems) item.Visible = strataStopped && !reserved;
+        UpdateStrataModelsMenu(strataStopped, reserved);
+        strataStopItem.Visible = !strataStopped;
+        strataStopItem.Enabled = !strataStopping;
         strataUnloadItem.Enabled = strataState == StrataState.Loaded && !strataUnloading;
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
@@ -896,9 +918,28 @@ sealed class TrayApp : ApplicationContext
         memorySaverReapplyItem.Enabled = !memorySaverSwitching;
     }
 
+    // Stopped: "Start Strata" lists the sizes. Running: "Strata model" marks the size that runs, and a click on
+    // another size restarts Strata with it. Strata splits across both GPUs, so nothing starts while GPU 0 is reserved.
+    void UpdateStrataModelsMenu(bool strataStopped, bool reserved)
+    {
+        strataModelsMenu.Text = strataStopped ? "Start Strata" : "Strata model";
+        strataModelsMenu.Enabled = !strataStopping && !strataLoading && strataState != StrataState.Starting
+            && !(strataStopped && reserved);
+        foreach (ToolStripMenuItem item in strataModelsMenu.DropDownItems)
+        {
+            var size = (StrataSize)item.Tag;
+            bool running = !strataStopped && strata.Model == size.ModelId;
+            item.Checked = running;
+            item.Text = !running ? size.Label
+                : strataState == StrataState.Loaded ? size.Label + "  (loaded)"
+                : size.Label + "  (unloaded, click to load)";
+        }
+    }
+
     string StrataStatusText()
     {
         if (strataStopping) return "Strata stopping...";
+        if (strataLoading) return "Strata loading the model (1-3 min)...";
         switch (strataState)
         {
             case StrataState.Stopped: return "Strata stopped";
@@ -1252,7 +1293,7 @@ sealed class TrayApp : ApplicationContext
         reserveGpu0 = reserve;
         if (routerRunning) StartRouter();
         bool stopStrata = reserve && strataState != StrataState.Stopped && !strataStopping;
-        if (stopStrata) await StrataStartOrStopAsync(null);
+        if (stopStrata) await StopStrataAsync(StrataStopFailure);
         Notify(reserve
             ? "GPU 0 reserved: only single-GPU presets are listed" + (stopStrata ? ", and Strata was stopped." : ".") + " Strata cannot start."
             : "GPU 0 released: all presets are listed again.", ToolTipIcon.Info);
@@ -1286,29 +1327,55 @@ sealed class TrayApp : ApplicationContext
         return exitCode;
     }
 
-    // The extra size items only start: a click on a menu opened before Strata left Stopped must not stop it.
-    async Task StrataStartOnlyAsync(int size)
-    {
-        if (strataState == StrataState.Stopped && !strataStopping) await StrataStartOrStopAsync(size);
-    }
+    const string StrataStopFailure = "Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.";
 
-    // While stopped, starts StrataSizes row `size`; otherwise stops Strata, whichever size runs (`size` may be null).
-    async Task StrataStartOrStopAsync(int? size)
+    // A click in the Strata model menu, read against the state now (the menu may have opened before it changed):
+    // stopped starts that size; the size that runs loads its model if it is unloaded; another size replaces it.
+    async Task StrataSelectAsync(StrataSize size)
     {
+        if (strataStopping || strataLoading || strataState == StrataState.Starting) return;
         if (strataState == StrataState.Stopped)
         {
-            string ramWarning = StrataSizes[size.Value, 2];
-            if (ramWarning != null && !MemorySaver.IsOn(root)) Notify(ramWarning, ToolTipIcon.Warning);
-            // start-strata.ps1 would stop ninfer too; stopping it here first brings back the router it displaced.
-            if (ninferState != NinferState.Stopped) await StopNinferAsync();
-            // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
-            strataProcess.Start("-Model " + StrataSizes[size.Value, 0]);
-            strataStartRequestedAt = DateTime.Now;
-            strataState = StrataState.Starting;
-            ShowState(state);
-            return;
+            await StrataStartAsync(size);
         }
-        await StopStrataAsync("Strata did not stop cleanly; its processes may still hold the GPUs. Check Task Manager.");
+        else if (strata.Model == size.ModelId)
+        {
+            if (strataState == StrataState.Unloaded) await StrataLoadAsync();
+        }
+        else if (await StopStrataAsync(StrataStopFailure) == 0)
+        {
+            await StrataStartAsync(size);
+        }
+    }
+
+    async Task StrataStartAsync(StrataSize size)
+    {
+        if (size.RamWarning != null && !MemorySaver.IsOn(root)) Notify(size.RamWarning, ToolTipIcon.Warning);
+        // start-strata.ps1 would stop ninfer too; stopping it here first brings back the router it displaced.
+        if (ninferState != NinferState.Stopped) await StopNinferAsync();
+        // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
+        strataProcess.Start("-Model " + size.Script);
+        strataStartRequestedAt = DateTime.Now;
+        strataState = StrataState.Starting;
+        ShowState(state);
+    }
+
+    // Loads the running size's model ahead of a request; Strata's before_load hook unloads the router's model first.
+    async Task StrataLoadAsync()
+    {
+        strataLoading = true;
+        UpdateMenu();
+        string error;
+        try
+        {
+            error = await strata.LoadAsync();
+        }
+        finally
+        {
+            strataLoading = false;
+        }
+        if (error != null) Notify("Could not load Strata's model: " + error, ToolTipIcon.Error);
+        await RefreshAsync();
     }
 
     // Returns the stop script's exit code, showing `failure` when it is non-zero.
