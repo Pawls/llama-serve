@@ -124,7 +124,8 @@ Other moving parts:
   "1"}` (2026-11-02), `--prompt-cache-spread` and `"expert_profile_save": "expert-profile-swift-learned.bin"`
   (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
   24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead) and it reads prompts at
-  a third to a half of IQ3_XXS's speed; with it the copy is 23.15 GiB, fully page-locked, and prompts read 9-22% faster
+  a third to a half of IQ3_XXS's speed; with it the copy was 23.15 GiB, fully page-locked, on 2026-11-02 (not on
+  engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below), and prompts read 9-22% faster
   ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
   from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
   since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
@@ -153,7 +154,7 @@ Other moving parts:
   restored it to 170 / 158 / 152, and `--pipeline-windows 2` on top gave 188 / 168 / 162. Table and method in
   [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or `SETUP.bat`, read the
   `VRAM free with everything loaded` lines in the start log; a "LOW" there means the desktop card needs a larger
-  reserve.** The engine an update replaced is kept in `F:\AI\strata\engine\.previous` (0.1.45 since 2026-11-01);
+  reserve.** The engine an update replaced is kept in `F:\AI\strata\engine\.previous` (0.1.57 since 2026-11-13);
   `python setup.py --rollback-engine` restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
   only when a message quotes `</tool_call>`. What 0.1.43.1-0.1.44.1 changed for this PC: Windows watchdog fixes for
   long prompts and conversation parking, that `</tool_call>` fix, fenced-JSON tool calls recovered, and the auto
@@ -206,10 +207,38 @@ Other moving parts:
   GitHub release zip 404'd and it fell back to the feed by itself); it leaves an untracked `engine-feed\` in the clone.
   The `STRATA_PREBUILT_URL` workaround used for 0.1.45 on 2026-10-19 (0.2.0-beta's `UPDATE.bat` looked only for
   the dropped `strata-windows-x64.zip`) is no longer needed.
+  **Since 0.2.10 `UPDATE.bat` no longer brings a newer engine**: setup fetches one only when the installed engine is
+  older than `MIN_ENGINE`, which stayed at 0.1.46. On 2026-11-13 it moved the code from v0.2.11-4 to
+  v0.2.13.1-160 and left engine 0.1.57. To install the feed's newest engine the way setup does (test start, old
+  engine kept in `engine\.previous`), run with `F:\AI\strata\.venv\Scripts\python.exe`:
+  `import sys; sys.path.insert(0, r'F:\AI\strata'); import setup; from pathlib import Path;
+  setup.engine_from_feed(Path(r'F:\AI\strata\engine'), updating=True)`. `strata.py update --check --no-control`
+  shows what the feed offers. **Every `setup.py --update` rewrites a `--prefill 2048` to `auto`**
+  (`upgrade_config`), so UD-Q4_K_XL's must be put back after each update. Untried: upstream documents
+  `--prefill auto:N` and `STRATA_PREFILL_AUTO_MAX` as left alone by `upgrade_config` (`docs\DETAILS.md`); if one gives
+  2048-token chunks on this PC, the manual re-add goes away.
   **`SETUP.bat` rewrote `strata-*.json` up to 0.2.0.** The 0.2.9 `setup.py` keeps every key it does not write
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
   listed under "Installed sizes" above and in the Swift and UD-Q4_K_XL bullets, and re-add any that dropped.
+- **Engine 0.1.59 (code v0.2.13.1-160) is installed since 2026-11-13**; 0.1.57 (installed 2026-11-05 with
+  UD-IQ3_XXS; Swift was benched on it on 2026-11-13, just before the update) is in `engine\.previous`. Swift on
+  0.1.59 decodes within 8% of 0.1.57 at 2k code and 1% elsewhere (one run per engine, not interleaved, so an
+  estimate; [README.md](./README.md#engine-0159-strata-0213-measured-2026-11-13)). **Swift's RAM copy has not pinned on
+  0.1.57 or 0.1.59** (`page-locking refused (out of memory)`, 23.41 GiB) and prompts read at the unpinned speed;
+  whether the engine or that night's lower free RAM caused it is open.
+  **Open: the default Swift config starts LOW on the desktop card.** In rounds 2 and 3 of the 2026-11-13 bench the
+  learned profile had moved one layer onto GPU 0 and the start log asked for `--vram-reserve-later-mib 1764`
+  (installed: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. Check the
+  `VRAM free with everything loaded` line at the next Swift start; if it says LOW, raise the reserve and re-bench.
+  **UD-Q4_K_XL is an Unsloth UD file, so since 0.2.13 it gets the Q8_0 hyper-connection read by default** (the
+  deleted UD-IQ3_XXS config had set `STRATA_HC_Q8=1` by hand). Not benched or tool-call-checked on 0.1.59, so its
+  2026-11-02 numbers may not hold; `STRATA_HC_Q8=0` in its `env` restores the old read.
+- **Unsloth 3.1 UD-IQ3_XXS was deleted on 2026-11-16** (Paul's call, 78 GB freed: model folder, pack, config, `run-*.bat`
+  and log). Installed 2026-11-05 and compared with Swift on 2026-11-13
+  ([README.md](./README.md#swift-15-iq3_s-against-unsloth-31-ud-iq3_xxs-measured-2026-11-13)): Swift finished the
+  50-task xhigh set 1.6x sooner and solved all of it. A later `setup.py --family unsloth --model UD-IQ3_XXS` would
+  recreate it, with a `run-*.bat` that starts on port 8080 (signal-cli's) with `--open`; change that to `--port 8411`.
 - **Engine 0.1.55 (installed 2026-11-01, benched the same night; table in
   [README.md](./README.md#engine-0155-strata-029-measured-2026-11-01)).** Decode is 12-16% faster than 0.1.45 on both
   sizes; not one variable (engine and code changed together). What changed for this PC:
@@ -338,7 +367,8 @@ Open handoffs live in [dev-notes/handoffs/](./dev-notes/handoffs/), one file per
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
 8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
 run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, and since 2026-11-02 (`STRATA_PF_FUSED=1`) so
-does Swift's 23.15 GiB copy, so pinning alone no longer argues for Linux; the full-copy mode is the remaining case. Slices U1-U5; U1 is Paul's hands-on
+does Swift's 23.15 GiB copy (on engine 0.1.55; it did not pin on 0.1.57 or 0.1.59, cause open), so
+pinning alone no longer argues for Linux unless that persists; the full-copy mode is the remaining case. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.
