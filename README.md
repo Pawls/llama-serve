@@ -487,7 +487,7 @@ v0.18.0 (2026-11-12) is the first release with both of our reports fixed: the ou
 ### Add a model
 
 1. Download the GGUF into `F:\AI\models\llm\<publisher>\<repo>\` (LM Studio does this, or `hf download`).
-2. Add a `[name]` section to `presets.ini`. Copy the closest existing section and change `model`, `mmproj` and the sampler lines to the model card's values. `F:\AI\models\llm\HANDOFF.md` §3 explains every key.
+2. Add a `[name]` section to `presets.ini`. Copy the closest existing section and change `model`, `mmproj` and the sampler lines to the model card's values. `F:\AI\models\llm\HANDOFF.md` §2 explains the flags.
 3. Restart the router.
 4. Run `F:\AI\llama-serve\test-tool-calls.ps1 -Model <name>` to confirm it can use tools (see below).
 
