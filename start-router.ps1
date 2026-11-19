@@ -1,4 +1,4 @@
-# Starts the llama.cpp router on 127.0.0.1:8410 with presets.ini.
+# Starts the llama.cpp router on 127.0.0.1:8410 (0.0.0.0:8410 with the tray's ShareOnNetwork) with presets.ini.
 # After every boot, a hit here means a degraded load that still passes functional checks:
 #   Select-String -Path F:\AI\llama-serve\logs\server.log -Pattern 'retrying without pipeline'
 $ErrorActionPreference = 'Stop'
@@ -48,6 +48,8 @@ if ($IdleMinutes -gt 0 -or $ReserveGpu0) {
     Set-Content $Presets $text -NoNewline
 }
 
-$ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host 127.0.0.1 --port 8410"
+# ShareOnNetwork (tray toggle) listens on every IPv4 interface; the firewall decides who gets in (README.md).
+$BindHost = if (Get-TraySetting 'ShareOnNetwork') { '0.0.0.0' } else { '127.0.0.1' }
+$ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host $BindHost --port 8410"
 # cmd merges stderr at the OS level, so Tee-Object receives plain lines rather than PowerShell ErrorRecords.
 cmd /c "$ArgLine 2>&1" | Tee-Object -FilePath $Log

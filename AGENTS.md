@@ -95,6 +95,11 @@ Other moving parts:
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
   `tray-settings.json` and a router restart; the tray menu click was not driven.
+- **Share on network.** The tray toggle sets `ShareOnNetwork`; `start-router.ps1` then passes `--host 0.0.0.0`
+  instead of `127.0.0.1`, so the router also answers on the LAN and Tailscale IPv4 addresses (not IPv6). Who gets in is
+  decided by the firewall: the `llama-server` program rules Windows created, scoped as in README.md § Using it from
+  another machine. A remote request can load a model and so evict Strata, like any router load. Checked 2026-11-19
+  through `tray-settings.json` and a tray relaunch; the menu click was not driven.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
   it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it

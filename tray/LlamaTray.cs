@@ -331,14 +331,17 @@ sealed class ScriptProcess
 }
 
 // tray-settings.json holds the choices that start-router.ps1 and start-strata.ps1 read at launch:
-// minutes of idleness before a model frees its VRAM (0 means never), and whether GPU 0 is reserved.
+// minutes of idleness before a model frees its VRAM (0 means never), whether GPU 0 is reserved, and whether
+// the router listens on the network.
 static class TraySettings
 {
     public const string RouterIdleKey = "RouterIdleMinutes";
     public const string StrataIdleKey = "StrataIdleMinutes";
     public const string ReserveGpu0Key = "ReserveGpu0";
+    public const string ShareOnNetworkKey = "ShareOnNetwork";
 
-    // A hand-edited file that does not parse reads as "not reserved" rather than throwing out of the poll timer.
+    // A hand-edited file that does not parse reads as false (not reserved, not shared) rather than throwing out of
+    // the poll timer.
     public static bool GetFlag(string root, string key)
     {
         try
@@ -714,12 +717,13 @@ sealed class TrayApp : ApplicationContext
     readonly SynchronizationContext uiContext;
 
     ToolStripMenuItem statusItem, gpuItem, modelsMenu, unloadItem, chatItem;
-    ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, autostartItem;
+    ToolStripMenuItem startStopItem, restartItem, reserveGpuItem, shareItem, autostartItem;
     ToolStripMenuItem strataStatusItem, strataModelsMenu, strataStopItem, strataUnloadItem, strataAppItem;
     ToolStripMenuItem ninferStatusItem, ninferStartStopItem;
     ToolStripMenuItem memorySaverItem, memorySaverReapplyItem, routerIdleMenu, strataIdleMenu;
     bool memorySaverSwitching;
     bool reserveGpu0;   // tray-settings.json's ReserveGpu0; only this tray writes it
+    bool shareOnNetwork;   // tray-settings.json's ShareOnNetwork; only this tray writes it
 
     // The first is also start-strata.ps1's default.
     static readonly StrataSize[] StrataSizes =
@@ -770,6 +774,7 @@ sealed class TrayApp : ApplicationContext
         ninferProcess = new ScriptProcess(root, "start-ninfer.ps1", "stop-ninfer.ps1");
         presetOrder = ReadPresetOrder(Path.Combine(root, "presets.ini"));
         reserveGpu0 = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
+        shareOnNetwork = TraySettings.GetFlag(root, TraySettings.ShareOnNetworkKey);
 
         int iconSize = SystemInformation.SmallIconSize.Width;
         foreach (RouterState each in Enum.GetValues(typeof(RouterState)))
@@ -823,6 +828,8 @@ sealed class TrayApp : ApplicationContext
 
         reserveGpuItem = new ToolStripMenuItem("Reserve GPU 0 for ComfyUI (single-GPU models only)", null,
             (s, e) => RunAction(ToggleReserveGpuAsync));
+        shareItem = new ToolStripMenuItem("Share router on the network (LAN and Tailscale)", null,
+            (s, e) => RunAction(ToggleShareAsync));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
         strataModelsMenu = new ToolStripMenuItem("Start Strata");
         foreach (StrataSize size in StrataSizes)
@@ -854,7 +861,7 @@ sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             chatItem, logItem, presetsItem, folderItem,
             new ToolStripSeparator(),
-            startStopItem, restartItem, reserveGpuItem,
+            startStopItem, restartItem, reserveGpuItem, shareItem,
             new ToolStripSeparator(),
             strataStatusItem, strataModelsMenu, strataStopItem,
             strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
@@ -936,6 +943,8 @@ sealed class TrayApp : ApplicationContext
         bool reserved = reserveGpu0;
         reserveGpuItem.Checked = reserved;
         reserveGpuItem.Enabled = state != RouterState.Starting && state != RouterState.Stopping;
+        shareItem.Checked = shareOnNetwork;
+        shareItem.Enabled = reserveGpuItem.Enabled;
 
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
@@ -1370,27 +1379,47 @@ sealed class TrayApp : ApplicationContext
         StartRouter();
     }
 
-    // start-router.ps1 reads the flag at launch and keeps only presets pinned to CUDA1, so a running router
-    // restarts (its model unloads) for the change to show in Load model. Reserving also stops Strata, which
-    // would otherwise reload across both cards on its next request. The flag is saved only once the old router
-    // is gone; if it would not stop, nothing changes and the router stays stopped for the user to inspect.
-    async Task ToggleReserveGpuAsync()
+    // start-router.ps1 reads its flags only at launch, so a running router restarts (its model unloads) for a
+    // change to apply. The flag is saved only once the old router is gone; if it would not stop, nothing changes,
+    // false comes back, and the router stays stopped for the user to inspect.
+    async Task<bool> SetRouterFlagAsync(string key, bool value, string settingName)
     {
-        bool reserve = !reserveGpu0;
         bool routerRunning = state != RouterState.Stopped;
         if (routerRunning && await StopRouterAsync() != 0)
         {
-            Notify("The router did not stop cleanly, so the GPU 0 setting was not changed. Check Task Manager, then use Start router.", ToolTipIcon.Error);
-            return;
+            Notify("The router did not stop cleanly, so the " + settingName + " setting was not changed. Check Task Manager, then use Start router.", ToolTipIcon.Error);
+            return false;
         }
-        TraySettings.SetFlag(root, TraySettings.ReserveGpu0Key, reserve);
-        reserveGpu0 = reserve;
+        TraySettings.SetFlag(root, key, value);
         if (routerRunning) StartRouter();
+        return true;
+    }
+
+    // With the flag, start-router.ps1 keeps only presets pinned to CUDA1. Reserving also stops Strata, which
+    // would otherwise reload across both cards on its next request.
+    async Task ToggleReserveGpuAsync()
+    {
+        bool reserve = !reserveGpu0;
+        if (!await SetRouterFlagAsync(TraySettings.ReserveGpu0Key, reserve, "GPU 0")) return;
+        reserveGpu0 = reserve;
         bool stopStrata = reserve && strataState != StrataState.Stopped && !strataStopping;
         if (stopStrata) await StopStrataAsync(StrataStopFailure);
         Notify(reserve
             ? "GPU 0 reserved: only single-GPU presets are listed" + (stopStrata ? ", and Strata was stopped." : ".") + " Strata cannot start."
             : "GPU 0 released: all presets are listed again.", ToolTipIcon.Info);
+    }
+
+    // With the flag, start-router.ps1 binds 0.0.0.0 instead of 127.0.0.1; the firewall rules decide which remote
+    // machines get through (see README.md § Using it from another machine).
+    async Task ToggleShareAsync()
+    {
+        bool share = !shareOnNetwork;
+        if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
+        shareOnNetwork = share;
+        string when = state == RouterState.Stopped ? " once the router is started." : ".";
+        Notify(share
+            ? "Router shared on port 8410 (LAN and Tailscale)" + when
+            : "Router is local only (127.0.0.1)" + when, ToolTipIcon.Info);
     }
 
     void StartRouter()

@@ -37,6 +37,7 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Open server log, Edit presets.ini, Open llama-serve folder | Opens them |
 | Stop / Start router, Restart router | Restart after editing `presets.ini` |
 | Reserve GPU 0 for ComfyUI | Serves only presets pinned to CUDA1, stops Strata and blocks it from starting; restarts the router. Saved as `ReserveGpu0` in `tray-settings.json`, which `start-router.ps1` reads into `logs\presets.run.ini` |
+| Share router on the network | Listens on every interface instead of only this PC, so the laptop can use it; restarts the router. Saved as `ShareOnNetwork`. See [Using it from another machine](#using-it-from-another-machine) |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
 | ninfer status, Start / Stop ninfer, Open ninfer log | Qwen3.8-27B on GPU 1 alone through ninfer-3090; starting it stops the router and Strata, and stopping it starts the router again. See [ninfer-3090](#ninfer-3090-measured-2026-10-18) |
@@ -55,6 +56,17 @@ If the router is already running when the tray starts (for example in a window),
 The footer shows the context size, e.g. `0.0%/262k`, and the thinking level. Pi talks to the router through its built-in `llama.cpp` provider (it reads `LLAMA_BASE_URL`); the older `huggingface/pi-llama` package is not installed, since it registers a second copy of every model and resets the overrides below after the first request.
 
 On its own, Pi treats llama.cpp thinking as on/off and never sends an effort, so the preset's `xhigh` always applied. The Qwen3.8 router models get `modelOverrides` in `~\.pi\agent\models.json` (provider `llama.cpp`) that map Pi's thinking level onto the template's `reasoning_effort`, so `Shift+Tab` cycles off / low / medium / xhigh and the footer shows the effort the model really gets. Pi sends `preserve_thinking: true` for all of them except `qwen3.8-27b-nopreserve`. Each entry pins `"reasoning": true`, because Pi marks a model as able to think only if it was loaded when Pi last read the router's model list; without the pin an unloaded model gets no thinking controls and the preset's `xhigh` applies. The presets with thinking off (`qwen3.6-*`, `ornith-35b`, `gemma4-*`) are pinned `"reasoning": false` for the same reason, so Pi never turns their thinking on. Checked 2026-10-19 by capturing Pi's request bodies at each level, on a loaded model and on unloaded ones. A new preset needs its own entry there.
+
+### Using it from another machine
+
+1. Tick **Share router on the network** in the tray. The router restarts on `0.0.0.0:8410`.
+2. The firewall decides who gets in. When `llama-server.exe` first listened, Windows created Allow rules for that program on the Private profile from **any** address. Once, in an admin PowerShell, narrow them to the home network and Tailscale:
+   `Get-NetFirewallApplicationFilter -Program "*llama-server*" | Get-NetFirewallRule | Set-NetFirewallRule -EdgeTraversalPolicy Block -RemoteAddress 192.168.1.0/24,100.64.0.0/10`
+   (Windows makes these rules "Defer to user" for edge traversal, which refuses any address condition; Block is fine, since Tailscale and the LAN are not edge traversal.)
+   A new llama.cpp build (`$Build`) is a new program path, so Windows asks again the first time it listens. Click **Allow** (Cancel creates a Block rule and sharing silently stops), then run the command again.
+3. On the other machine, use `http://100.112.21.82:8410/v1` (this PC's Tailscale IPv4) as the OpenAI-compatible base URL. The name `pawl-desktop` also resolves to a Tailscale IPv6 address that the router doesn't listen on, and clients that try IPv6 first wait out a timeout. `curl http://100.112.21.82:8410/v1/models` lists the presets.
+
+The router has no API key, so anything the firewall lets through can load models and send prompts. A remote request that loads a model also evicts Strata, like any router load. Untick the item to go back to local only.
 
 ### Using it from VS Code chat
 
