@@ -61,7 +61,8 @@ On its own, Pi treats llama.cpp thinking as on/off and never sends an effort, so
 
 1. Tick **Share router on the network** in the tray. The router restarts on `0.0.0.0:8410`.
 2. The firewall decides who gets in. When `llama-server.exe` first listened, Windows created Allow rules for that program on the Private profile from **any** address. Once, in an admin PowerShell, narrow them to the home network and Tailscale:
-   `Get-NetFirewallApplicationFilter -Program "*llama-server*" | Get-NetFirewallRule | Set-NetFirewallRule -RemoteAddress 192.168.1.0/24,100.64.0.0/10`
+   `Get-NetFirewallApplicationFilter -Program "*llama-server*" | Get-NetFirewallRule | Set-NetFirewallRule -EdgeTraversalPolicy Block -RemoteAddress 192.168.1.0/24,100.64.0.0/10`
+   (Windows makes these rules "Defer to user" for edge traversal, which refuses any address condition; Block is fine, since Tailscale and the LAN are not edge traversal.)
    A new llama.cpp build (`$Build`) is a new program path, so Windows asks again the first time it listens. Click **Allow** (Cancel creates a Block rule and sharing silently stops), then run the command again.
 3. On the other machine, use `http://100.112.21.82:8410/v1` (this PC's Tailscale IPv4) as the OpenAI-compatible base URL. The name `pawl-desktop` also resolves to a Tailscale IPv6 address that the router doesn't listen on, and clients that try IPv6 first wait out a timeout. `curl http://100.112.21.82:8410/v1/models` lists the presets.
 
