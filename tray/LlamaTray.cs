@@ -331,7 +331,8 @@ sealed class ScriptProcess
 }
 
 // tray-settings.json holds the choices that start-router.ps1 and start-strata.ps1 read at launch:
-// minutes of idleness before a model frees its VRAM (0 means never), and whether GPU 0 is reserved.
+// minutes of idleness before a model frees its VRAM (0 means never), whether GPU 0 is reserved, and whether
+// the router listens on the network.
 static class TraySettings
 {
     public const string RouterIdleKey = "RouterIdleMinutes";
@@ -339,7 +340,8 @@ static class TraySettings
     public const string ReserveGpu0Key = "ReserveGpu0";
     public const string ShareOnNetworkKey = "ShareOnNetwork";
 
-    // A hand-edited file that does not parse reads as "not reserved" rather than throwing out of the poll timer.
+    // A hand-edited file that does not parse reads as false (not reserved, not shared) rather than throwing out of
+    // the poll timer.
     public static bool GetFlag(string root, string key)
     {
         try
@@ -1407,16 +1409,17 @@ sealed class TrayApp : ApplicationContext
             : "GPU 0 released: all presets are listed again.", ToolTipIcon.Info);
     }
 
-    // With the flag, start-router.ps1 binds 0.0.0.0 instead of 127.0.0.1; the Windows firewall rule for 8410
-    // decides which remote machines get through (see README.md § Using it from another machine).
+    // With the flag, start-router.ps1 binds 0.0.0.0 instead of 127.0.0.1; the firewall rules decide which remote
+    // machines get through (see README.md § Using it from another machine).
     async Task ToggleShareAsync()
     {
         bool share = !shareOnNetwork;
         if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
         shareOnNetwork = share;
+        string when = state == RouterState.Stopped ? " once the router is started." : ".";
         Notify(share
-            ? "Router shared: other machines reach it at http://" + Environment.MachineName.ToLowerInvariant() + ":8410/v1 where the firewall allows."
-            : "Router is local only again (127.0.0.1).", ToolTipIcon.Info);
+            ? "Router shared on port 8410 (LAN and Tailscale)" + when
+            : "Router is local only (127.0.0.1)" + when, ToolTipIcon.Info);
     }
 
     void StartRouter()

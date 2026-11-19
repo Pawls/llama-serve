@@ -48,7 +48,7 @@ if ($IdleMinutes -gt 0 -or $ReserveGpu0) {
     Set-Content $Presets $text -NoNewline
 }
 
-# ShareOnNetwork (tray toggle) listens on every interface; the firewall rule for 8410 limits who gets in.
+# ShareOnNetwork (tray toggle) listens on every IPv4 interface; the firewall decides who gets in (README.md).
 $BindHost = if (Get-TraySetting 'ShareOnNetwork') { '0.0.0.0' } else { '127.0.0.1' }
 $ArgLine = "`"$Exe`" --models-preset `"$Presets`" --models-max 1 --host $BindHost --port 8410"
 # cmd merges stderr at the OS level, so Tee-Object receives plain lines rather than PowerShell ErrorRecords.

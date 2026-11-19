@@ -60,11 +60,12 @@ On its own, Pi treats llama.cpp thinking as on/off and never sends an effort, so
 ### Using it from another machine
 
 1. Tick **Share router on the network** in the tray. The router restarts on `0.0.0.0:8410`.
-2. Once, in an admin PowerShell, allow the port from the home network and Tailscale only:
-   `New-NetFirewallRule -DisplayName "llama router (LAN + Tailscale)" -Direction Inbound -Protocol TCP -LocalPort 8410 -RemoteAddress 192.168.1.0/24,100.64.0.0/10 -Action Allow -Profile Private`
-3. On the other machine, use `http://pawl-desktop:8410/v1` (the Tailscale name) as the OpenAI-compatible base URL. `curl http://pawl-desktop:8410/v1/models` lists the presets.
+2. The firewall decides who gets in. When `llama-server.exe` first listened, Windows created Allow rules for that program on the Private profile from **any** address. Once, in an admin PowerShell, narrow them to the home network and Tailscale:
+   `Get-NetFirewallApplicationFilter -Program "*llama-server*" | Get-NetFirewallRule | Set-NetFirewallRule -RemoteAddress 192.168.1.0/24,100.64.0.0/10`
+   A new llama.cpp build (`$Build`) is a new program path, so Windows asks again the first time it listens. Click **Allow** (Cancel creates a Block rule and sharing silently stops), then run the command again.
+3. On the other machine, use `http://100.112.21.82:8410/v1` (this PC's Tailscale IPv4) as the OpenAI-compatible base URL. The name `pawl-desktop` also resolves to a Tailscale IPv6 address that the router doesn't listen on, and clients that try IPv6 first wait out a timeout. `curl http://100.112.21.82:8410/v1/models` lists the presets.
 
-The router has no API key, so anything the firewall lets through can load models and send prompts. Untick the item to go back to local only.
+The router has no API key, so anything the firewall lets through can load models and send prompts. A remote request that loads a model also evicts Strata, like any router load. Untick the item to go back to local only.
 
 ### Using it from VS Code chat
 
