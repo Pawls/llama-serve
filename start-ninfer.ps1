@@ -42,5 +42,5 @@ $env:NINFER_MODEL_DIR = Join-Path $NinferDir 'models'
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 if (Test-Path $Log) { Move-Item -Force $Log (Join-Path $LogDir 'ninfer.prev.log') }
 
-# stdin from nul: run.bat must never wait on a prompt while it runs hidden.
+# stdin from nul: run.bat or ninfer-serve must never wait on a prompt while it runs hidden.
 cmd /c "$Command < nul 2>&1" | Tee-Object -FilePath $Log

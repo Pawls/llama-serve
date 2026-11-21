@@ -416,7 +416,7 @@ From PowerShell: `.\memory-saver.ps1 -Mode Status` lists the candidates with the
 
 ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installed in `F:\AI\ninfer-3090` with its own `.ninfer` weights (not GGUF) and one GPU per model. Three builds sit side by side there: Don-Chad's v0.16.1 (measured below), ashalliants's v0.17.1 (added 2026-11-02, [below](#ashalliants-v0171-on-windows-measured-2026-11-02)) and ashalliants's v0.18.0 (added 2026-11-12, [below](#ashalliants-v0180-on-windows-measured-2026-11-12)); `start-ninfer.ps1` runs v0.18.0 (`$Build` in the script). No client is configured for its Qwen3.8-27B (clients do list [Inkling 2 Mini](#inkling-2-mini-measured-2026-11-21), which runs through ninfer-all on the same port), and nothing starts it at login.
 
-**Start it** from the tray (**Start ninfer: Qwen3.8-27B on GPU 1**) or with `F:\AI\llama-serve\start-ninfer.ps1`; stop it with **Stop ninfer** or `stop-ninfer.ps1`. Only one engine holds the GPUs at a time:
+**Start it** from the tray (**Start ninfer on GPU 1 → Qwen3.8-27B**) or with `F:\AI\llama-serve\start-ninfer.ps1`; stop it with **Stop ninfer** or `stop-ninfer.ps1`. Only one engine holds the GPUs at a time:
 
 - Starting ninfer stops Strata and the router. Unloading the router's model is not enough: any request from Pi or VS Code would load a two-GPU preset onto GPU 1 beside ninfer, and both would slow down. While ninfer runs, the router's clients get no answer.
 - Starting the router (`start-router.ps1`, or the tray's **Start router (stops ninfer)**) or Strata (`start-strata.ps1`) stops ninfer first.
@@ -498,7 +498,7 @@ v0.18.0 (2026-11-12) is the first release with both of our reports fixed: the ou
 
 Thinking Machines' Inkling 2 Mini is a looped MoE: 26.4B parameters, 3.4B active per token, and its middle 12 layers run three times with the same weights, so a token passes through 48 layers. It reasons (effort `none` to `xhigh`; `none` still reasons briefly) and reads images. It runs through **ninfer-all** on GPU 1, not through the router: ninfer-all decodes it about twice as fast as llama.cpp, reads prompts about 2.7 times as fast, and holds 128K of context on one card where llama.cpp stops at 64K.
 
-**Start it** from the tray (**Start ninfer on GPU 1 → Inkling 2 Mini**) or with `.\start-ninfer.ps1 -Model inkling2-mini`. It shares port 8412 and the start/stop rules of [ninfer-3090](#ninfer-3090-measured-2026-10-18): starting it stops the router and Strata, and stopping it from the tray starts the router again. It answers in about 7 s. The model id is `inkling-2-mini`, in Pi (provider `ninfer`), VS Code chat (group **ninfer**) and Hermes (`hermes --provider ninfer`). Those entries answer only while it runs.
+**Start it** from the tray (**Start ninfer on GPU 1 → Inkling 2 Mini (ninfer-all, 128K, images)**) or with `.\start-ninfer.ps1 -Model inkling2-mini`. It shares port 8412 and the start/stop rules of [ninfer-3090](#ninfer-3090-measured-2026-10-18): starting it stops the router and Strata, and stopping it from the tray starts the router again. It answers in about 7 s. The model id is `inkling-2-mini`, in Pi (provider `ninfer`), VS Code chat (group **ninfer**) and Hermes (`hermes --provider ninfer`). Those entries answer only while it runs.
 
 What runs:
 

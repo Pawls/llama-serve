@@ -277,13 +277,15 @@ enum NinferState { Stopped, Starting, Ready }
 sealed class NinferModel
 {
     public readonly string Script;    // start-ninfer.ps1's -Model value
-    public readonly string Label;
+    public readonly string Name;      // short, for the status line and tooltip
+    public readonly string Label;     // the menu item
     public readonly string ModelId;   // the id /v1/models reports while it runs
 
-    public NinferModel(string script, string label, string modelId)
+    public NinferModel(string script, string name, string modelId, string detail = null)
     {
         Script = script;
-        Label = label;
+        Name = name;
+        Label = detail == null ? name : name + " (" + detail + ")";
         ModelId = modelId;
     }
 }
@@ -295,16 +297,15 @@ sealed class NinferClient
     readonly HttpClient http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = Timeout.InfiniteTimeSpan };
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
-    // /v1/models' first id from the last answer, e.g. "inkling-2-mini"; null while ninfer is not answering.
+    // /v1/models' first id, e.g. "inkling-2-mini"; kept while the process lives (a busy server can miss a
+    // /health timeout) and cleared by ForgetModel once it is gone.
     public string Model { get; private set; }
+
+    public void ForgetModel() { Model = null; }
 
     public async Task<bool> IsAnsweringAsync()
     {
-        if (await StatusQuery.GetBodyAsync(http, "/health") == null)
-        {
-            Model = null;
-            return false;
-        }
+        if (await StatusQuery.GetBodyAsync(http, "/health") == null) return false;
         if (Model == null) Model = await ReadModelIdAsync();
         return true;
     }
@@ -777,11 +778,11 @@ sealed class TrayApp : ApplicationContext
     static readonly NinferModel[] NinferModels =
     {
         new NinferModel("qwen38-27b", "Qwen3.8-27B", "qwen3.8-27b"),
-        new NinferModel("inkling2-mini", "Inkling 2 Mini (ninfer-all, 128K, images)", "inkling-2-mini"),
+        new NinferModel("inkling2-mini", "Inkling 2 Mini", "inkling-2-mini", "ninfer-all, 128K, images"),
     };
 
     StrataState strataState = StrataState.Stopped;
-    bool strataLoading;                // a load the tray sent is in flight
+    bool strataLoading;                 // a load the tray sent is in flight
     bool strataLaunching;               // a menu Start is stopping ninfer before it launches Strata
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
@@ -1068,7 +1069,7 @@ sealed class TrayApp : ApplicationContext
     string NinferModelLabel()
     {
         NinferModel known = NinferModels.FirstOrDefault(m => m.ModelId == ninfer.Model);
-        if (known != null) return known.Label;
+        if (known != null) return known.Name;
         return ninfer.Model ?? "ninfer";
     }
 
@@ -1124,7 +1125,9 @@ sealed class TrayApp : ApplicationContext
             Task<bool?> strataQuery = strata.GetLoadedAsync();
             // A connect to a closed local port takes ~2 s to fail on Windows, longer than a poll, so probe ninfer
             // only while its process exists.
-            Task<bool> ninferQuery = ServerProcesses.NinferRunning() ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
+            bool ninferProcess = ServerProcesses.NinferRunning();
+            if (!ninferProcess) ninfer.ForgetModel();
+            Task<bool> ninferQuery = ninferProcess ? ninfer.IsAnsweringAsync() : Task.FromResult(false);
             List<ModelInfo> latest = await routerQuery;
             bool? strataLoaded = await strataQuery;
             bool ninferAnswering = await ninferQuery;
