@@ -30,12 +30,13 @@ Clients that consume these servers (none of their configs are in this repo):
   using Pi's built-in `llama.cpp` provider (not the `huggingface/pi-llama` package, which resets model overrides after
   the first request). Effort for the Qwen3.8 presets comes from `modelOverrides` under `llama.cpp` in
   `~\.pi\agent\models.json`, which also pins `reasoning` for every preset (Pi otherwise marks only models it saw
-  loaded); a new preset needs an entry there. Strata is the `strata` provider in the same file. That file holds an API
-  key field; do not print it.
+  loaded); a new preset needs an entry there. Strata is the `strata` provider in the same file, and ninfer's Inkling 2
+  Mini the `ninfer` provider (port 8412). That file holds an API key field; do not print it.
 - **Hermes**: `hermes --provider llama-router` (the router; effort via `/reasoning low|medium|xhigh`, other values
-  are an HTTP 500 unless the `pawl-patches` plugin clamps them) and `hermes --provider strata`.
+  are an HTTP 500 unless the `pawl-patches` plugin clamps them), `hermes --provider strata` and
+  `hermes --provider ninfer` (Inkling 2 Mini).
 - **VS Code chat**: `%APPDATA%\Code\User\chatLanguageModels.json`, generated from `presets.ini`. Adding a preset means
-  adding an entry there too.
+  adding an entry there too. The **Strata** and **ninfer** (Inkling 2 Mini) groups were added by hand.
 - llama.cpp's own chat page at `http://127.0.0.1:8410/`.
 
 ## The machine
@@ -64,6 +65,7 @@ Windows logon task "llama-router"
        -> start-router.ps1 -> llama-server router :8410 -> child llama-server per model (presets.ini)
        -> start-strata.ps1 -> F:\AI\strata\run-<size>.bat -> Strata server :8411 (user starts it by hand)
        -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 (user starts it by hand)
+                             (-Model inkling2-mini: ninfer-all's ninfer-serve directly; its run.bat has no profile)
 ```
 
 **Only one engine may hold the GPUs at a time.** For ninfer the scripts enforce it: `start-ninfer.ps1` stops Strata
@@ -203,6 +205,15 @@ Other moving parts:
   `run.bat` `FINDSTR` fix (ashalliants#434). New in v0.18.0: without `--api-key` a foreign `Origin` gets 403
   (tested; `127.0.0.1` and `localhost` pass); per its release notes other Host names need `NINFER_ALLOWED_HOST`. Upstream
   status, known bugs and which build has which fix are in the README section.
+- **Inkling 2 Mini runs through ninfer-all** (iamwavecut/ninfer-all, which carries the ninfer-3090 line on) since
+  2026-11-21: release `2026-11-21.4` (`$InklingBuild` in `start-ninfer.ps1`), artifact
+  `F:\AI\ninfer-3090\models\inkling2-iq4xs\` (UD-IQ4_XS, 15.4 GiB), 128K context with vision and
+  `--structured-output` on GPU 1 (22.9 GiB). Measured against llama.cpp b12613 the same day: about 2x the decode
+  speed and 2.7x the prompt reads, and llama.cpp tops out at 64K on one card. Why it is not a router preset yet (open
+  llama.cpp #32740, #32752, #32718) and the other engines checked are in
+  [README.md](./README.md#inkling-2-mini-measured-2026-11-21). The tray's ninfer submenu has one item per
+  `NinferModels` row in [tray/LlamaTray.cs](./tray/LlamaTray.cs) and names the running model from `/v1/models`.
+  Qwen3.8-27B stays on v0.18.0; ninfer-all also serves it, untested here.
 - **To update:** `cd F:\AI\strata; cmd /c ".\UPDATE.bat < nul"` (the `< nul` skips the final "press any key"). It runs
   `git pull --ff-only`, then `setup.py --update`: Python packages, a new engine from Strata's signed update feed when
   the installed one is older than setup's `MIN_ENGINE`, and config upgrades. It leaves models and `strata-*.json`
