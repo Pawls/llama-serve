@@ -40,7 +40,7 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Share router on the network | Listens on every interface instead of only this PC, so the laptop can use it; restarts the router. Saved as `ShareOnNetwork`. See [Using it from another machine](#using-it-from-another-machine) |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
-| ninfer status, Start ninfer on GPU 1, Stop ninfer, Open ninfer log | One model on GPU 1 alone: Qwen3.8-27B through ninfer-3090, or Inkling 2 Mini through ninfer-all. Starting it stops the router and Strata, and stopping it starts the router again. See [ninfer-3090](#ninfer-3090-measured-2026-10-18) and [Inkling 2 Mini](#inkling-2-mini-measured-2026-11-21) |
+| ninfer status, Start ninfer, Stop ninfer, Open ninfer log | One model: Qwen3.8-27B on GPU 1 through ninfer-3090, or Inkling 2 Mini through ninfer-all on GPU 1 or on both GPUs. Starting it stops the router and Strata, and stopping it starts the router again. See [ninfer-3090](#ninfer-3090-measured-2026-10-18) and [Inkling 2 Mini](#inkling-2-mini-measured-2026-11-21) |
 | Router models: free GPUs when idle, Strata: unload when idle | How long a model sits unused before it frees the GPUs: never, 15 / 30 minutes, 1 / 2 / 4 hours. Defaults: router never, Strata 15 minutes. Saved in `tray-settings.json` and used at the next router or Strata start |
 | Start with Windows | Turns the logon task on or off |
 | Quit | Stops the router, Strata and ninfer, and closes the tray |
@@ -422,7 +422,7 @@ ninfer-3090 is a third engine: a Windows build of ninfer for RTX 3090s, installe
 - Starting the router (`start-router.ps1`, or the tray's **Start router (stops ninfer)**) or Strata (`start-strata.ps1`) stops ninfer first.
 - When the tray stopped the router for ninfer, it starts the router again once ninfer stops, whether from the menu or because ninfer exited by itself. A tray restarted while ninfer runs adopts it, but leaves the router stopped after **Stop ninfer**; use **Start router**.
 
-The script sets `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `CUDA_VISIBLE_DEVICES=1`, `NINFER_PORT=8412` (the default, 8080, belongs to signal-cli), `NINFER_GRAFTS=off` (stops the downloader from fetching a private graft through the Hugging Face login) and `NINFER_MODEL_DIR`, for its own process only, and logs to `logs\ninfer.log` (the previous run's in `ninfer.prev.log`). The server is ready in 10-15 s (`/health` answers 200), speaks the OpenAI API at `http://127.0.0.1:8412/v1`, and returns llama.cpp-style `timings`, so `bench-depth.ps1 -BaseUrl http://127.0.0.1:8412` works unchanged.
+The script sets `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `CUDA_VISIBLE_DEVICES=1` (`0,1` for the two-GPU Inkling profiles), `NINFER_PORT=8412` (the default, 8080, belongs to signal-cli), `NINFER_GRAFTS=off` (stops the downloader from fetching a private graft through the Hugging Face login) and `NINFER_MODEL_DIR`, for its own process only, and logs to `logs\ninfer.log` (the previous run's in `ninfer.prev.log`). The server is ready in 10-15 s (`/health` answers 200), speaks the OpenAI API at `http://127.0.0.1:8412/v1`, and returns llama.cpp-style `timings`, so `bench-depth.ps1 -BaseUrl http://127.0.0.1:8412` works unchanged.
 
 `bench-depth.ps1`, thinking off, 5 measured runs per cell, one round each, not interleaved (a second, swapped round was cut short when the PC was needed), so read it as an estimate. Net t/s:
 
@@ -498,7 +498,15 @@ v0.18.0 (2026-11-12) is the first release with both of our reports fixed: the ou
 
 Thinking Machines' Inkling 2 Mini is a looped MoE: 26.4B parameters, 3.4B active per token, and its middle 12 layers run three times with the same weights, so a token passes through 48 layers. It reasons (effort `none` to `xhigh`; `none` still reasons briefly) and reads images. It runs through **ninfer-all** on GPU 1, not through the router: ninfer-all decodes it about twice as fast as llama.cpp, reads prompts about 2.7 times as fast, and holds 128K of context on one card where llama.cpp stops at 64K.
 
-**Start it** from the tray (**Start ninfer on GPU 1 → Inkling 2 Mini (ninfer-all, 128K, images)**) or with `.\start-ninfer.ps1 -Model inkling2-mini`. It shares port 8412 and the start/stop rules of [ninfer-3090](#ninfer-3090-measured-2026-10-18): starting it stops the router and Strata, and stopping it from the tray starts the router again. It answers in about 7 s. The model id is `inkling-2-mini`, in Pi (provider `ninfer`), VS Code chat (group **ninfer**) and Hermes (`hermes --provider ninfer`). Those entries answer only while it runs.
+**Start it** from the tray (**Start ninfer → Inkling 2 Mini on GPU 1 / on both GPUs / Q8 on both GPUs**) or with `.\start-ninfer.ps1 -Model <profile>`. It shares port 8412 and the start/stop rules of [ninfer-3090](#ninfer-3090-measured-2026-10-18): starting it stops the router and Strata, and stopping it from the tray starts the router again. It answers in about 7-10 s. Three profiles, each with images and JSON mode, each answering only under its own model id (ninfer refuses any other name with `model_not_found`):
+
+| Profile (`-Model`) | Model id | Weights | GPUs | Context | Code decode 2k / 51k |
+|---|---|---|---|---|---|
+| `inkling2-mini` | `inkling-2-mini` | UD-IQ4_XS | GPU 1 | 128K | 113 / 72 |
+| `inkling2-mini-2gpu` | `inkling-2-mini-2gpu` | UD-IQ4_XS | both | 384K | 95 / 65 |
+| `inkling2-mini-q8` | `inkling-2-mini-q8` | UD-Q8_K_XL | both | 262K | 75 / 49 |
+
+All three ids are in Pi (provider `ninfer`), VS Code chat (group **ninfer**) and Hermes (`hermes --provider ninfer`); pick the one that is running. Use the one-GPU profile unless the conversation needs more than 128K: it is the fastest and leaves GPU 0 free.
 
 What runs:
 
@@ -516,6 +524,20 @@ Speed, `bench-depth.ps1` on GPU 1, thinking off, one round per engine, 3 measure
 
 Logs: `logs\inkling-bench-ninfer-all.console.txt`, `logs\inkling-bench-llama-b12613.console.txt`.
 
+**Both GPUs (measured 2026-11-21).** ninfer-all cannot split Inkling into pipeline stages, and its `--tensor-attention positions` (splitting the cache by position) is for Qwen3.5-family models only, so the whole F16 KV cache stays on the first device. `--devices 1,0 --tensor-parallel` divides only the routed experts; `--tensor-split 1,3` puts three quarters of them on GPU 0 (the desktop card, x16) to leave GPU 1 room for the cache. The cards have no peer access, so their partial sums go through host memory every layer pass, which is what the decode loss is. Same method as the table above (`bench-depth.ps1`, thinking off, 3 runs per cell, one round, not interleaved: an estimate). Net tok/s:
+
+| | GPU 1 / GPU 0 peak (desktop incl.) | Code 2k / 51k | Essay 2k / 51k |
+|---|---|---|---|
+| 1 GPU, UD-IQ4_XS, 128K | 22.9 GiB / - | 113 / 72 | 94 / 64 |
+| 2 GPUs, UD-IQ4_XS, 384K, split 1,3 | 22.2 / 15.0 GiB | 95 / 65 | 74 / 48 |
+| 2 GPUs, UD-IQ4_XS, 262K, split 1,1 | 21.0 / 11.8 GiB | 101 / 61 | 73 / 48 |
+| 2 GPUs, UD-Q8_K_XL, 262K, split 1,3 | 20.4 / 18.9 GiB | 75 / 49 | 53 / 43 |
+
+- **384K is near the ceiling:** the start log leaves 1.31 GiB of GPU 1 free. A code hidden in a 361,966-token prompt was found (`MAGENTA-7193-OTTER`, reasoning effort low); reading it took 1,760 s (206 tok/s on average, since attention cost grows with depth). The model is trained to 1M tokens (`n_ctx_train 1048576`), but 1M needs 32 GiB of F16 cache on one card.
+- **UD-Q8_K_XL** (`F:\AI\ninfer-3090\models\inkling2-q8kxl\`, 22.06 GiB, SHA-256 `9272016b…`, from [WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3](https://huggingface.co/WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3)) is BF16 everywhere except the routed experts of layers 0-19, which stay NVFP4 as in the release, so it is the closest to the original weights. It does not fit one card with any useful context. The gain is small: Unsloth measures UD-IQ4_XS at a mean KL divergence of 0.0109 from it and the same top token 97.7% of the time, and ninfer-all's WikiText perplexity differs by 0.11%. Its 262K leaves ~3.7 GiB of GPU 1 free and GPU 0 at 18.9 GiB; more context would push GPU 0 past its desktop budget. Pick it for quality-sensitive work that fits 262K, not for speed.
+- Checks: tool calls 3/3 on both two-GPU profiles; images and JSON mode were checked on the one-GPU profile only (same server flags).
+- Logs: `logs\bench-depth-20261121-1818.txt` (split 1,1), `-1900.txt` (Q8), `-1909.txt` (384K), `logs\ink2gpu-*.log` (start logs of the trial runs).
+
 **Why not the router yet.** llama.cpp added Inkling 2 on 2026-11-20 (ggml-org/llama.cpp#32694). Its loop fix (#32704, without which Unsloth measured perplexity ~130 instead of 7.65) merged on 2026-11-21, so b12613 is the first prebuilt that runs it correctly. It works (tool calls 3/3 on b12613), but:
 
 - Inkling's attention has a per-position bias that llama.cpp's flash attention does not take yet (#32740, open), so it builds the whole attention matrix. On GPU 1 that is a 6.5 GiB compute buffer at 64K with `-ub 512`, which does not fit beside the 16 GiB model; `-ub 256` fits at 64K (21.1 GiB on the card). #32752 (open) shrinks it.
@@ -528,7 +550,7 @@ Adding it to the router means moving every preset to the new build. b12613 is un
 
 - Strata: two open, unmerged PRs. Niko1221/Strata#6506 reports 120-124 tok/s decode on one 3090 and a Windows build. #6520 is a draft that loads the official NVFP4 checkpoint, at 92 tok/s on a 3090, and has no Windows build.
 - ashalliants/ninfer-3090: Inkling serving merged on 2026-11-21 (#541), but it is not in a release yet (the latest is v0.18.0 from 2026-11-12), and its Inkling work targets Linux on the V100.
-- ninfer-all's two-GPU expert split decoded 0.78-0.82x as fast as one card on two 3090s without peer access (its docs), so one card is the right setup here.
+- ninfer-all's two-GPU expert split decoded 0.78-0.82x as fast as one card on two 3090s without peer access (its docs); measured here it is 0.84-0.90x on code (table above), worth it only for the longer context.
 - Inkling 2 Small (594B total, 17B active) does not fit this PC: Unsloth's smallest GGUF, UD-IQ1_S, is 172 GB.
 
 Not tested: video, more than one request at a time (`--max-concurrency`), streaming, and a long Pi session.
