@@ -1,7 +1,10 @@
-# Starts ninfer on GPU 1 alone at 127.0.0.1:8412, after stopping Strata and the router. Ready in 8-15 s.
-#   .\start-ninfer.ps1                        Qwen3.8-27B (ninfer-3090 v0.18.0, run.bat's qwen38-27b profile)
-#   .\start-ninfer.ps1 -Model inkling2-mini   Inkling 2 Mini UD-IQ4_XS (ninfer-all), 128K context, images, JSON mode
-#   .\start-ninfer.ps1 -Model <name>          another v0.18.0 run.bat model; its .ninfer file must be in F:\AI\ninfer-3090\models
+# Starts ninfer at 127.0.0.1:8412, after stopping Strata and the router. Ready in 8-15 s.
+#   .\start-ninfer.ps1                             Qwen3.8-27B on GPU 1 (ninfer-3090 v0.18.0, run.bat's qwen38-27b profile)
+#   .\start-ninfer.ps1 -Model inkling2-mini        Inkling 2 Mini UD-IQ4_XS (ninfer-all) on GPU 1, 128K context
+#   .\start-ninfer.ps1 -Model inkling2-mini-2gpu   the same file on both GPUs, 384K context
+#   .\start-ninfer.ps1 -Model inkling2-mini-q8     Inkling 2 Mini UD-Q8_K_XL on both GPUs, 262K context
+#   .\start-ninfer.ps1 -Model <name>               another v0.18.0 run.bat model; its .ninfer file must be in F:\AI\ninfer-3090\models
+# Every Inkling profile has images and JSON mode. Its model id is the profile name with dashes (inkling-2-mini-2gpu).
 # The router must be stopped, not just unloaded: any client request would load a two-GPU preset beside ninfer.
 # See README § ninfer-3090 and § Inkling 2 Mini.
 param([string]$Model = 'qwen38-27b')
@@ -10,17 +13,35 @@ $ErrorActionPreference = 'Stop'
 $NinferDir = 'F:\AI\ninfer-3090'
 $Build     = 'ninfer-rtx3090-windows-x64-0.18.0-rtx3090'
 # ninfer-all continues the ninfer-3090 line and is the only build with Inkling 2; its run.bat has no profile for it.
-$InklingBuild    = 'ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-bd8195f42e87'
-$InklingArtifact = Join-Path $NinferDir 'models\inkling2-iq4xs\Inkling-2-Mini-UD-IQ4_XS-ninfer-v3.ninfer'
-$LogDir    = Join-Path $PSScriptRoot 'logs'
-$Log       = Join-Path $LogDir 'ninfer.log'
+$InklingBuild = 'ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-bd8195f42e87'
+$IQ4XS = 'models\inkling2-iq4xs\Inkling-2-Mini-UD-IQ4_XS-ninfer-v3.ninfer'
+$Q8KXL = 'models\inkling2-q8kxl\Inkling-2-Mini-UD-Q8_K_XL-ninfer-v3.ninfer'
+# The KV cache is F16 only and stays whole on the first device, so context is bounded by GPU 1. Two GPUs divide
+# only the routed experts (--tensor-parallel); 1,3 puts three quarters on GPU 0 to leave GPU 1 room for the cache.
+# Peak use, measured 2026-11-21 (README § Inkling 2 Mini): 1 GPU 22.9 GiB; 2gpu 22.2 / 15.0 GiB (GPU 1 / GPU 0,
+# desktop included); q8 20.4 / 18.9 GiB.
+$TwoGpus = '--devices 1,0 --tensor-parallel --tensor-split 1,3'
+$Inkling = @{
+    'inkling2-mini'      = @{ File = $IQ4XS; Context = 131072; Gpus = '' }
+    'inkling2-mini-2gpu' = @{ File = $IQ4XS; Context = 393216; Gpus = $TwoGpus }
+    'inkling2-mini-q8'   = @{ File = $Q8KXL; Context = 262144; Gpus = $TwoGpus }
+}
+$LogDir = Join-Path $PSScriptRoot 'logs'
+$Log    = Join-Path $LogDir 'ninfer.log'
 
-if ($Model -eq 'inkling2-mini') {
+$VisibleGpus = '1'
+if ($Inkling.ContainsKey($Model)) {
+    $Spec = $Inkling[$Model]
     $Server = Join-Path $NinferDir "$InklingBuild\ninfer-serve.exe"
-    foreach ($path in $Server, $InklingArtifact) { if (-not (Test-Path $path)) { throw "$path not found." } }
-    # 128K with the vision tower leaves ~600 MiB of GPU 1 free (measured 2026-11-21); the KV cache is F16 only.
-    $Command = "`"$Server`" `"$InklingArtifact`" --model-id inkling-2-mini --host 127.0.0.1 --port 8412" +
-        ' --max-context 131072 --vision --structured-output'
+    $Artifact = Join-Path $NinferDir $Spec.File
+    foreach ($path in $Server, $Artifact) { if (-not (Test-Path $path)) { throw "$path not found." } }
+    if ($Spec.Gpus) {
+        . (Join-Path $PSScriptRoot 'tray-settings.ps1')
+        if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). This profile uses both GPUs; untick it first.' }
+        $VisibleGpus = '0,1'   # ninfer's device 1 is then GPU 1 under PCI_BUS_ID order
+    }
+    $Command = "`"$Server`" `"$Artifact`" --model-id $($Model -replace '^inkling2', 'inkling-2')" +
+        " --host 127.0.0.1 --port 8412 --max-context $($Spec.Context) --vision --structured-output $($Spec.Gpus)"
 } else {
     $RunScript = Join-Path $NinferDir "$Build\run.bat"
     if (-not (Test-Path $RunScript)) { throw "$RunScript not found." }
@@ -34,7 +55,7 @@ if (Get-Process ninfer-serve -ErrorAction SilentlyContinue) { throw 'ninfer is a
 # These apply to this process and its children only. The default port, 8080, is signal-cli's, and
 # NINFER_GRAFTS=off stops the downloader from fetching a private graft through the Hugging Face login.
 $env:CUDA_DEVICE_ORDER = 'PCI_BUS_ID'
-$env:CUDA_VISIBLE_DEVICES = '1'
+$env:CUDA_VISIBLE_DEVICES = $VisibleGpus
 $env:NINFER_PORT = '8412'
 $env:NINFER_GRAFTS = 'off'
 $env:NINFER_MODEL_DIR = Join-Path $NinferDir 'models'

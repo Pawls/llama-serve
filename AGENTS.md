@@ -64,8 +64,8 @@ Windows logon task "llama-router"
   -> tray\bin\LlamaTray.exe (single instance, polls every 2 s)
        -> start-router.ps1 -> llama-server router :8410 -> child llama-server per model (presets.ini)
        -> start-strata.ps1 -> F:\AI\strata\run-<size>.bat -> Strata server :8411 (user starts it by hand)
-       -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 (user starts it by hand)
-                             (-Model inkling2-mini: ninfer-all's ninfer-serve directly; its run.bat has no profile)
+       -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 or both (user starts it)
+                             (-Model inkling2-mini[-2gpu|-q8]: ninfer-all's ninfer-serve directly; -2gpu, -q8 use both GPUs)
 ```
 
 **Only one engine may hold the GPUs at a time.** For ninfer the scripts enforce it: `start-ninfer.ps1` stops Strata
@@ -92,7 +92,8 @@ Other moving parts:
   start.
 - **Reserve GPU 0.** The tray toggle sets `ReserveGpu0` in `tray-settings.json`; `start-router.ps1` then writes
   `logs\presets.run.ini` with only `[*]` and the presets whose `device` and `spec-draft-device` lines are all `CUDA1`
-  (and `start-strata.ps1` refuses to run). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
+  (and `start-strata.ps1` and the two-GPU Inkling profiles of `start-ninfer.ps1` refuse to run; ticking it stops
+  them, and the tray greys out their items). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
   Pi's `models.json` and VS Code's `chatLanguageModels.json` like any preset. Measured 2026-10-31 on GPU 1 alone: `gemma4-26b-a4b-single` holds
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through
@@ -208,8 +209,11 @@ Other moving parts:
 - **Inkling 2 Mini runs through ninfer-all** (iamwavecut/ninfer-all, which carries the ninfer-3090 line on) since
   2026-11-21: release `2026-11-21.4` (`$InklingBuild` in `start-ninfer.ps1`), artifact
   `F:\AI\ninfer-3090\models\inkling2-iq4xs\` (UD-IQ4_XS, 15.4 GiB), 128K context with vision and
-  `--structured-output` on GPU 1 (22.9 GiB). Measured against llama.cpp b12613 the same day: about 2x the decode
-  speed and 2.7x the prompt reads, and llama.cpp tops out at 64K on one card. Why it is not a router preset yet (open
+  `--structured-output` on GPU 1 (22.9 GiB). Two-GPU profiles since the same day: `inkling2-mini-2gpu` (same file,
+  384K) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl\`, 262K). Only the routed experts split; the
+  KV cache stays whole on GPU 1, so GPU 1's free memory bounds the context. Each profile answers only under its own
+  model id (`inkling-2-mini[-2gpu|-q8]`), and Pi, VS Code and Hermes list all three. Measured against llama.cpp
+  b12613 the same day: about 2x the decode speed and 2.7x the prompt reads, and llama.cpp tops out at 64K on one card. Why it is not a router preset yet (open
   llama.cpp #32740, #32752, #32718) and the other engines checked are in
   [README.md](./README.md#inkling-2-mini-measured-2026-11-21). The tray's ninfer submenu has one item per
   `NinferModels` row in [tray/LlamaTray.cs](./tray/LlamaTray.cs) and names the running model from `/v1/models`.

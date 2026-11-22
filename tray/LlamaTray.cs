@@ -270,7 +270,7 @@ sealed class StrataClient
     }
 }
 
-// ninfer runs one model on GPU 1 alone. It answers HTTP only once its weights are on the card.
+// ninfer runs one model, on GPU 1 or on both GPUs. It answers HTTP only once its weights are on the cards.
 enum NinferState { Stopped, Starting, Ready }
 
 // One model start-ninfer.ps1 can start. A server serves one model, fixed when it starts.
@@ -280,10 +280,12 @@ sealed class NinferModel
     public readonly string Name;      // short, for the status line and tooltip
     public readonly string Label;     // the menu item
     public readonly string ModelId;   // the id /v1/models reports while it runs
+    public readonly bool BothGpus;    // also uses GPU 0, so Reserve GPU 0 blocks it
 
-    public NinferModel(string script, string name, string modelId, string detail = null)
+    public NinferModel(string script, string name, string modelId, string detail = null, bool bothGpus = false)
     {
         Script = script;
+        BothGpus = bothGpus;
         Name = name;
         Label = detail == null ? name : name + " (" + detail + ")";
         ModelId = modelId;
@@ -777,8 +779,10 @@ sealed class TrayApp : ApplicationContext
     // The first is also start-ninfer.ps1's default.
     static readonly NinferModel[] NinferModels =
     {
-        new NinferModel("qwen38-27b", "Qwen3.8-27B", "qwen3.8-27b"),
-        new NinferModel("inkling2-mini", "Inkling 2 Mini", "inkling-2-mini", "ninfer-all, 128K, images"),
+        new NinferModel("qwen38-27b", "Qwen3.8-27B on GPU 1", "qwen3.8-27b"),
+        new NinferModel("inkling2-mini", "Inkling 2 Mini on GPU 1", "inkling-2-mini", "UD-IQ4_XS, 128K, images"),
+        new NinferModel("inkling2-mini-2gpu", "Inkling 2 Mini on both GPUs", "inkling-2-mini-2gpu", "UD-IQ4_XS, 384K, images", true),
+        new NinferModel("inkling2-mini-q8", "Inkling 2 Mini Q8 on both GPUs", "inkling-2-mini-q8", "UD-Q8_K_XL, 262K, images", true),
     };
 
     StrataState strataState = StrataState.Stopped;
@@ -891,10 +895,10 @@ sealed class TrayApp : ApplicationContext
         memorySaverReapplyItem = new ToolStripMenuItem("Memory saver: close apps again...", null,
             (s, e) => RunAction(ReapplyMemorySaverAsync));
         ninferStatusItem = new ToolStripMenuItem { Enabled = false };
-        ninferModelsMenu = new ToolStripMenuItem("Start ninfer on GPU 1 (stops the router and Strata)");
+        ninferModelsMenu = new ToolStripMenuItem("Start ninfer (stops the router and Strata)");
         foreach (NinferModel model in NinferModels)
         {
-            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferStartAsync(model))));
+            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferStartAsync(model))) { Tag = model });
         }
         ninferStopItem = new ToolStripMenuItem("Stop ninfer", null, (s, e) => RunAction(StopNinferAsync));
         var ninferLogItem = new ToolStripMenuItem("Open ninfer log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "ninfer.log")));
@@ -1009,6 +1013,8 @@ sealed class TrayApp : ApplicationContext
         ninferStatusItem.Text = NinferStatusText();
         ninferModelsMenu.Visible = ninferStopped;
         ninferModelsMenu.Enabled = !ninferLaunching;
+        foreach (ToolStripMenuItem item in ninferModelsMenu.DropDownItems)
+            item.Enabled = !(reserved && ((NinferModel)item.Tag).BothGpus);
         ninferStopItem.Visible = !ninferStopped;
         ninferStopItem.Text = routerYieldedToNinfer ? "Stop ninfer and restart the router" : "Stop ninfer";
         ninferStopItem.Enabled = !ninferStopping && !ninferLaunching;
@@ -1061,14 +1067,17 @@ sealed class TrayApp : ApplicationContext
         {
             case NinferState.Stopped: return "ninfer stopped";
             case NinferState.Starting: return "ninfer starting (about 10 s)...";
-            default: return "ninfer ready: " + NinferModelLabel() + " on GPU 1, port 8412";
+            default: return "ninfer ready: " + NinferModelLabel() + ", port 8412";
         }
     }
+
+    // The NinferModels row of the running server; null while stopped or for a model started by hand.
+    NinferModel RunningNinferModel() { return NinferModels.FirstOrDefault(m => m.ModelId == ninfer.Model); }
 
     // A server started by hand with another model shows its own id.
     string NinferModelLabel()
     {
-        NinferModel known = NinferModels.FirstOrDefault(m => m.ModelId == ninfer.Model);
+        NinferModel known = RunningNinferModel();
         if (known != null) return known.Name;
         return ninfer.Model ?? "ninfer";
     }
@@ -1220,7 +1229,7 @@ sealed class TrayApp : ApplicationContext
         }
         if (processRunning)
         {
-            // A load stuck on GPU 1 keeps the process up without ever answering: say so once.
+            // A stuck load keeps the process up without ever answering: say so once.
             if (ninferStartRequestedAt.HasValue && DateTime.Now - ninferStartRequestedAt.Value > NinferLoadWarning)
             {
                 ninferStartRequestedAt = null;
@@ -1459,7 +1468,8 @@ sealed class TrayApp : ApplicationContext
     }
 
     // With the flag, start-router.ps1 keeps only presets pinned to CUDA1. Reserving also stops Strata, which
-    // would otherwise reload across both cards on its next request.
+    // would otherwise reload across both cards on its next request, and a two-GPU ninfer (after the flag is saved,
+    // so the router it restarts reads it).
     async Task ToggleReserveGpuAsync()
     {
         bool reserve = !reserveGpu0;
@@ -1467,8 +1477,13 @@ sealed class TrayApp : ApplicationContext
         reserveGpu0 = reserve;
         bool stopStrata = reserve && strataState != StrataState.Stopped && !strataStopping;
         if (stopStrata) await StopStrataAsync(StrataStopFailure);
+        NinferModel running = RunningNinferModel();
+        bool stopNinfer = reserve && running != null && running.BothGpus && ninferState != NinferState.Stopped && !ninferStopping;
+        if (stopNinfer) await StopNinferAsync();
+        string stopped = stopStrata && stopNinfer ? ", and Strata and ninfer were stopped."
+            : stopStrata ? ", and Strata was stopped." : stopNinfer ? ", and ninfer was stopped." : ".";
         Notify(reserve
-            ? "GPU 0 reserved: only single-GPU presets are listed" + (stopStrata ? ", and Strata was stopped." : ".") + " Strata cannot start."
+            ? "GPU 0 reserved: only single-GPU presets are listed" + stopped + " Strata and two-GPU ninfer cannot start."
             : "GPU 0 released: all presets are listed again.", ToolTipIcon.Info);
     }
 
@@ -1609,7 +1624,7 @@ sealed class TrayApp : ApplicationContext
         return exitCode;
     }
 
-    // ninfer needs GPU 1 to itself. The router is stopped, not just unloaded, because any client request would load a
+    // ninfer needs its GPUs to itself. The router is stopped, not just unloaded, because any client request would load a
     // two-GPU preset beside it; Strata is stopped because it reloads across both cards on its next request.
     async Task NinferStartAsync(NinferModel model)
     {
@@ -1661,7 +1676,7 @@ sealed class TrayApp : ApplicationContext
         {
             ninferStopping = false;
         }
-        if (exitCode != 0) Notify("ninfer did not stop cleanly; it may still hold GPU 1. Check Task Manager.", ToolTipIcon.Error);
+        if (exitCode != 0) Notify("ninfer did not stop cleanly; it may still hold the GPUs. Check Task Manager.", ToolTipIcon.Error);
         ninferState = NinferState.Stopped;
         RestoreRouterAfterNinfer();
         ShowState(state);
