@@ -35,7 +35,11 @@ if ($Inkling.ContainsKey($Model)) {
     $Server = Join-Path $NinferDir "$InklingBuild\ninfer-serve.exe"
     $Artifact = Join-Path $NinferDir $Spec.File
     foreach ($path in $Server, $Artifact) { if (-not (Test-Path $path)) { throw "$path not found." } }
-    if ($Spec.Gpus) { $VisibleGpus = '0,1' }   # ninfer's device 1 is then GPU 1 under PCI_BUS_ID order
+    if ($Spec.Gpus) {
+        . (Join-Path $PSScriptRoot 'tray-settings.ps1')
+        if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). This profile uses both GPUs; untick it first.' }
+        $VisibleGpus = '0,1'   # ninfer's device 1 is then GPU 1 under PCI_BUS_ID order
+    }
     $Command = "`"$Server`" `"$Artifact`" --model-id $($Model -replace '^inkling2', 'inkling-2')" +
         " --host 127.0.0.1 --port 8412 --max-context $($Spec.Context) --vision --structured-output $($Spec.Gpus)"
 } else {

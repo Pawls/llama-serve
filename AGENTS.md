@@ -64,7 +64,7 @@ Windows logon task "llama-router"
   -> tray\bin\LlamaTray.exe (single instance, polls every 2 s)
        -> start-router.ps1 -> llama-server router :8410 -> child llama-server per model (presets.ini)
        -> start-strata.ps1 -> F:\AI\strata\run-<size>.bat -> Strata server :8411 (user starts it by hand)
-       -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 (user starts it by hand)
+       -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 or both (user starts it)
                              (-Model inkling2-mini[-2gpu|-q8]: ninfer-all's ninfer-serve directly; -2gpu, -q8 use both GPUs)
 ```
 
@@ -92,7 +92,8 @@ Other moving parts:
   start.
 - **Reserve GPU 0.** The tray toggle sets `ReserveGpu0` in `tray-settings.json`; `start-router.ps1` then writes
   `logs\presets.run.ini` with only `[*]` and the presets whose `device` and `spec-draft-device` lines are all `CUDA1`
-  (and `start-strata.ps1` refuses to run). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
+  (and `start-strata.ps1` and the two-GPU Inkling profiles of `start-ninfer.ps1` refuse to run; ticking it stops
+  them, and the tray greys out their items). A new single-GPU preset needs `device = CUDA1` to show up, plus entries in
   Pi's `models.json` and VS Code's `chatLanguageModels.json` like any preset. Measured 2026-10-31 on GPU 1 alone: `gemma4-26b-a4b-single` holds
   the full 262k (peak 21.1 GiB); `qwen3.8-27b-single` (Q4_K_XL) holds 131k at q8 KV (peak 21.7 GiB). Qwen at 262k and
   the Q3_K_XL, ISTA IQ3_S and Hauhau Q3_K_P files are untried. The toggle itself was checked through

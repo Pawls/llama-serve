@@ -1,4 +1,4 @@
-# Stops ninfer-serve, freeing GPU 1 and the 8 GiB of RAM it pins. Returns once the server and the start-ninfer.ps1
+# Stops ninfer-serve, freeing its GPUs (GPU 1, or both for a two-GPU Inkling profile) and the 8 GiB of RAM it pins. Returns once the server and the start-ninfer.ps1
 # launcher that logs it have exited; exits 1 if either is still running after its wait.
 $ErrorActionPreference = 'Stop'
 $StartScript = Join-Path $PSScriptRoot 'start-ninfer.ps1'
