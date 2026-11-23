@@ -1,14 +1,15 @@
 # Decode-speed bench at context depth, for comparing drafter lanes of the same model family.
 #   .\bench-depth.ps1 -Model swift-qwen3.8-27b,swift-qwen3.8-27b-dflash2
 # Per model x depth x kind (code 800 tok / essay 1000 tok, forced to full length): 1 prefill, 2 warm, 5 measured.
-# Thinking is off so every token is answer text. Writes logs\bench-depth-<stamp>.jsonl and .txt (medians).
+# Thinking is off so every token is answer text. -Temperature 0 decodes greedy; without it the server's default applies. Writes logs\bench-depth-<stamp>.jsonl and .txt (medians).
 # Needs the router on :8410 with nothing else using the GPUs. Leaves the last model loaded.
 param(
     [Parameter(Mandatory)][string[]]$Model,
     [int[]]$Depth = @(2000, 52000, 128000),
     [int]$Warm = 2,
     [int]$Runs = 5,
-    [string]$BaseUrl = 'http://127.0.0.1:8410'
+    [string]$BaseUrl = 'http://127.0.0.1:8410',
+    [Nullable[double]]$Temperature = $null
 )
 $ErrorActionPreference = 'Stop'
 
@@ -57,11 +58,13 @@ function Invoke-Chat([hashtable]$Body) {
     $r
 }
 function New-Body([string]$M, [string]$Filler, [string]$Task, [int]$MaxTokens) {
-    @{
+    $body = @{
         model = $M; max_tokens = $MaxTokens; ignore_eos = $true
         chat_template_kwargs = @{ enable_thinking = $false }
         messages = @(@{ role = 'user'; content = "<document>`n$Filler`n</document>`n`n$Task" })
     }
+    if ($null -ne $Temperature) { $body.temperature = $Temperature }
+    $body
 }
 function Get-VramMiB { (nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits) -join ' / ' }
 function Get-Median($xs) { $s = @($xs | Sort-Object); if (-not $s.Count) { return $null }; $s[[math]::Floor($s.Count / 2)] }
@@ -122,7 +125,7 @@ $summary = $rows | Where-Object phase -eq 'measured' | Group-Object model, depth
 $fallbacks = @(Select-String -Path (Join-Path $LogDir 'server.log') -Pattern 'retrying without pipeline' -ErrorAction SilentlyContinue).Count
 $errors = @($rows | Where-Object phase -eq 'error')
 $report = @(
-    "bench-depth $Stamp  models: $($Model -join ', ')  calibration: $([math]::Round($CharsPerToken, 2)) chars/token"
+    "bench-depth $Stamp  models: $($Model -join ', ')  calibration: $([math]::Round($CharsPerToken, 2)) chars/token  temperature: $(if ($null -ne $Temperature) { $Temperature } else { 'server default' })"
     ($summary | Sort-Object model, depth, kind | Format-Table -AutoSize | Out-String)
     "pipeline fallback hits in server.log: $fallbacks"
     "errors: $($errors.Count)"
