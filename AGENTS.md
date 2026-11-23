@@ -37,6 +37,10 @@ Clients that consume these servers (none of their configs are in this repo):
   `hermes --provider ninfer` (Inkling 2 Mini).
 - **VS Code chat**: `%APPDATA%\Code\User\chatLanguageModels.json`, generated from `presets.ini`. Adding a preset means
   adding an entry there too. The **Strata** and **ninfer** (Inkling 2 Mini) groups were added by hand.
+- **opencode**: `~\.config\opencode\opencode.jsonc` has no model discovery, so [sync-opencode.ps1](./sync-opencode.ps1)
+  regenerates its three providers (router, Strata, ninfer) from `presets.ini`, `F:\AI\strata\strata-*.json` and the
+  `$Inkling` table in `start-ninfer.ps1`. Rerun it after changing any of them and restart opencode. Display names
+  persist per id; a new preset gets an auto name until edited in the file.
 - llama.cpp's own chat page at `http://127.0.0.1:8410/`.
 
 ## The machine
