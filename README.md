@@ -576,7 +576,7 @@ Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x
 | DSpark (default) | 137 / 102 | 106 / 92 |
 | DSpark at temperature 1.0 (above) | 114 / 94-95 | 102-103 / 89 |
 
-Without drafts, decode is 105 tok/s at 2k and 94-95 at 51k. DSpark adds 30% on code at 2k when greedy, 9% at 51k, and nothing on the essay; at temperature 1.0 it adds less. GPU 1 holds 22.0 GiB with `--spec none` (the drafter is not loaded) against 23.0 GiB.
+Without drafts, decode is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark adds 30% on code at 2k and 9% at 51k, and nothing on the essay (106 against 105 at 2k, 92 against 95 at 51k). GPU 1 holds 22.0 GiB with `--spec none` (the drafter is not loaded) against 23.0 GiB.
 
 **Long prompts over both GPUs** (768K profile, the needle test above, reasoning effort low): 370,730 tokens took 450 s and 699,323 tokens took 1,236 s, both answered correctly, with GPU 1 at 22,546 MiB and GPU 0 at 13.6 GiB at peak. Prompt reading slows with depth: about 410 tok/s near the end of the 699K prompt. On 2026-11-21.4, 361,966 tokens took 1,760 s.
 
