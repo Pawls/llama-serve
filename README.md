@@ -568,7 +568,7 @@ Release `2026-11-23.9` stores the KV cache of Inkling's eight full-attention vis
 
 Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x as fast. The one exception: the essay's 2k prompt read at 1,271-1,277 tok/s against 2,145-2,162 (the code prompt's 2k read did not drop). A code hidden in a 259,272-token prompt was found (`MAGENTA-7193-OTTER`, reasoning effort low) in 203 s, against 1,760 s for a 361,966-token prompt on the old build over both GPUs. GPU 1 peaked at 23,026 MiB, with no spill.
 
-**Greedy, with and without DSpark** (one GPU, 256K, `bench-depth.ps1 -Temperature 0`, one round each, an estimate; the rows above use the server's default temperature 1.0). Net tok/s:
+**Greedy, with and without DSpark** (one GPU, 256K, `bench-depth.ps1 -Temperature 0`, one round each, an estimate; both GPUs run their Afterburner undervolt, see [AGENTS.md](AGENTS.md#the-machine); the rows above use the release's default temperature 1.0, per the artifact's `README.md` § Sampling defaults). Net tok/s:
 
 | | Code 2k / 51k | Essay 2k / 51k |
 |---|---|---|
@@ -576,9 +576,9 @@ Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x
 | DSpark (default) | 137 / 102 | 106 / 92 |
 | DSpark at temperature 1.0 (above) | 114 / 94-95 | 102-103 / 89 |
 
-Without drafts, decode is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark adds 30% on code at 2k and 9% at 51k, and nothing on the essay (106 against 105 at 2k, 92 against 95 at 51k). GPU 1 holds 22.0 GiB with `--spec none` (the drafter is not loaded) against 23.0 GiB.
+Without drafts, net speed is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark adds 30% on code at 2k and 9% at 51k; on the essay it gains 1% at 2k (106 against 105) and loses 3% at 51k (92 against 95), within one round's noise. GPU 1 holds 22.0 GiB with `--spec none` (the drafter is not loaded) against 23.0 GiB.
 
-**Long prompts over both GPUs** (768K profile, the needle test above, reasoning effort low): 370,730 tokens took 450 s and 699,323 tokens took 1,236 s, both answered correctly, with GPU 1 at 22,546 MiB and GPU 0 at 13.6 GiB at peak. Prompt reading slows with depth: about 410 tok/s near the end of the 699K prompt. On 2026-11-21.4, 361,966 tokens took 1,760 s.
+**Long prompts over both GPUs** (768K profile, the needle test above, reasoning effort low): 370,730 tokens took 450 s and 699,323 tokens took 1,236 s, both answered correctly, with GPU 1 at 22,546 MiB and GPU 0 at 13.6 GiB at peak. Prompt reading slows with depth: about 410 tok/s near the end of the 699K prompt. On 2026-11-21.4, 361,966 tokens took 1,760 s. Those are first reads; a follow-up turn reuses the prefix: on a 98,913-token prompt the first question took 75 s and the follow-up 6.8 s, with 98,912 tokens from the cache (`cache_n`). Whether a 700K prefix (11 GiB of cache) survives another conversation in between is untested; it exceeds the default 8 GiB `--host-cache-mib`.
 
 **Two GPUs**, one round each (an estimate), against the 2026-11-21 table above:
 

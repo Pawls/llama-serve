@@ -2,7 +2,7 @@
 #   .\bench-depth.ps1 -Model swift-qwen3.8-27b,swift-qwen3.8-27b-dflash2
 # Per model x depth x kind (code 800 tok / essay 1000 tok, forced to full length): 1 prefill, 2 warm, 5 measured.
 # Thinking is off so every token is answer text. -Temperature 0 decodes greedy; without it the server's default applies. Writes logs\bench-depth-<stamp>.jsonl and .txt (medians).
-# Needs the router on :8410 with nothing else using the GPUs. Leaves the last model loaded.
+# Needs the router on :8410 (or Strata / ninfer through -BaseUrl) with nothing else using the GPUs. Leaves the last model loaded.
 param(
     [Parameter(Mandatory)][string[]]$Model,
     [int[]]$Depth = @(2000, 52000, 128000),
@@ -84,14 +84,14 @@ foreach ($m in $Model) {
             try {
                 $sw = [Diagnostics.Stopwatch]::StartNew()
                 $pre = Invoke-Chat (New-Body $m $filler $k.text 1)
-                $prefill = [ordered]@{ model = $m; depth_target = $d; kind = $kind; phase = 'prefill'; prompt_n = $pre.timings.prompt_n + $pre.timings.cache_n; prompt_tps = [math]::Round($pre.timings.prompt_per_second, 1); wall_s = [math]::Round($sw.Elapsed.TotalSeconds, 1); vram = Get-VramMiB }
+                $prefill = [ordered]@{ model = $m; depth_target = $d; kind = $kind; temperature = $Temperature; phase = 'prefill'; prompt_n = $pre.timings.prompt_n + $pre.timings.cache_n; prompt_tps = [math]::Round($pre.timings.prompt_per_second, 1); wall_s = [math]::Round($sw.Elapsed.TotalSeconds, 1); vram = Get-VramMiB }
                 ($prefill | ConvertTo-Json -Compress) | Add-Content -Encoding utf8NoBOM $Jsonl
                 Write-Host ($prefill | ConvertTo-Json -Compress)
                 for ($i = 1; $i -le $Warm + $Runs; $i++) {
                     $sw.Restart()
                     $r = Invoke-Chat (New-Body $m $filler $k.text $k.tokens)
                     $row = [ordered]@{
-                        model = $m; depth_target = $d; kind = $kind; phase = ($i -le $Warm ? 'warm' : 'measured'); run = $i
+                        model = $m; depth_target = $d; kind = $kind; temperature = $Temperature; phase = ($i -le $Warm ? 'warm' : 'measured'); run = $i
                         prompt_n = $r.timings.prompt_n + $r.timings.cache_n; predicted_n = $r.timings.predicted_n
                         decode_tps = [math]::Round($r.timings.predicted_per_second, 1)
                         net_tps = [math]::Round($r.timings.predicted_n / $sw.Elapsed.TotalSeconds, 1)
@@ -122,7 +122,8 @@ $summary = $rows | Where-Object phase -eq 'measured' | Group-Object model, depth
         peak_vram = ($g.vram | Sort-Object { ($_ -split ' / ' | Measure-Object -Maximum).Maximum } | Select-Object -Last 1)
     }
 }
-$fallbacks = @(Select-String -Path (Join-Path $LogDir 'server.log') -Pattern 'retrying without pipeline' -ErrorAction SilentlyContinue).Count
+# server.log is the router's; its count says nothing about Strata or ninfer.
+$fallbacks = if ($BaseUrl -match ':8410') { @(Select-String -Path (Join-Path $LogDir 'server.log') -Pattern 'retrying without pipeline' -ErrorAction SilentlyContinue).Count } else { 'n/a (not the router)' }
 $errors = @($rows | Where-Object phase -eq 'error')
 $report = @(
     "bench-depth $Stamp  models: $($Model -join ', ')  calibration: $([math]::Round($CharsPerToken, 2)) chars/token  temperature: $(if ($null -ne $Temperature) { $Temperature } else { 'server default' })"
