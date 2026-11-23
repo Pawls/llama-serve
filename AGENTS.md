@@ -44,6 +44,10 @@ Clients that consume these servers (none of their configs are in this repo):
 - 2x RTX 3090 (24 GB each), no NVLink (Paul declined it; do not suggest it), Intel i5-12600K, 64 GB RAM, Windows 11.
 - **GPU 0 (`01:00.0`, Suprim X, PCIe x16) drives the Windows desktop.** Budget it at ~19-21.5 GiB usable. **GPU 1
   (`04:00.0`, Founders Edition, headless) is PCIe Gen4 x4.** Layer split is fine over x4; never use `-sm row`.
+- **Both cards are undervolted in MSI Afterburner** (always in the tray): flat from 850 mV at 1680 MHz (GPU 0) and
+  1650 MHz (GPU 1), each board's own stock clock at 850 mV, power limit 100%. `nvidia-smi` shows only the stock power
+  limits, not the curve. The scheduled task `Afterburner_Reapply_Undervolt_On_TDR` re-applies Profile 1 after a
+  driver reset. State the undervolt with any published benchmark.
 - `CUDA_DEVICE_ORDER=PCI_BUS_ID` is set in `start-router.ps1`. Without it two identical cards tie and `tensor-split`
   can land reversed.
 - **WDDM spills VRAM into system RAM instead of failing.** A preset that does not fit loads and runs 5-10x slower.
