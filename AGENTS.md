@@ -398,6 +398,10 @@ install and nothing is started. Windows stays the main OS and the four 2 TB driv
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.
 
+[plans/context-and-quality-benches.md](./plans/context-and-quality-benches.md): more context for
+`qwen3.8-27b-single` (A1), Inkling 2 Mini on the `rk8v4` cache (A2), and Qwen3.8-27B on ninfer-all (A4), plus
+Inkling's answer quality on the 50-task set against Swift (A3). Bench sessions Paul starts; one PR per slice.
+
 ## Git
 
 Remote `Pawls/llama-serve` (public), default branch `main`. Work goes through a pull request into `main` (PR #1, the
