@@ -68,7 +68,8 @@ function Get-Median($xs) { $s = @($xs | Sort-Object); if (-not $s.Count) { retur
 
 # Calibrate chars per token on the first model once; every model here shares the Qwen tokenizer family.
 $cal = Invoke-Chat (New-Body $Model[0] (New-Filler 40000) 'Reply with OK.' 1)
-$CharsPerToken = 40000 / [math]::Max(1, $cal.timings.prompt_n)
+# cache_n too: a server that kept this prompt from an earlier run counts it there, not in prompt_n.
+$CharsPerToken = 40000 / [math]::Max(1, $cal.timings.prompt_n + $cal.timings.cache_n)
 Write-Host ("calibration: {0:N2} chars/token" -f $CharsPerToken)
 
 foreach ($m in $Model) {

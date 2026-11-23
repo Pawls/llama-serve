@@ -184,8 +184,8 @@ Other moving parts:
   1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
   `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
   and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is on Swift since 2026-11-02 (see "Untried levers" below).
-- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
-  `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
+- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, deleted
+  2026-11-23) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
   router's `qwen3.8-27b-dflash2`, on a ~4-bit conversion (17.2 GiB) against UD-Q5_K_XL; quality was not compared.
   Flash-Next does not start on this PC (it must pin 34.7 GiB of host memory, which Windows maps into a GPU address
@@ -200,21 +200,22 @@ Other moving parts:
   v0.16.1 is ashalliants's code at `931bd49b` (2026-10-15), copied back whole, plus Windows build fixes. ashalliants
   ships Windows zips its author builds but never runs on a card. **v0.18.0 (2026-11-12) runs here** since 2026-11-12
   (`F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.18.0-rtx3090`, `$Build` in `start-ninfer.ps1`; v0.17.1 and
-  Don-Chad's v0.16.1 stay beside it for rollback; their `run.bat` prints `FINDSTR: Cannot open >nul` ~84 times per
-  start, which `start-ninfer.ps1` no longer filters): same model file and profile, tool calls 5/5, JSON mode 3/3. It
+  Don-Chad's v0.16.1, kept for rollback until then, were deleted on 2026-11-23): same model file and profile, tool calls 5/5, JSON mode 3/3. It
   has the out-of-vocabulary crash fix we asked for in #410 (PR #412: the request fails, the server stays up) and the
   `run.bat` `FINDSTR` fix (ashalliants#434). New in v0.18.0: without `--api-key` a foreign `Origin` gets 403
   (tested; `127.0.0.1` and `localhost` pass); per its release notes other Host names need `NINFER_ALLOWED_HOST`. Upstream
   status, known bugs and which build has which fix are in the README section.
 - **Inkling 2 Mini runs through ninfer-all** (iamwavecut/ninfer-all, which carries the ninfer-3090 line on) since
-  2026-11-21: release `2026-11-21.4` (`$InklingBuild` in `start-ninfer.ps1`), artifact
-  `F:\AI\ninfer-3090\models\inkling2-iq4xs\` (UD-IQ4_XS, 15.4 GiB), 128K context with vision and
-  `--structured-output` on GPU 1 (22.9 GiB). Two-GPU profiles since the same day: `inkling2-mini-2gpu` (same file,
-  384K) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl\`, 262K). Only the routed experts split; the
-  KV cache stays whole on GPU 1, so GPU 1's free memory bounds the context. Each profile answers only under its own
+  2026-11-21; release `2026-11-23.9` since 2026-11-23 (`$InklingBuild` in `start-ninfer.ps1`; `2026-11-21.4` stays
+  beside it for rollback), artifact `F:\AI\ninfer-3090\models\inkling2-iq4xs\` (UD-IQ4_XS, 15.4 GiB), 256K context
+  with vision and `--structured-output` on GPU 1 (23.0 GiB). Two-GPU profiles: `inkling2-mini-2gpu` (same file,
+  768K, split 1,7) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl\`, 512K). Only the routed experts
+  split; the KV cache (MXFP8 since 2026-11-23.9, half of F16) stays whole on GPU 1, so GPU 1's free memory bounds the
+  context; RAM cannot extend it. Each profile answers only under its own
   model id (`inkling-2-mini[-2gpu|-q8]`), and Pi, VS Code and Hermes list all three. Measured against llama.cpp
-  b12613 the same day: about 2x the decode speed and 2.7x the prompt reads, and llama.cpp tops out at 64K on one card. Why it is not a router preset yet (open
-  llama.cpp #32740, #32752, #32718) and the other engines checked are in
+  b12613 the same day: about 2x the decode speed and 2.7x the prompt reads, and llama.cpp tops out at 64K on one card. Why it is not a router preset yet (llama.cpp
+  #32752, #32718 and #32751 open; #32740 merged 2026-11-23), the 2026-11-23.9 numbers and the other engines checked
+  (maya-inkling-mini, a vLLM 2x3090 image, Unsloth's runtime) are in
   [README.md](./README.md#inkling-2-mini-measured-2026-11-21). The tray's ninfer submenu has one item per
   `NinferModels` row in [tray/LlamaTray.cs](./tray/LlamaTray.cs) and names the running model from `/v1/models`.
   Qwen3.8-27B stays on v0.18.0; ninfer-all also serves it, untested here.

@@ -780,9 +780,9 @@ sealed class TrayApp : ApplicationContext
     static readonly NinferModel[] NinferModels =
     {
         new NinferModel("qwen38-27b", "Qwen3.8-27B on GPU 1", "qwen3.8-27b"),
-        new NinferModel("inkling2-mini", "Inkling 2 Mini on GPU 1", "inkling-2-mini", "UD-IQ4_XS, 128K, images"),
-        new NinferModel("inkling2-mini-2gpu", "Inkling 2 Mini on both GPUs", "inkling-2-mini-2gpu", "UD-IQ4_XS, 384K, images", true),
-        new NinferModel("inkling2-mini-q8", "Inkling 2 Mini Q8 on both GPUs", "inkling-2-mini-q8", "UD-Q8_K_XL, 262K, images", true),
+        new NinferModel("inkling2-mini", "Inkling 2 Mini on GPU 1", "inkling-2-mini", "UD-IQ4_XS, 256K, images"),
+        new NinferModel("inkling2-mini-2gpu", "Inkling 2 Mini on both GPUs", "inkling-2-mini-2gpu", "UD-IQ4_XS, 768K, images", true),
+        new NinferModel("inkling2-mini-q8", "Inkling 2 Mini Q8 on both GPUs", "inkling-2-mini-q8", "UD-Q8_K_XL, 512K, images", true),
     };
 
     StrataState strataState = StrataState.Stopped;
