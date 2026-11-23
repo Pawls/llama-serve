@@ -568,6 +568,18 @@ Release `2026-11-23.9` stores the KV cache of Inkling's eight full-attention vis
 
 Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x as fast. The one exception: the essay's 2k prompt read at 1,271-1,277 tok/s against 2,145-2,162 (the code prompt's 2k read did not drop). A code hidden in a 259,272-token prompt was found (`MAGENTA-7193-OTTER`, reasoning effort low) in 203 s, against 1,760 s for a 361,966-token prompt on the old build over both GPUs. GPU 1 peaked at 23,026 MiB, with no spill.
 
+**Greedy, with and without DSpark** (one GPU, 256K, `bench-depth.ps1 -Temperature 0`, one round each, an estimate; the rows above use the server's default temperature 1.0). Net tok/s:
+
+| | Code 2k / 51k | Essay 2k / 51k |
+|---|---|---|
+| `--spec none` | 105 / 94 | 105 / 95 |
+| DSpark (default) | 137 / 102 | 106 / 92 |
+| DSpark at temperature 1.0 (above) | 114 / 94-95 | 102-103 / 89 |
+
+Without drafts, decode is 105 tok/s at 2k and 94-95 at 51k. DSpark adds 30% on code at 2k when greedy, 9% at 51k, and nothing on the essay; at temperature 1.0 it adds less. GPU 1 holds 22.0 GiB with `--spec none` (the drafter is not loaded) against 23.0 GiB.
+
+**Long prompts over both GPUs** (768K profile, the needle test above, reasoning effort low): 370,730 tokens took 450 s and 699,323 tokens took 1,236 s, both answered correctly, with GPU 1 at 22,546 MiB and GPU 0 at 13.6 GiB at peak. Prompt reading slows with depth: about 410 tok/s near the end of the 699K prompt. On 2026-11-21.4, 361,966 tokens took 1,760 s.
+
 **Two GPUs**, one round each (an estimate), against the 2026-11-21 table above:
 
 | | GPU 1 / GPU 0 (desktop incl.) | Start log free | Code 2k / 51k | Essay 2k / 51k |
@@ -579,7 +591,7 @@ Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x
 - 1M (the model's trained length) starts only with `--kv-dtype rk8v4` (12.75 KiB a token) and split 1,7, leaving 282 MiB free: too tight under WDDM, so not installed.
 - RAM is not a way to more context for Inkling: ninfer-all keeps the whole cache on the first device (`--kv-resident` is Flash-Next only), and experts in host memory (`--expert-residency host`) roughly halve decode.
 - Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3, `response_format` JSON parses, and a solid red image is named red (GPU 1 at 23,040 MiB with the image on the one-GPU profile).
-- Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, start logs `logs\ink-arm-*.log`.
+- Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, `logs\ink-bench-greedy-{nospec,dspark}.console.txt`, `logs\ink-extra.console.txt` (370K and 699K prompts), start logs `logs\ink-arm-*.log`.
 
 **Other Inkling engines (checked 2026-11-23), none adopted:**
 
