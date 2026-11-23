@@ -20,11 +20,11 @@ $Q8KXL = 'models\inkling2-q8kxl\Inkling-2-Mini-UD-Q8_K_XL-ninfer-v3.ninfer'
 # Two GPUs divide only the routed experts (--tensor-parallel); the split puts most of them on GPU 0 to leave GPU 1
 # room for the cache: 768K starts only with 1,7 (1,3 is 71 MiB short). Measured 2026-11-23 (README § Inkling 2 Mini),
 # GPU 1 / GPU 0 with the desktop: 1 GPU 23.0 GiB; 2gpu 22.5 / 13.5 GiB; q8 21.8 / 15.6 GiB.
-$TwoGpus = '--devices 1,0 --tensor-parallel --tensor-split'
+$TwoGpus = '--devices 1,0 --tensor-parallel'
 $Inkling = @{
     'inkling2-mini'      = @{ File = $IQ4XS; Context = 262144; Gpus = '' }
-    'inkling2-mini-2gpu' = @{ File = $IQ4XS; Context = 786432; Gpus = "$TwoGpus 1,7" }
-    'inkling2-mini-q8'   = @{ File = $Q8KXL; Context = 524288; Gpus = "$TwoGpus 1,3" }
+    'inkling2-mini-2gpu' = @{ File = $IQ4XS; Context = 786432; Gpus = "$TwoGpus --tensor-split 1,7" }
+    'inkling2-mini-q8'   = @{ File = $Q8KXL; Context = 524288; Gpus = "$TwoGpus --tensor-split 1,3" }
 }
 $LogDir = Join-Path $PSScriptRoot 'logs'
 $Log    = Join-Path $LogDir 'ninfer.log'

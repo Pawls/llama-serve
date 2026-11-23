@@ -184,8 +184,8 @@ Other moving parts:
   1,798 -> 2,097 tok/s with `--pipeline-windows 2`. Measured here 2026-10-18 on `layer_split: auto`: dropping
   `--remote-expert-opt` changes nothing (inert, as upstream says), and `--pipeline-windows 2` adds 6-11% decode on code
   and nothing on prose or prefill (on 0.1.44.1; on 0.1.55 it adds nothing). `--adapt-async 1` is on Swift since 2026-11-02 (see "Untried levers" below).
-- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, in
-  `F:\AI\ninfer-3090`) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
+- **ninfer** (Neroued/ninfer) is Linux and RTX 5090 only. Its fork Don-Chad/ninfer-3090 (v0.16.1, deleted
+  2026-11-23) has Windows sm_86 builds and its own `.ninfer` weights (not GGUF), one GPU per model. Measured
   2026-10-18 (one round each, not interleaved, so an estimate): Qwen3.8-27B on GPU 1 decodes 204 / 171 / 146 tok/s on code at 2k / 52k / 128k against 81 / 63 / 52 for the
   router's `qwen3.8-27b-dflash2`, on a ~4-bit conversion (17.2 GiB) against UD-Q5_K_XL; quality was not compared.
   Flash-Next does not start on this PC (it must pin 34.7 GiB of host memory, which Windows maps into a GPU address

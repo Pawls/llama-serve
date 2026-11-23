@@ -461,7 +461,7 @@ The two rows are not the same model file:
 
 ### ashalliants v0.17.1 on Windows (measured 2026-11-02)
 
-ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine with no NVIDIA GPU and never run, runs here. It is installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090` (CUDA 12.8 libraries, against CUDA 13 in Don-Chad's build); the zip's SHA-256 and all 21 inner checksums matched. Launched with the environment `start-ninfer.ps1` now sets, it reaches `/health` 200 in 8-13 s on GPU 1, loads the existing `models\qwen3_8_27b.ninfer` without a download, and starts with the same profile as v0.16.1 (188k context, rk4v4, DFlash2 K=7, 22.1 GiB on the card).
+ashalliants's v0.17.1 Windows zip, which its notes say was built on a machine with no NVIDIA GPU and never run, runs here. It was installed in `F:\AI\ninfer-3090\ninfer-rtx3090-windows-x64-0.17.1-rtx3090` until 2026-11-23 (CUDA 12.8 libraries, against CUDA 13 in Don-Chad's build); the zip's SHA-256 and all 21 inner checksums matched. Launched with the environment `start-ninfer.ps1` now sets, it reaches `/health` 200 in 8-13 s on GPU 1, loads the existing `models\qwen3_8_27b.ninfer` without a download, and starts with the same profile as v0.16.1 (188k context, rk4v4, DFlash2 K=7, 22.1 GiB on the card).
 
 - **Tool calls** 5/5 (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8412 -Model qwen3.8-27b -Runs 5`; with the router stopped, `-Model` is required). **JSON mode** works: 3/3 `json_object` replies parse.
 - **Speed is the same as v0.16.1.** `bench-depth.ps1`, thinking off, 3 rounds per build interleaved (0.17.1 first), 5 measured runs per cell; net t/s, median of the three round medians:
@@ -500,9 +500,9 @@ Thinking Machines' Inkling 2 Mini is a looped MoE: 26.4B parameters, 3.4B active
 
 **Start it** from the tray (**Start ninfer → Inkling 2 Mini on GPU 1 / on both GPUs / Q8 on both GPUs**) or with `.\start-ninfer.ps1 -Model <profile>`. It shares port 8412 and the start/stop rules of [ninfer-3090](#ninfer-3090-measured-2026-10-18): starting it stops the router and Strata, and stopping it from the tray starts the router again. It answers in about 7-10 s. Three profiles, each with images and JSON mode, each answering only under its own model id (ninfer refuses any other name with `model_not_found`):
 
-| Profile (`-Model`) | Model id | Weights | GPUs | Context | Code decode 2k / 51k |
+| Profile (`-Model`) | Model id | Weights | GPUs | Context | Code, net tok/s 2k / 51k |
 |---|---|---|---|---|---|
-| `inkling2-mini` | `inkling-2-mini` | UD-IQ4_XS | GPU 1 | 256K | 114 / 95 |
+| `inkling2-mini` | `inkling-2-mini` | UD-IQ4_XS | GPU 1 | 256K | 114 / 94-95 |
 | `inkling2-mini-2gpu` | `inkling-2-mini-2gpu` | UD-IQ4_XS | both | 768K | 100 / 80 |
 | `inkling2-mini-q8` | `inkling-2-mini-q8` | UD-Q8_K_XL | both | 512K | 75 / 65 |
 
@@ -510,7 +510,7 @@ Contexts and speeds are those of ninfer-all 2026-11-23.9 ([below](#ninfer-all-20
 
 What runs:
 
-- **Engine:** [iamwavecut/ninfer-all](https://github.com/iamwavecut/ninfer-all) release `2026-11-23.9` (commit `5fdefb3`) since 2026-11-23, the Windows CUDA 12.9 package, unpacked into `F:\AI\ninfer-3090\ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-5fdefb3764c9` (all 73 inner checksums matched). Release `2026-11-21.4` (`bd8195f`), measured below, stays beside it for rollback (`$InklingBuild` in `start-ninfer.ps1`). ninfer-all continues the ninfer-3090 line and also serves Qwen3.8-27B, but `start-ninfer.ps1` keeps Qwen on v0.18.0 (not re-measured on ninfer-all). The release notes say this Windows package was not run on a GPU before release; it runs here. Both archive parts and all 73 inner checksums matched.
+- **Engine:** [iamwavecut/ninfer-all](https://github.com/iamwavecut/ninfer-all) release `2026-11-23.9` (commit `5fdefb3`) since 2026-11-23, the Windows CUDA 12.9 package, unpacked into `F:\AI\ninfer-3090\ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-5fdefb3764c9` (all 73 inner checksums matched). Release `2026-11-21.4` (`bd8195f`), measured below, stays beside it for rollback (`$InklingBuild` in `start-ninfer.ps1`). ninfer-all continues the ninfer-3090 line and also serves Qwen3.8-27B, but `start-ninfer.ps1` keeps Qwen on v0.18.0 (not re-measured on ninfer-all). The release notes of both say their CI does not run inference on a GPU; both run here. For 2026-11-21.4, both archive parts also matched.
 - **Weights:** `F:\AI\ninfer-3090\models\inkling2-iq4xs\Inkling-2-Mini-UD-IQ4_XS-ninfer-v3.ninfer` (15.4 GiB, SHA-256 `a4a1bbfb…`), from [WaveCut/Inkling-2-Mini-UD-IQ4_XS-NInfer-v3](https://huggingface.co/WaveCut/Inkling-2-Mini-UD-IQ4_XS-NInfer-v3): Unsloth's UD-IQ4_XS GGUF blocks unchanged, plus the vision tower and the DSpark drafter.
 - **Flags** (`start-ninfer.ps1`): `--max-context 262144 --vision --structured-output`. With them, the start log says `free 536.0 MiB` and GPU 1 holds 23.0 GiB, also with a 259k-token prompt. The KV cache is MXFP8 (16.5 KiB per token; on 2026-11-21.4 it was F16 only, 32 KiB, and this profile held 128K). DSpark drafting is on by default for one request at a time. `--structured-output` makes `response_format` JSON work; without it the request gets HTTP 400.
 - **Checks:** tool calls 5/5, plus 3/3 and 2/2 on later starts (`test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8412 -Model inkling-2-mini`); JSON mode parses; a red test image is named red; a code hidden in 7k-, 44k- and 122k-token prompts was found each time (the 122k prompt took 218 s).
@@ -534,13 +534,13 @@ Logs: `logs\inkling-bench-ninfer-all.console.txt`, `logs\inkling-bench-llama-b12
 | 2 GPUs, UD-Q8_K_XL, 262K, split 1,3 | 20.4 / 18.9 GiB | 75 / 49 | 53 / 43 |
 
 - **384K is near the ceiling:** the start log leaves 1.31 GiB of GPU 1 free. A code hidden in a 361,966-token prompt was found (`MAGENTA-7193-OTTER`, reasoning effort low); reading it took 1,760 s (206 tok/s on average, since attention cost grows with depth). The model is trained to 1M tokens (`n_ctx_train 1048576`), but 1M needs 32 GiB of F16 cache on one card.
-- **UD-Q8_K_XL** (`F:\AI\ninfer-3090\models\inkling2-q8kxl\`, 22.06 GiB, SHA-256 `9272016b…`, from [WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3](https://huggingface.co/WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3)) is BF16 everywhere except the routed experts of layers 0-19, which stay NVFP4 as in the release, so it is the closest to the original weights. It does not fit one card with any useful context. The gain is small: Unsloth measures UD-IQ4_XS at a mean KL divergence of 0.0109 from it and the same top token 97.7% of the time, and ninfer-all's WikiText perplexity differs by 0.11%. Its 262K leaves ~3.7 GiB of GPU 1 free and GPU 0 at 18.9 GiB; more context would push GPU 0 past its desktop budget. Pick it for quality-sensitive work that fits 262K, not for speed.
+- **UD-Q8_K_XL** (`F:\AI\ninfer-3090\models\inkling2-q8kxl\`, 22.06 GiB, SHA-256 `9272016b…`, from [WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3](https://huggingface.co/WaveCut/Inkling-2-Mini-UD-Q8_K_XL-NInfer-v3)) is BF16 everywhere except the routed experts of layers 0-19, which stay NVFP4 as in the release, so it is the closest to the original weights. It does not fit one card with any useful context. The gain is small: Unsloth measures UD-IQ4_XS at a mean KL divergence of 0.0109 from it and the same top token 97.7% of the time, and ninfer-all's WikiText perplexity differs by 0.11%. On 2026-11-21.4 its 262K left ~3.7 GiB of GPU 1 free and GPU 0 at 18.9 GiB (512K since 2026-11-23.9, below). Pick it for quality-sensitive work, not for speed.
 - Checks: tool calls 3/3 on both two-GPU profiles; images and JSON mode were checked on the one-GPU profile only (same server flags).
 - Logs: `logs\bench-depth-20261121-1818.txt` (split 1,1), `-1900.txt` (Q8), `-1909.txt` (384K), `logs\ink2gpu-*.log` (start logs of the trial runs).
 
 **Why not the router yet.** llama.cpp added Inkling 2 on 2026-11-20 (ggml-org/llama.cpp#32694). Its loop fix (#32704, without which Unsloth measured perplexity ~130 instead of 7.65) merged on 2026-11-21, so b12613 is the first prebuilt that runs it correctly. It works (tool calls 3/3 on b12613), but:
 
-- Inkling's attention has a per-position bias that llama.cpp's flash attention does not take yet (#32740, open), so it builds the whole attention matrix. On GPU 1 that is a 6.5 GiB compute buffer at 64K with `-ub 512`, which does not fit beside the 16 GiB model; `-ub 256` fits at 64K (21.1 GiB on the card). #32752 (open) shrinks it.
+- Inkling's attention has a per-position bias that llama.cpp's flash attention did not take on b12613 (#32740, merged 2026-11-23, not yet in a build tested here), so it builds the whole attention matrix. On GPU 1 that is a 6.5 GiB compute buffer at 64K with `-ub 512`, which does not fit beside the 16 GiB model; `-ub 256` fits at 64K (21.1 GiB on the card). #32752 (open) shrinks it.
 - Over both GPUs, `-sm layer` decoded 14 tok/s (2026-11-20), because the second and third passes of a looped layer keep their state on the other card (#32718, open). Tensor split for Inkling is #32751 (open).
 - Experts on the CPU (`--n-cpu-moe`) give garbage output on looped layers (#32710, #32755). Full GPU offload, as here, is not affected.
 
@@ -578,8 +578,8 @@ Decode is 3-9% faster at 2k and 21-39% faster at 51k, and long prompts read 2.1x
 - 768K does not start with split 1,3: the workspace and CUDA graphs need 71 MiB more than GPU 1 has left. Split 1,7 keeps 16 of the 128 routed experts on GPU 1 and 112 on GPU 0.
 - 1M (the model's trained length) starts only with `--kv-dtype rk8v4` (12.75 KiB a token) and split 1,7, leaving 282 MiB free: too tight under WDDM, so not installed.
 - RAM is not a way to more context for Inkling: ninfer-all keeps the whole cache on the first device (`--kv-resident` is Flash-Next only), and experts in host memory (`--expert-residency host`) roughly halve decode.
-- Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3 and `response_format` JSON parses. Images were not rechecked on this build.
-- Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-needle-256k-vram.txt`, start logs `logs\ink-arm-*.log`.
+- Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3, `response_format` JSON parses, and a solid red image is named red (GPU 1 at 23,040 MiB with the image on the one-GPU profile).
+- Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, start logs `logs\ink-arm-*.log`.
 
 **Other Inkling engines (checked 2026-11-23), none adopted:**
 
