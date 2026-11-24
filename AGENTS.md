@@ -129,7 +129,7 @@ Other moving parts:
   2026-11-01 (Paul's call, for disk space); its shard 2 was a hardlink of IQ3_XXS's, so only shard 1 and the pack went.
   The four-arm bench that chose the default is in
   [README.md](./README.md#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01).
-  `F:\AI\strata\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
+  `F:\AI\strata\terminal\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
   has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked
   for; numbers in [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). It had
   `--pipeline-windows 2` until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below), and has
@@ -146,7 +146,7 @@ Other moving parts:
   a third to a half of IQ3_XXS's speed; with it the copy was 23.15 GiB, fully page-locked, on 2026-11-02 (not on
   engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below), and prompts read 9-22% faster
   ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
-  from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
+  from `F:\AI\strata\terminal\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
   since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
@@ -171,9 +171,10 @@ Other moving parts:
   split left the desktop card (Strata's CUDA1) with 160 MiB free and the start log said so ("CUDA1: 160 MiB of VRAM
   free ... LOW", under WDDM a full card pages). `--vram-reserve-later-mib 1308`, the value that log line suggests,
   restored it to 170 / 158 / 152, and `--pipeline-windows 2` on top gave 188 / 168 / 162. Table and method in
-  [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or `SETUP.bat`, read the
+  [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or setup run (`START-HERE.bat`), read the
   `VRAM free with everything loaded` lines in the start log; a "LOW" there means the desktop card needs a larger
-  reserve.** The engine an update replaced is kept in `F:\AI\strata\terminal\engine\.previous` (0.1.57 since 2026-11-13);
+  reserve.** The engine an update replaced is kept in `F:\AI\strata\terminal\engine\.previous` (0.1.57 since 2026-11-13; the 0.2.20 move left it in the root's
+  `engine\.previous`, where `--rollback-engine` cannot see it, and it was moved by hand on 2026-11-23);
   `python setup.py --rollback-engine` restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
   only when a message quotes `</tool_call>`. What 0.1.43.1-0.1.44.1 changed for this PC: Windows watchdog fixes for
   long prompts and conversation parking, that `</tool_call>` fix, fenced-JSON tool calls recovered, and the auto

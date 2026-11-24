@@ -6,10 +6,11 @@ $ErrorActionPreference = 'Stop'
 $Strata = 'http://127.0.0.1:8411'   # "port" in every F:\AI\strata\terminal\strata-*.json
 
 # A venv's python.exe is a redirector that starts the real interpreter as a child, so match the command line,
-# not the exe path. The engine and vision encoder sit in the server's job object and end with it.
+# not the exe path. The engine and vision encoder sit in the server's job object and end with it. The wildcard also
+# matches a server started before Strata 0.2.20 moved it under terminal\.
 function Get-StrataServers {
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
-        Where-Object { $_.CommandLine -like '*F:\AI\strata\terminal\serve\server.py*' }
+        Where-Object { $_.CommandLine -like '*F:\AI\strata\*serve\server.py*' }
 }
 function Test-StrataRunning {
     [bool]((Get-StrataServers) -or

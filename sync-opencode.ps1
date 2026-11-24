@@ -9,7 +9,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$Config = (Join-Path $HOME '.config\opencode\opencode.jsonc'),
-    [string]$StrataDir = 'F:\AI\strata\terminal',
+    [string]$StrataDir = (& { . (Join-Path $PSScriptRoot 'strata-dir.ps1'); $StrataDir }),
     # Catalog providers opencode would otherwise connect from environment variables (models.dev ids).
     [string[]]$DisableProviders = @('cloudflare-ai-gateway', 'cloudflare-workers-ai', 'huggingface')
 )

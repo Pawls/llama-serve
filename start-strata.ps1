@@ -3,7 +3,7 @@
 param([string]$Model = 'swift-iq3_s')
 $ErrorActionPreference = 'Stop'
 
-$StrataDir = 'F:\AI\strata\terminal'   # since Strata 0.2.20 its configs, engine and venv live under terminal\
+. (Join-Path $PSScriptRoot 'strata-dir.ps1')
 $RunScript = Join-Path $StrataDir "run-$Model.bat"
 $LogDir    = Join-Path $PSScriptRoot 'logs'
 $Log       = Join-Path $LogDir 'strata.log'

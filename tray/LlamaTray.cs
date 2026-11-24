@@ -173,7 +173,7 @@ enum StrataState { Stopped, Starting, Unloaded, Loaded }
 // One installed Strata size. A server serves one size, fixed when it starts.
 sealed class StrataSize
 {
-    const string StrataDir = @"F:\AI\strata\terminal";   // start-strata.ps1's $StrataDir
+    const string StrataDir = @"F:\AI\strata\terminal";   // strata-dir.ps1's $StrataDir
 
     public readonly string Script;       // start-strata.ps1's -Model value
     public readonly string Label;
