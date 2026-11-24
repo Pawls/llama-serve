@@ -50,7 +50,7 @@ if ($Inkling.ContainsKey($Model)) {
     if (-not (Test-Path $TokenFile)) { [guid]::NewGuid().ToString('N') | Set-Content -NoNewline $TokenFile }
     $Command = "`"$Server`" `"$Artifact`" --model-id $($Model -replace '^inkling2', 'inkling-2')" +
         " --host 127.0.0.1 --port 8412 --max-context $($Spec.Context) --vision --structured-output $($Spec.Gpus)" +
-        " --host-cache-mib 24576 --prefix-cache-file `"$CacheFile`" --admin-token $(Get-Content -Raw $TokenFile)"
+        " --host-cache-mib 20480 --prefix-cache-file `"$CacheFile`" --admin-token $(Get-Content -Raw $TokenFile)"
 } else {
     $RunScript = Join-Path $NinferDir "$Build\run.bat"
     if (-not (Test-Path $RunScript)) { throw "$RunScript not found." }
