@@ -35,6 +35,10 @@
 - **Files already in place:** `F:\AI\Strata-data\models\inkling-2-mini` holds `Inkling-2-Mini-SQ-20.strata` and
   `Inkling-2-Mini-Vision.strata` (SHA-256 checked against the repo's `SHA256SUMS.txt` on 2026-11-23) and the
   tokenizer files. Point setup at them; do not download again.
+- **Only `max_tokens` stops a runaway think.** Upstream reports that `reasoning_budget_tokens` and `answer_room` do
+  nothing for Inkling (PR #6869, open), and stock Strata has thought silently for ~100k tokens in one agent reply.
+  Send a `max_tokens` with every bench and probe request, and give the Inkling model a `maxTokens` in Pi before a
+  long session. Not yet seen on this PC; S1 checks it.
 - **The override fails loudly** if Strata's run script stops naming `terminal\serve\server.py` (start-strata.ps1
   throws), and it patches nothing once `serve.inkling_dialect` has `server_effort` (upstream PR #6955) or no longer
   turns `high` into `none`; its `[inkling_thinking]` line in `logs\strata.log` says which.
@@ -63,6 +67,8 @@
       answer; one with `"none"` returns no reasoning; one with no effort thinks (default `low`).
 - [ ] `.\test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` passes; images (a red test picture
       named red) and JSON mode work.
+- [ ] Thinking cap: a request at `high` with `reasoning_budget_tokens: 500` and `max_tokens: 4000` on a hard
+      problem; record whether the thinking stops near 500 or runs to `max_tokens` (PR #6869 says the latter).
 - [ ] `.\stop-strata.ps1` stops it: no `strata-inkling` process left, both cards back near idle.
 - [ ] Prompt reuse: two Pi turns in one conversation (Pi's `strata` provider replays `reasoning_content`); the
       second turn's `cached_tokens` covers the first prompt.
