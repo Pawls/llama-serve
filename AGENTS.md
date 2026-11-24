@@ -19,7 +19,10 @@ configs, launch scripts and a tray app. It does not contain any inference engine
 | Autostart | Yes, through the tray | No, on purpose (see Strata below) |
 
 **Strata is not this repo and not llama.cpp.** `F:\AI\strata` is a clone of the upstream repo (remote
-`Niko1221/Strata`) with the user's generated configs beside it. Never commit there, and do not edit its source. This repo
+`Niko1221/Strata`) with the user's generated configs in it. Since code 0.2.20 (2026-11-23) the configs (`strata-*.json`,
+`run-*.bat`), engine logs, `engine\`, `.venv`, `setup.py`, `strata.py` and `serve\` live in `F:\AI\strata\terminal`;
+`UPDATE.bat`, `START-HERE.bat` and `docs\` stay at the root, and the `run-*.bat` still `cd` to the root, so the relative
+`expert_profile_save` file stays there. Never commit there, and do not edit its source. This repo
 only launches it ([start-strata.ps1](./start-strata.ps1), [stop-strata.ps1](./stop-strata.ps1)) and coordinates GPU use
 with the router. Strata ships its own agent docs: `F:\AI\strata\AGENTS.md`, `docs\TROUBLESHOOTING.md`,
 `docs\DETAILS.md` (engine internals, every setting), `docs\MULTI_GPU.md`, `docs\AI_SETUP.md`.
@@ -38,7 +41,7 @@ Clients that consume these servers (none of their configs are in this repo):
 - **VS Code chat**: `%APPDATA%\Code\User\chatLanguageModels.json`, generated from `presets.ini`. Adding a preset means
   adding an entry there too. The **Strata** and **ninfer** (Inkling 2 Mini) groups were added by hand.
 - **opencode**: `~\.config\opencode\opencode.jsonc` has no model discovery, so [sync-opencode.ps1](./sync-opencode.ps1)
-  regenerates its three providers (router, Strata, ninfer) from `presets.ini`, `F:\AI\strata\strata-*.json` and the
+  regenerates its three providers (router, Strata, ninfer) from `presets.ini`, `F:\AI\strata\terminal\strata-*.json` and the
   `$Inkling` table in `start-ninfer.ps1`. Rerun it after changing any of them and restart opencode. Display names
   persist per id; a new preset gets an auto name until edited in the file.
 - llama.cpp's own chat page at `http://127.0.0.1:8410/`.
@@ -71,7 +74,7 @@ Clients that consume these servers (none of their configs are in this repo):
 Windows logon task "llama-router"
   -> tray\bin\LlamaTray.exe (single instance, polls every 2 s)
        -> start-router.ps1 -> llama-server router :8410 -> child llama-server per model (presets.ini)
-       -> start-strata.ps1 -> F:\AI\strata\run-<size>.bat -> Strata server :8411 (user starts it by hand)
+       -> start-strata.ps1 -> F:\AI\strata\terminal\run-<size>.bat -> Strata server :8411 (user starts it by hand)
        -> start-ninfer.ps1 -> F:\AI\ninfer-3090\<build>\run.bat -> ninfer-serve :8412, GPU 1 or both (user starts it)
                              (-Model inkling2-mini[-2gpu|-q8]: ninfer-all's ninfer-serve directly; -2gpu, -q8 use both GPUs)
 ```
@@ -81,7 +84,7 @@ and the router (the router itself, since any client request would load a two-GPU
 `start-router.ps1` and `start-strata.ps1` run `stop-ninfer.ps1` first. The tray starts the router again when ninfer
 stops, if the tray had stopped it for ninfer. Between the router and Strata, two hooks enforce it:
 
-- Strata to router: `before_load` in `F:\AI\strata\strata-<size>.json` runs [unload-router-model.ps1](./unload-router-model.ps1)
+- Strata to router: `before_load` in `F:\AI\strata\terminal\strata-<size>.json` runs [unload-router-model.ps1](./unload-router-model.ps1)
   before Strata loads, and waits until the router child is gone.
 - Router to Strata: the router has no such hook. The **tray** notices a router model loading while Strata is loaded
   and unloads Strata. While Strata's engine process is up but `/health` still says not loaded (a client request or
@@ -126,7 +129,7 @@ Other moving parts:
   2026-11-01 (Paul's call, for disk space); its shard 2 was a hardlink of IQ3_XXS's, so only shard 1 and the pack went.
   The four-arm bench that chose the default is in
   [README.md](./README.md#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01).
-  `F:\AI\strata\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
+  `F:\AI\strata\terminal\strata-iq3_xxs.json` runs both GPUs with `layer_split: auto`, 262k context, int8 KV, images on, and
   has `--vram-reserve-later-mib 1310` and `--vram-reserve-mib 1344` (2026-10-19, each the value its start log asked
   for; numbers in [README.md](./README.md#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19)). It had
   `--pipeline-windows 2` until 2026-11-01, when engine 0.1.55 made it worthless (see "Engine 0.1.55" below), and has
@@ -143,7 +146,7 @@ Other moving parts:
   a third to a half of IQ3_XXS's speed; with it the copy was 23.15 GiB, fully page-locked, on 2026-11-02 (not on
   engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below), and prompts read 9-22% faster
   ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
-  from `F:\AI\strata\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
+  from `F:\AI\strata\terminal\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
   since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
 - **Unsloth UD-Q4_K_XL** (4-bit, 111 GB in `F:\AI\Strata-data\models\unsloth-UD-Q4_K_XL`) was installed on
   2026-11-01 by `setup.py --family unsloth --model UD-Q4_K_XL --gpus 0,1 --no-start`; it left the two configs
@@ -160,17 +163,18 @@ Other moving parts:
   0.115 in budget mode) and a CPU picture reader to free ~1.3 GB of VRAM for experts.
 - Strata is not started at login because loading locks 17-36 GiB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
-- Installed engine version: `"version"` in `F:\AI\strata\engine\BUILD.json`. The `session is up (engine X)` line in
-  `F:\AI\strata\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
+- Installed engine version: `"version"` in `F:\AI\strata\terminal\engine\BUILD.json`. The `session is up (engine X)` line in
+  `F:\AI\strata\terminal\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.
 - **Engine 0.1.44.1 was installed on 2026-10-16 (from 0.1.43) and benched on 2026-10-18; 0.1.43 never was.** The
   installed IQ2_XS config decoded 52 tok/s on code at every depth (133 / 130 / 117 on 2026-10-04) because the auto
   split left the desktop card (Strata's CUDA1) with 160 MiB free and the start log said so ("CUDA1: 160 MiB of VRAM
   free ... LOW", under WDDM a full card pages). `--vram-reserve-later-mib 1308`, the value that log line suggests,
   restored it to 170 / 158 / 152, and `--pipeline-windows 2` on top gave 188 / 168 / 162. Table and method in
-  [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or `SETUP.bat`, read the
+  [README.md](./README.md#engine-01441-measured-2026-10-18). **After any engine update or setup run (`START-HERE.bat`), read the
   `VRAM free with everything loaded` lines in the start log; a "LOW" there means the desktop card needs a larger
-  reserve.** The engine an update replaced is kept in `F:\AI\strata\engine\.previous` (0.1.57 since 2026-11-13);
+  reserve.** The engine an update replaced is kept in `F:\AI\strata\terminal\engine\.previous` (0.1.57 since 2026-11-13; the 0.2.20 move left it in the root's
+  `engine\.previous`, where `--rollback-engine` cannot see it, and it was moved by hand on 2026-11-23);
   `python setup.py --rollback-engine` restores it. Upstream says GSQ-RCO answers (IQ2_XS, IQ3_XXS) are byte-identical to 0.1.43.1, which differs from 0.1.43
   only when a message quotes `</tool_call>`. What 0.1.43.1-0.1.44.1 changed for this PC: Windows watchdog fixes for
   long prompts and conversation parking, that `</tool_call>` fix, fenced-JSON tool calls recovered, and the auto
@@ -242,10 +246,13 @@ Other moving parts:
   the dropped `strata-windows-x64.zip`) is no longer needed.
   **Since 0.2.10 `UPDATE.bat` no longer brings a newer engine**: setup fetches one only when the installed engine is
   older than `MIN_ENGINE`, which stayed at 0.1.46. On 2026-11-13 it moved the code from v0.2.11-4 to
-  v0.2.13.1-160 and left engine 0.1.57. To install the feed's newest engine the way setup does (test start, old
-  engine kept in `engine\.previous`), run with `F:\AI\strata\.venv\Scripts\python.exe`:
-  `import sys; sys.path.insert(0, r'F:\AI\strata'); import setup; from pathlib import Path;
-  setup.engine_from_feed(Path(r'F:\AI\strata\engine'), updating=True)`. `strata.py update --check --no-control`
+  v0.2.13.1-160 and left engine 0.1.57. On 2026-11-23 it moved the code to v0.2.20 (`6a6db7ff5`), moved the user
+  files into `terminal\` (above), rewrote every config's paths to match and left engine 0.1.59; the feed (sequence 132)
+  offers 0.1.66. The engine's test start loads an installed model and generates one token, so it needs the GPUs free.
+  To install the feed's newest engine the way setup does (test start, old
+  engine kept in `engine\.previous`), run with `F:\AI\strata\terminal\.venv\Scripts\python.exe`:
+  `import sys; sys.path.insert(0, r'F:\AI\strata\terminal'); import setup; from pathlib import Path;
+  setup.engine_from_feed(Path(r'F:\AI\strata\terminal\engine'), updating=True)`. `strata.py update --check --no-control`
   shows what the feed offers. **Every `setup.py --update` rewrites a `--prefill 2048` to `auto`**
   (`upgrade_config`), so UD-Q4_K_XL's must be put back after each update. Untried: upstream documents
   `--prefill auto:N` and `STRATA_PREFILL_AUTO_MAX` as left alone by `upgrade_config` (`docs\DETAILS.md`); if one gives
@@ -350,7 +357,7 @@ Other moving parts:
     ([README.md](./README.md#swift-15-with-strata_exchange_rotate1-measured-2026-11-02)).
   - Hit rate: `--vision cpu` with a Q8_0 mmproj frees ~1.4 GB of VRAM (~1,000 experts, 2-8% decode upstream) at
     ~3 s per picture (not approved by Paul). `--draft-vocab en`: ~110 MiB VRAM, English 1-2% faster, no CJK drafts.
-  - Pinning: granting "Lock pages in memory" (`F:\AI\strata\tools\windows\enable_large_pages.ps1` as admin, then log
+  - Pinning: granting "Lock pages in memory" (`F:\AI\strata\terminal\tools\windows\enable_large_pages.ps1` as admin, then log
     off and on) is what large pages need; whether it helps Swift's refused pin is unknown.
   - Quality: `STRATA_ROUTE_TAIL_SKIP=0` (see the 0.1.40-0.1.43 bullet above; upstream KL 0.003-0.006 on one GPU,
     0.053 -> 0.115 on UD-Q4_K_XL's budget mode).
@@ -388,7 +395,7 @@ There is no unit-test suite. Verification is running the real thing:
 | Editing the tray or the switching logic | Run `install-tray.ps1`, then exercise it. Script-reachable parts first (status endpoints, the scripts the tray calls). The GPU handover between router and Strata was verified 2026-10-04 with 3 switches each way. |
 
 Logs: `logs\server.log` (router; `server.prev.log` is the previous boot), `logs\strata.log` (the launcher's capture),
-`F:\AI\strata\strata-<size>.log` (engine). Router status:
+`F:\AI\strata\terminal\strata-<size>.log` (engine). Router status:
 `Invoke-RestMethod http://127.0.0.1:8410/models | % data | select id, @{n='status';e={$_.status.value}}`.
 
 ## Plans in flight

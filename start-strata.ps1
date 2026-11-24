@@ -3,12 +3,12 @@
 param([string]$Model = 'swift-iq3_s')
 $ErrorActionPreference = 'Stop'
 
-$StrataDir = 'F:\AI\strata'
+. (Join-Path $PSScriptRoot 'strata-dir.ps1')
 $RunScript = Join-Path $StrataDir "run-$Model.bat"
 $LogDir    = Join-Path $PSScriptRoot 'logs'
 $Log       = Join-Path $LogDir 'strata.log'
 
-if (-not (Test-Path $RunScript)) { throw "$RunScript not found. Install the model with $StrataDir\SETUP.bat first." }
+if (-not (Test-Path $RunScript)) { throw "$RunScript not found. Install the model with F:\AI\strata\START-HERE.bat first." }
 
 . (Join-Path $PSScriptRoot 'tray-settings.ps1')
 if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). Strata uses both GPUs; untick it first.' }

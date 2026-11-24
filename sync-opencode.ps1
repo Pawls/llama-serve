@@ -3,13 +3,13 @@
 # the file (mcp, ...) and keeps a model's display name when the file already has one for that id.
 #   .\sync-opencode.ps1            write ~\.config\opencode\opencode.jsonc (restart opencode to pick it up)
 #   .\sync-opencode.ps1 -WhatIf    print what would change, write nothing
-# Sources: presets.ini (router: ctx-size, mmproj, reasoning, chat-template-kwargs), F:\AI\strata\strata-*.json
+# Sources: presets.ini (router: ctx-size, mmproj, reasoning, chat-template-kwargs), F:\AI\strata\terminal\strata-*.json
 # (Strata: model_name, --max-context) and the $Inkling table in start-ninfer.ps1 (ninfer: context, GPUs, file).
 # Run it after editing any of those. Strata's and ninfer's start-up scripts stay the owners of those values.
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$Config = (Join-Path $HOME '.config\opencode\opencode.jsonc'),
-    [string]$StrataDir = 'F:\AI\strata',
+    [string]$StrataDir = (& { . (Join-Path $PSScriptRoot 'strata-dir.ps1'); $StrataDir }),
     # Catalog providers opencode would otherwise connect from environment variables (models.dev ids).
     [string[]]$DisableProviders = @('cloudflare-ai-gateway', 'cloudflare-workers-ai', 'huggingface')
 )
