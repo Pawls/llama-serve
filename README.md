@@ -593,6 +593,14 @@ Without drafts, net speed is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark ad
 - Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3, `response_format` JSON parses, and a solid red image is named red (GPU 1 at 23,040 MiB with the image on the one-GPU profile).
 - Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, `logs\ink-bench-greedy-{nospec,dspark}.console.txt`, `logs\ink-extra.console.txt` (370K and 699K prompts), start logs `logs\ink-arm-*.log`.
 
+### Inkling's context cache: host budget and cache file (2026-11-23)
+
+Inkling keeps one sequence; when a request ends its state is copied to a pinned host-RAM image, and the next request resumes from it (`cache N (100%, turn closure)` in the log). The default host budget is 8 GiB, and a 379k-token image is ~6 GiB. In one 768K session (opencode, thinking high) requests #86, #88 and #143 each re-read their whole prompt (3 min at 195k, 7 min 50 s at 379k) with `cache 0`, while the prompts had only grown by 1-3k tokens; `/metrics` then showed `ninfer:context_occupancy{pool="host_kv_bytes"}` at 7.76 GiB of 8. That the full budget caused the misses is likely, not proven.
+
+- `start-ninfer.ps1` now passes `--host-cache-mib 20480` (up to 20 GiB of pinned RAM, taken as images are stored) and `--prefix-cache-file F:\AI\ninfer-3090\cache\<profile>.pfx`, which saves the host cache at a clean stop and restores it at the next start of the same profile and build.
+- The save happens only on a graceful stop, so `stop-ninfer.ps1` sends `POST /shutdown` (the server's `--admin-token`, kept in `logs\ninfer-admin-token`) and waits up to 300 s before it falls back to a kill. A killed server, or one started without the token, writes no file.
+- Checked 2026-11-23 with a 10,280-token prompt: first request `cache 0`, stop in 3.6 s with `prefix cache saved: 4 images, 1666.9 MiB`, restart restoring them in 1.1 s, the same prompt then `cache 10,279 (100.0%)`. Not yet seen with a 379k conversation; the file may be up to the budget in size.
+
 **Other Inkling engines (checked 2026-11-23), none adopted:**
 
 - **Unsloth's "1.9x faster" (2026-11-23)** applies only to Unsloth's own desktop runtime: the updated GGUFs load in llama.cpp without the speedup. Its 125 tok/s is on an RTX Pro 6000; ninfer-all's own measurement of 1.9x over llama.cpp on a 3090 is the same gain, already in use here.

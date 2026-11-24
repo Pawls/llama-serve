@@ -1,4 +1,4 @@
-# Stops ninfer-serve, freeing its GPUs (GPU 1, or both for a two-GPU Inkling profile) and the 8 GiB of RAM it pins. Returns once the server and the start-ninfer.ps1
+# Stops ninfer-serve, freeing its GPUs (GPU 1, or both for a two-GPU Inkling profile) and the RAM it pins. An Inkling server is stopped through POST /shutdown so it saves its prefix cache file. Returns once the server and the start-ninfer.ps1
 # launcher that logs it have exited; exits 1 if either is still running after its wait.
 $ErrorActionPreference = 'Stop'
 $StartScript = Join-Path $PSScriptRoot 'start-ninfer.ps1'
@@ -15,8 +15,8 @@ function Get-NinferLaunchers {
         Where-Object { $_.CommandLine -like '*F:\AI\ninfer-3090\*run.bat*' }
 }
 # Wait-Process cannot find a process that is already exiting (it errors at once), so wait on process objects.
-function Wait-Exit([System.Diagnostics.Process[]]$processes) {
-    $processes | ForEach-Object { $null = $_.WaitForExit(30000) }
+function Wait-Exit([System.Diagnostics.Process[]]$processes, [int]$Seconds = 30) {
+    $processes | ForEach-Object { $null = $_.WaitForExit($Seconds * 1000) }
 }
 
 $servers = @(Get-NinferServers)
@@ -24,8 +24,20 @@ $launchers = @(Get-NinferLaunchers)
 if (-not $servers -and -not $launchers) { Write-Host 'ninfer is not running.'; return }
 
 if ($servers) {
-    # Only the server is killed: run.bat then finishes on its own and deletes the temporary log it keeps in %TEMP%.
-    $servers | Stop-Process -Force
+    # An Inkling server started with --admin-token stops through POST /shutdown, which writes its --prefix-cache-file
+    # (8+ GB, up to a minute or two); a kill loses the cache. Servers without the token, and a /shutdown that fails,
+    # fall through to the kill.
+    $TokenFile = Join-Path $PSScriptRoot 'logs\ninfer-admin-token'
+    if (Test-Path $TokenFile) {
+        try {
+            Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8412/shutdown' -TimeoutSec 10 `
+                -Headers @{ Authorization = "Bearer $(Get-Content -Raw $TokenFile)" } | Out-Null
+            Write-Host 'Asked ninfer to shut down; waiting for it to save its cache.'
+            Wait-Exit $servers -Seconds 300
+        } catch { Write-Host "ninfer's /shutdown failed ($($_.Exception.Message)); killing it." }
+    }
+    # run.bat then finishes on its own and deletes the temporary log it keeps in %TEMP%.
+    $servers | Where-Object { -not $_.HasExited } | Stop-Process -Force
     Wait-Exit $servers
 } else {
     # A launcher with no server is still starting (stopping Strata and the router, or in run.bat) and would start
