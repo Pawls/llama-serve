@@ -16,7 +16,7 @@
 > **Update 2026-11-24:** Paul kept Inkling on Strata and moved to 0.2.21 (code and engines 0.1.67). Its server now
 > handles effort itself, so the override is deleted (S4 done), and the installed config runs on GPU 1 alone, where
 > the DSpark drafter works (S5 re-benches; the 0.2.20 numbers in S2 and the README no longer hold).
-> **Next:** S5 (Paul's night bench), then S3 (clients, tray switch test)
+> **Next:** S6 (safe context ceiling without offload, target 368K), then S5 (Paul's night bench), then S3 (tray switch test)
 > **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
@@ -24,6 +24,7 @@
 - ~~[S2 — Bench against ninfer](#s2)~~
 - [S3 — Keep it: tray, clients, docs](#s3)
 - ~~[S4 — Retire the override when upstream ships its own](#s4)~~ (done 2026-11-24 with the 0.2.21 update)
+- [S6 — Safe context ceiling without KV offload](#s6)
 - [S5 — Re-bench Inkling on Strata 0.2.21](#s5)
 
 ## Traps
@@ -151,6 +152,26 @@ Findings (2026-11-24; numbers, method and logs in README.md § Inkling 2 Mini on
 - [x] (done 2026-11-24, all four) Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),
       Hermes, opencode (`.\sync-opencode.ps1`).
 - [ ] AGENTS.md "Strata state" bullet for the Inkling config and the override.
+
+### S6 — Find the safe context ceiling without `--kv-offload` · Sonnet 5.5 / medium {#s6}
+
+**Status:** not started. Goal (Paul, 2026-11-24): the largest `--max-context` Strata can run Inkling at without
+`--kv-offload on` and without crashing, searched between 256K and the known-bad ~400k; **368K is the target** (ninfer
+ran 368K-384K, README.md § Inkling 2 Mini, "384K is near the ceiling").
+**Known:** 0.2.20 on both GPUs at `--max-context 1048576` died at 401,920 tokens (`VRAM exhausted growing elastic
+global KV cache`). The cache costs ~31 KB per token. On GPU 1 alone the start log already auto-offloads at 256K
+(56k tokens in VRAM, ~205k mapped to host RAM, "Auto Host KV Offload"), so "no offload" there means ~56k: the
+search is for the two-GPU split (drafter off, ~58 tok/s sample) and, secondarily, whether GPU 1 alone can be forced
+to keep a larger window in VRAM. 0.2.21's long-conversation crash fix (#6905) and K/V reserve change may have
+moved the ceiling; none of it is measured.
+**Needs:** both GPUs idle (Paul stops Strata and the router model); method: needle prompt as in README.md
+§ Inkling 2 Mini ("MAGENTA-7193-OTTER"), effort low, `max_tokens` set.
+- [ ] Config copy `strata-inkling-2-mini-sq-20-split.json` with `--gpus 2 --layer-split auto` and no `"gpu"`;
+      `--max-context` 262144, 327680, 368640, then bisect toward 400k.
+- [ ] At each size: start log's `VRAM free with everything loaded` (LOW means too tight), a prompt filling ~90% of
+      the context with the needle found, `nvidia-smi` peak per card, no spill (a card near 24,576 MiB).
+- [ ] Record the largest size that passes twice, and the first that fails and how (README.md, dated, with engine).
+- [ ] Set the installed config's `--max-context` only if Paul wants it; say which GPU layout it belongs to.
 
 ### S5 — Re-bench Inkling on Strata 0.2.21 · Sonnet 5.5 / medium {#s5}
 
