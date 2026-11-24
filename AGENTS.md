@@ -227,7 +227,7 @@ Other moving parts:
   [README.md](./README.md#inkling-2-mini-measured-2026-11-21). The tray's ninfer submenu has one item per
   `NinferModels` row in [tray/LlamaTray.cs](./tray/LlamaTray.cs) and names the running model from `/v1/models`.
   Qwen3.8-27B stays on v0.18.0; ninfer-all also serves it, untested here.
-  **Inkling's host cache is 20 GiB with a cache file since 2026-11-23** (`--host-cache-mib 20480`, `--prefix-cache-file
+  **Inkling's host cache is 24 GiB with a cache file since 2026-11-23** (`--host-cache-mib 24576`, `--prefix-cache-file
   F:\AI\ninfer-3090\cache\<profile>.pfx`); it is saved only on a graceful stop, so `stop-ninfer.ps1` posts `/shutdown`
   with the token in `logs\ninfer-admin-token` before it kills. Never kill ninfer-serve by hand when its cache matters
   ([README.md](./README.md#inklings-context-cache-host-budget-and-cache-file-2026-11-23)).
