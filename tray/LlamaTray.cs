@@ -173,7 +173,7 @@ enum StrataState { Stopped, Starting, Unloaded, Loaded }
 // One installed Strata size. A server serves one size, fixed when it starts.
 sealed class StrataSize
 {
-    const string StrataDir = @"F:\AI\strata";   // start-strata.ps1's $StrataDir
+    const string StrataDir = @"F:\AI\strata\terminal";   // start-strata.ps1's $StrataDir
 
     public readonly string Script;       // start-strata.ps1's -Model value
     public readonly string Label;
@@ -648,7 +648,7 @@ static class ServerProcesses
     public static bool NinferRunning() { return AnyRunning("ninfer-serve", @"F:\AI\ninfer-3090\"); }
 
     // Strata's engine, which exists only while a model is loading or loaded (it exits on unload).
-    public static bool StrataEngineRunning() { return AnyRunning("strata", @"F:\AI\strata\engine\"); }
+    public static bool StrataEngineRunning() { return AnyRunning("strata", @"F:\AI\strata\terminal\engine\"); }
 
     static bool AnyRunning(string processName, string exeDir)
     {

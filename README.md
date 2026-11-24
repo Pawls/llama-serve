@@ -131,7 +131,7 @@ Names ending in `-dflash`, `-dflash2` or `-mtp` are the same model plus a small 
 
 **Only one of the two holds the GPUs at a time:**
 
-- Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\strata-<size>.json`, which runs `unload-router-model.ps1`).
+- Before Strata loads its model, it unloads the router's model (`before_load` in `F:\AI\strata\terminal\strata-<size>.json`, which runs `unload-router-model.ps1`).
 - The router has no such hook. When the router starts loading a model while Strata's is loaded, the tray unloads Strata on its next poll (every 2 s), and loading a model from the tray menu unloads Strata first. This needs the tray running. On 2026-10-04 all 3 switches each way worked, with no out-of-memory errors in the router log.
 
 Swift 1.5 IQ3_S, IQ3_XXS and Unsloth's UD-Q4_K_XL are installed, and the tray has a start item for each. Unsloth 3.1 UD-IQ3_XXS was installed for a comparison and deleted on 2026-11-16 (Swift won); see [Swift 1.5 IQ3_S against Unsloth 3.1 UD-IQ3_XXS](#swift-15-iq3_s-against-unsloth-31-ud-iq3_xxs-measured-2026-11-13). **Swift 1.5 IQ3_S is the default since 2026-11-01**; the reasons and the numbers for all three are in [Swift 1.5, resident experts and UD-Q4_K_XL](#swift-15-resident-experts-and-ud-q4_k_xl-measured-2026-11-01). IQ2_XS was deleted on 2026-11-01 to free disk space; its numbers below are kept for comparison. IQ3_XXS was the default from 2026-10-19 (its quantizer rates it ~99% of BF16, against ~96% for IQ2_XS). Newer numbers for IQ3_XXS and IQ2_XS are in [Engine 0.1.45](#engine-0145-iq3_xxs-against-iq2_xs-measured-2026-10-19) and, for the installed engine, [Engine 0.1.59](#engine-0159-strata-0213-measured-2026-11-13). Measured 2026-10-04 and 05 (both GPUs, 262k context, images on):
@@ -645,7 +645,7 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | A model is suddenly very slow (several times slower than usual) | It didn't fit in VRAM and Windows spilled into system RAM. Run `nvidia-smi`: a card near 24,576 MiB used is the culprit. Close other GPU programs, or lower `ctx-size` for that model. |
 | Speeds or memory look off after changing a preset | `Select-String -Path F:\AI\llama-serve\logs\server.log -Pattern 'retrying without pipeline'`. Any hit means the model loaded in a degraded mode; the preset needs less context or a different `tensor-split`. |
 | A model fails to load | Read the end of `F:\AI\llama-serve\logs\server.log`. The previous boot's log is `server.prev.log`. |
-| A router model fails to load while Strata is running | The tray wasn't running to unload Strata. Use **Unload Strata model** in the tray, or `stop-strata.ps1`, and retry. Strata's own log: `logs\strata.log`; engine log: `F:\AI\strata\strata-<size>.log`. |
+| A router model fails to load while Strata is running | The tray wasn't running to unload Strata. Use **Unload Strata model** in the tray, or `stop-strata.ps1`, and retry. Strata's own log: `logs\strata.log`; engine log: `F:\AI\strata\terminal\strata-<size>.log`. |
 | Port 8410 is busy | Another router is already running (for example one started in a window). Stop it first. |
 
 ## Files

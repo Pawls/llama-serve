@@ -3,13 +3,13 @@
 # its expert_profile_save file; then the server is killed. Returns once the server, the engine and the
 # start-strata.ps1 launcher that logs them have exited; exits 1 if any is still running after its wait.
 $ErrorActionPreference = 'Stop'
-$Strata = 'http://127.0.0.1:8411'   # "port" in every F:\AI\strata\strata-*.json
+$Strata = 'http://127.0.0.1:8411'   # "port" in every F:\AI\strata\terminal\strata-*.json
 
 # A venv's python.exe is a redirector that starts the real interpreter as a child, so match the command line,
 # not the exe path. The engine and vision encoder sit in the server's job object and end with it.
 function Get-StrataServers {
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
-        Where-Object { $_.CommandLine -like '*F:\AI\strata\serve\server.py*' }
+        Where-Object { $_.CommandLine -like '*F:\AI\strata\terminal\serve\server.py*' }
 }
 function Test-StrataRunning {
     [bool]((Get-StrataServers) -or
