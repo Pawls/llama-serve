@@ -269,6 +269,9 @@ Other moving parts:
   `inkling-2-mini-sq-20`, written by `setup.py --family inkling-2-mini --model SQ-20 --gpus 0,1 --no-start
   --models-dir F:\AI\Strata-data\models --context 1048576 --port 8411 --no-browser --vision yes --yes` (setup's menu
   stops at 256K; 1M is taken as asked). Hand-added: `idle_unload_s`, `sampling` (temperature 1.0), `before_load`.
+  **`--max-context` cut to 262144 by hand on 2026-11-24**: at 1M the cache grows in VRAM and the engine died at
+  ~400k tokens; 1M works only with `--kv-offload on` (32 GB of host RAM, decode ~30% slower). Measured slower than
+  ninfer's Inkling (README.md § Inkling 2 Mini on Strata); Paul's keep-or-drop call is open.
   **Its engine is a component outside the clone**: `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\<version>\strata-inkling.exe`,
   which `stop-strata.ps1` and the tray's `StrataEngineRunning` match by that folder.
 - **Engine 0.1.59 (code v0.2.13.1-160) was installed 2026-11-13 to 2026-11-24**; 0.1.57 (installed 2026-11-05 with

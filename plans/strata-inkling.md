@@ -13,12 +13,12 @@
 > `none` (S1); bench-depth's thinking-off request really decodes no thinking under the override (S2); the tray and
 > `stop-strata.ps1` see `strata-inkling.exe`, which runs from `%LOCALAPPDATA%\Strata\components\shapes\inkling2\`
 > (S1 stop box, S3).
-> **Next:** S2 — bench against ninfer (a night session Paul starts)
+> **Next:** Paul's keep-or-drop call on S2's result (README.md § Inkling 2 Mini on Strata); S3 only if he keeps it
 > **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
 - ~~[S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)~~
-- [S2 — Bench against ninfer](#s2)
+- ~~[S2 — Bench against ninfer](#s2)~~
 - [S3 — Keep it: tray, clients, docs](#s3)
 - [S4 — Retire the override when upstream ships its own](#s4)
 
@@ -99,23 +99,38 @@ Findings (2026-11-24, engine 0.1.66, both cards undervolted as in AGENTS.md):
 - **Ruling:** S3's `StrataSizes` row and the tray's engine folder shipped with S1 so Paul can try it before the
   bench; the tray-driven switch test and the clients stay in S3.
 
-### S2 — Bench against ninfer · Opus 5.5 / medium {#s2}
+### ~~S2 — Bench against ninfer~~ · Opus 5.5 / medium {#s2}
 
-**Status:** not started.
+**Status:** done 2026-11-24 (night); Paul's pick is open.
 **Touches:** README.md (`## Inkling 2 Mini`), `logs\`
 **After:** S1
 **Seam:** `bench-depth.ps1 -BaseUrl`, `test-tool-calls.ps1`
 
-- [ ] bench-depth's thinking-off request decodes no reasoning under the override (check one reply's
+- [x] bench-depth's thinking-off request decodes no reasoning under the override (check one reply's
       `reasoning_content` is empty); if not, send effort `none` for this bench.
-- [ ] `bench-depth.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` and the same on ninfer
+- [x] `bench-depth.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` and the same on ninfer
       `inkling2-mini` (`-BaseUrl http://127.0.0.1:8412 -Model inkling-2-mini`): 2 rounds each, interleaved,
       settle before each, code and essay at 2k / 52k. Table of net tok/s and prompt reads in README.
-- [ ] Long context: a code hidden in a ~500k-token prompt (beyond ninfer's one-card 256K) is found; record read
+- [x] Long context: a code hidden in a ~500k-token prompt (beyond ninfer's one-card 256K) is found; record read
       time, free RAM during it and whether the host KV pinned (start log).
-- [ ] One thinking sample at `high` on the same short coding prompt on both engines: tokens, time, answer correct.
+- [x] One thinking sample at `high` on the same short coding prompt on both engines: tokens, time, answer correct.
       (The 50-task quality run is A3 of [context-and-quality-benches.md](./context-and-quality-benches.md).)
 - [ ] README states the result and a recommendation for Paul; he picks keep or drop.
+
+Findings (2026-11-24; numbers, method and logs in README.md § Inkling 2 Mini on Strata):
+
+- Thinking-off box: `chat_template_kwargs.enable_thinking: false` gives empty `reasoning_content` (the override
+  maps it to `none`). Strata ignores `ignore_eos`.
+- Strata on both GPUs decodes ~56 / 48 tok/s at 2k / 51k against ninfer's ~116 / ~100, and reads prompts at
+  1,150-1,300 against 2,020-2,190; the layer split is the main cost (engine bench: 78.6 on one GPU, 55.1 split).
+- 1M with the cache in VRAM crashes at ~400k; `--kv-offload on` reaches 641k (needle found, 3,536 s) at 32 GB
+  of RAM and 38-39 tok/s decode.
+- **Ruling:** the installed config is now 256K without `--kv-offload` (`args_written` still records setup's 1M),
+  and the tray label says 256K, so the tray item cannot crash on a long prompt.
+- **Ruling:** the GPU 1-only config used for one arm was deleted after its round; README says how it was built.
+- Recommendation in README: drop it for daily use and keep ninfer; Strata's edge is lossless weights and
+  768K-1M context. If Paul drops it, S3 becomes: remove the `StrataSizes` row, the config, run script and
+  `strata_overrides` (or keep the override until S4), and the files in `F:\AI\Strata-data\models\inkling-2-mini`.
 
 ### S3 — Keep it: tray, clients, docs · Sonnet 5.5 / medium {#s3}
 

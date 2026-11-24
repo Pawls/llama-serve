@@ -781,7 +781,7 @@ sealed class TrayApp : ApplicationContext
         new StrataSize("unsloth-ud-q4_k_xl",
             "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
             "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open."),
-        new StrataSize("inkling-2-mini-sq-20", "Inkling 2 Mini SQ-20 (lossless, 1M, images)", null),
+        new StrataSize("inkling-2-mini-sq-20", "Inkling 2 Mini SQ-20 (lossless, 256K, images)", null),
     };
 
     // The first is also start-ninfer.ps1's default.
