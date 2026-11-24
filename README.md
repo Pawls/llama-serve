@@ -620,6 +620,24 @@ Without drafts, net speed is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark ad
 - Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3, `response_format` JSON parses, and a solid red image is named red (GPU 1 at 23,040 MiB with the image on the one-GPU profile).
 - Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, `logs\ink-bench-greedy-{nospec,dspark}.console.txt`, `logs\ink-extra.console.txt` (370K and 699K prompts), start logs `logs\ink-arm-*.log`.
 
+#### Context ceiling on the split (measured 2026-11-24)
+
+Why: on GPU 1 alone at 256K the start log auto-offloads (`global KV = 56320 VRAM + 205824 mapped host tokens`), and a
+108k-token agent request decoded at 2.7 tok/s (48 tok/s at 57k, 7.8 at 72k, 3 at 100k; `/metrics` showed ~10 GB/s of
+PCIe receive and GPU 1 at 100%). Fix: `--gpus 2 --layer-split auto`, no drafter benefit (it does nothing on the split).
+Engine 0.1.67, fp16 KV, both cards undervolted, one needle prompt per size (`MAGENTA-7193-OTTER` mid-prompt, effort
+low, `max_tokens` 300, filler of numbered log lines at ~19.8 tokens each):
+
+| `--max-context` | Prompt tokens | Found | Time | Peak GPU 0 / GPU 1 |
+|---|---|---|---|---|
+| 327,680 | 299,538 | yes | 484 s | 15.8 / 19.1 GiB |
+| 368,640 | 330,384 | yes | 576 s | 16.2 / 20.0 GiB |
+| 368,640 | 355,260 (96%) | yes | 637 s | 16.4 / 20.7 GiB |
+
+Cache cost ~29 KB a token on GPU 1; no offload line and no LOW in the start log, no spill. 368,640 is installed. 0.2.20
+died at 401,920 tokens on a split with the drafter loaded, so the ceiling above 368,640 is untried. Decode speed on the
+split at depth is not measured yet (S5).
+
 ### Inkling's context cache: host budget and cache file (2026-11-23)
 
 Inkling keeps one sequence; when a request ends its state is copied to a pinned host-RAM image, and the next request resumes from it (`cache N (100%, turn closure)` in the log). The default host budget is 8 GiB, and a 379k-token image is ~6 GiB. In one 768K session (opencode, thinking high) requests #86, #88 and #143 each re-read their whole prompt (3 min at 195k, 7 min 50 s at 379k) with `cache 0`, while the prompts had only grown by 1-3k tokens; `/metrics` then showed `ninfer:context_occupancy{pool="host_kv_bytes"}` at 7.76 GiB of 8. That the full budget caused the misses is likely, not proven.

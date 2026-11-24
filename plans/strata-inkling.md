@@ -16,7 +16,7 @@
 > **Update 2026-11-24:** Paul kept Inkling on Strata and moved to 0.2.21 (code and engines 0.1.67). Its server now
 > handles effort itself, so the override is deleted (S4 done), and the installed config runs on GPU 1 alone, where
 > the DSpark drafter works (S5 re-benches; the 0.2.20 numbers in S2 and the README no longer hold).
-> **Next:** S6 (safe context ceiling without offload, target 368K), then S5 (Paul's night bench), then S3 (tray switch test)
+> **Next:** S5 (Paul's night bench), then S3 (tray switch test)
 > **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
@@ -155,7 +155,8 @@ Findings (2026-11-24; numbers, method and logs in README.md § Inkling 2 Mini on
 
 ### S6 — Find the safe context ceiling without `--kv-offload` · Sonnet 5.5 / medium {#s6}
 
-**Status:** not started. Goal (Paul, 2026-11-24): the largest `--max-context` Strata can run Inkling at without
+**Status:** done on the split 2026-11-24 (368,640 installed and needle-tested to 355k, README.md § Context ceiling on
+the split); above it untried. Goal (Paul, 2026-11-24): the largest `--max-context` Strata can run Inkling at without
 `--kv-offload on` and without crashing, searched between 256K and the known-bad ~400k; **368K is the target** (ninfer
 ran 368K-384K, README.md § Inkling 2 Mini, "384K is near the ceiling").
 **Known:** 0.2.20 on both GPUs at `--max-context 1048576` died at 401,920 tokens (`VRAM exhausted growing elastic

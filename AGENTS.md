@@ -274,8 +274,12 @@ Other moving parts:
   ninfer's Inkling (README.md § Inkling 2 Mini on Strata); Paul kept it on 2026-11-24.
   **Strata 0.2.21 (code and engines 0.1.67, installed 2026-11-24; the Inkling engine by hand, because `strata update`
   skipped it: `shape_engine.ensure("inkling2", <feed url>)` from the Strata venv):** the server handles thinking
-  itself (the override is deleted) and the installed config now runs on **GPU 1 alone** (`"gpu": 1`, no `--gpus` or
-  `--layer-split`; for the split add `--gpus 2 --layer-split auto` back). The DSpark drafter does nothing on the split
+  itself (the override is deleted). **Since 2026-11-24 afternoon the installed config runs the two-GPU split at
+  `--max-context 368640`** (`--gpus 2 --layer-split auto`, no `"gpu"`): on GPU 1 alone the cache held only 56k
+  tokens in VRAM and decode fell from 48 to 2.7 tok/s at 108k (the rest streamed from host RAM over the x4 link);
+  Paul's rule is no config under 262k. Needle prompts of 299,538, 330,384 and 355,260 tokens were found, peak
+  20.7 GiB on GPU 1 (README.md § Inkling 2 Mini on Strata, "Context ceiling on the split"). Between 2026-11-24
+  morning and afternoon it ran on **GPU 1 alone** (`"gpu": 1`). The DSpark drafter does nothing on the split
   (`draft_n` 0) and works on one GPU: one greedy code sample decoded 58 tok/s split against 104-107 on GPU 1 (not a
   bench; 22.6 GiB used there, ~0.9 GiB free, 205k tokens of KV in host RAM). The 0.2.20 numbers in README.md
   § Inkling 2 Mini on Strata are superseded; plans/strata-inkling.md S5 re-benches.
