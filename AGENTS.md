@@ -144,7 +144,7 @@ Other moving parts:
   (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
   24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead) and it reads prompts at
   a third to a half of IQ3_XXS's speed; with it the copy was 23.15 GiB, fully page-locked, on 2026-11-02 (not on
-  engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below), and prompts read 9-22% faster
+  engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below; pinned again on 0.1.66), and prompts read 9-22% faster
   ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
   from `F:\AI\strata\terminal\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
   since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
@@ -247,8 +247,8 @@ Other moving parts:
   **Since 0.2.10 `UPDATE.bat` no longer brings a newer engine**: setup fetches one only when the installed engine is
   older than `MIN_ENGINE`, which stayed at 0.1.46. On 2026-11-13 it moved the code from v0.2.11-4 to
   v0.2.13.1-160 and left engine 0.1.57. On 2026-11-23 it moved the code to v0.2.20 (`6a6db7ff5`), moved the user
-  files into `terminal\` (above), rewrote every config's paths to match and left engine 0.1.59; the feed (sequence 132)
-  offers 0.1.66. The engine's test start loads an installed model and generates one token, so it needs the GPUs free.
+  files into `terminal\` (above), rewrote every config's paths to match and left engine 0.1.59; 0.1.66 from the feed was installed by
+  hand on 2026-11-24 (below). The engine's test start loads an installed model and generates one token, so it needs the GPUs free.
   To install the feed's newest engine the way setup does (test start, old
   engine kept in `engine\.previous`), run with `F:\AI\strata\terminal\.venv\Scripts\python.exe`:
   `import sys; sys.path.insert(0, r'F:\AI\strata\terminal'); import setup; from pathlib import Path;
@@ -261,7 +261,17 @@ Other moving parts:
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
   listed under "Installed sizes" above and in the Swift and UD-Q4_K_XL bullets, and re-add any that dropped.
-- **Engine 0.1.59 (code v0.2.13.1-160) is installed since 2026-11-13**; 0.1.57 (installed 2026-11-05 with
+- **Engine 0.1.66 is installed since 2026-11-24** (by the `engine_from_feed` snippet above; 0.1.59 is in
+  `engine\.previous`). Swift on it: tool calls 3/3, no LOW (1,698 and 1,361 MiB free with everything loaded on
+  the two cards), and **its 21.53 GiB RAM copy is page-locked again** (pinned in 11 s). Not benched yet.
+- **Inkling 2 Mini SQ-20 on Strata** (installed 2026-11-24, [plans/strata-inkling.md](./plans/strata-inkling.md)):
+  config `strata-inkling-2-mini-sq-20.json`, run script `run-inkling-2-mini-sq-20.bat`, model id
+  `inkling-2-mini-sq-20`, written by `setup.py --family inkling-2-mini --model SQ-20 --gpus 0,1 --no-start
+  --models-dir F:\AI\Strata-data\models --context 1048576 --port 8411 --no-browser --vision yes --yes` (setup's menu
+  stops at 256K; 1M is taken as asked). Hand-added: `idle_unload_s`, `sampling` (temperature 1.0), `before_load`.
+  **Its engine is a component outside the clone**: `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\<version>\strata-inkling.exe`,
+  which `stop-strata.ps1` and the tray's `StrataEngineRunning` match by that folder.
+- **Engine 0.1.59 (code v0.2.13.1-160) was installed 2026-11-13 to 2026-11-24**; 0.1.57 (installed 2026-11-05 with
   UD-IQ3_XXS; Swift was benched on it on 2026-11-13, just before the update) is in `engine\.previous`. Swift on
   0.1.59 decodes within 8% of 0.1.57 at 2k code and 1% elsewhere (one run per engine, not interleaved, so an
   estimate; [README.md](./README.md#engine-0159-strata-0213-measured-2026-11-13)). **Swift's RAM copy has not pinned on
@@ -407,7 +417,7 @@ Open handoffs live in [dev-notes/handoffs/](./dev-notes/handoffs/), one file per
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
 8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
 run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, and since 2026-11-02 (`STRATA_PF_FUSED=1`) so
-does Swift's 23.15 GiB copy (on engine 0.1.55; it did not pin on 0.1.57 or 0.1.59, cause open), so
+does Swift's 23.15 GiB copy (on engine 0.1.55; it did not pin on 0.1.57 or 0.1.59, and pins again on 0.1.66), so
 pinning alone no longer argues for Linux unless that persists; the full-copy mode is the remaining case. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and

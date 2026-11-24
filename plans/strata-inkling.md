@@ -11,12 +11,13 @@
 > the undervolt; Paul decides from S2's table whether Strata's Inkling stays.
 > **Review focus:** a request with no effort from a client that sends none (VS Code, opencode) gets `low`, not
 > `none` (S1); bench-depth's thinking-off request really decodes no thinking under the override (S2); the tray and
-> `stop-strata.ps1` see `strata-inkling.exe`, which has not run here yet (S1 stop box, S3).
-> **Next:** S1 — install engine 0.1.66 and the Inkling SQ-20 config, check it starts and thinks
-> **Branch:** not cut yet
+> `stop-strata.ps1` see `strata-inkling.exe`, which runs from `%LOCALAPPDATA%\Strata\components\shapes\inkling2\`
+> (S1 stop box, S3).
+> **Next:** S2 — bench against ninfer (a night session Paul starts)
+> **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
-- [S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)
+- ~~[S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)~~
 - [S2 — Bench against ninfer](#s2)
 - [S3 — Keep it: tray, clients, docs](#s3)
 - [S4 — Retire the override when upstream ships its own](#s4)
@@ -38,42 +39,65 @@
 - **Only `max_tokens` stops a runaway think.** Upstream reports that `reasoning_budget_tokens` and `answer_room` do
   nothing for Inkling (PR #6869, open), and stock Strata has thought silently for ~100k tokens in one agent reply.
   Send a `max_tokens` with every bench and probe request, and give the Inkling model a `maxTokens` in Pi before a
-  long session. Not yet seen on this PC; S1 checks it.
+  long session. Confirmed here 2026-11-24 (S1 findings): a 500-token budget let it think ~8,000 characters.
 - **The override fails loudly** if Strata's run script stops naming `terminal\serve\server.py` (start-strata.ps1
   throws), and it patches nothing once `serve.inkling_dialect` has `server_effort` (upstream PR #6955) or no longer
   turns `high` into `none`; its `[inkling_thinking]` line in `logs\strata.log` says which.
 
-### S1 — Engine 0.1.66 and the Inkling SQ-20 config · Opus 5.5 / medium {#s1}
+### ~~S1 — Engine 0.1.66 and the Inkling SQ-20 config~~ · Opus 5.5 / medium {#s1}
 
-**Status:** not started. Override and its tests landed 2026-11-23 (9/9 against Strata 0.2.20's dialect).
+**Status:** done 2026-11-24. Override and its tests landed 2026-11-23 (9/9 against Strata 0.2.20's dialect).
 **Touches:** `F:\AI\strata\terminal` (engine, new config and run script; outside this repo), AGENTS.md
 **After:** none
 **Seam:** `start-strata.ps1 -Model <inkling id>` and the OpenAI API on :8411
 
-- [ ] Engine 0.1.66: the `engine_from_feed` snippet in AGENTS.md "To update"; `terminal\engine\BUILD.json` says
+- [x] Engine 0.1.66: the `engine_from_feed` snippet in AGENTS.md "To update"; `terminal\engine\BUILD.json` says
       0.1.66 and `engine\.previous` holds 0.1.59.
-- [ ] Swift still starts on 0.1.66: `.\start-strata.ps1`, then the `VRAM free with everything loaded` lines in
+- [x] Swift still starts on 0.1.66: `.\start-strata.ps1`, then the `VRAM free with everything loaded` lines in
       `F:\AI\strata\terminal\strata-swift-iq3_s.log` (raise `--vram-reserve-later-mib` if one says LOW) and
       `.\test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411` passes. Stop it.
-- [ ] Inkling config: `setup.py --family inkling-2-mini --model SQ-20 --gpus 0,1 --no-start` from
+- [x] Inkling config: `setup.py --family inkling-2-mini --model SQ-20 --gpus 0,1 --no-start` from
       `F:\AI\strata\terminal` with the Strata venv, using the files above (`--models-dir F:\AI\Strata-data\models`,
       or `--gguf-dir` if setup asks for a folder). Record the config and run-script names it wrote; fix the port.
       Hand-add `before_load`, `sampling` (`temperature 1.0`, as the card says) and `idle_unload_s` like the Swift
       config, and `--max-context` as setup's largest offer.
-- [ ] Start it: `.\start-strata.ps1 -Model <its id>`; `logs\strata.log` shows
+- [x] Start it: `.\start-strata.ps1 -Model <its id>`; `logs\strata.log` shows
       `[inkling_thinking] patched serve.inkling_dialect`; `nvidia-smi` shows no card near 24,576 MiB; the start log's
       VRAM and host-KV lines are recorded.
-- [ ] Thinking works: a request with `reasoning_effort: "high"` returns non-empty `reasoning_content` and an
+- [x] Thinking works: a request with `reasoning_effort: "high"` returns non-empty `reasoning_content` and an
       answer; one with `"none"` returns no reasoning; one with no effort thinks (default `low`).
-- [ ] `.\test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` passes; images (a red test picture
+- [x] `.\test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` passes; images (a red test picture
       named red) and JSON mode work.
-- [ ] Thinking cap: a request at `high` with `reasoning_budget_tokens: 500` and `max_tokens: 4000` on a hard
+- [x] Thinking cap: a request at `high` with `reasoning_budget_tokens: 500` and `max_tokens: 4000` on a hard
       problem; record whether the thinking stops near 500 or runs to `max_tokens` (PR #6869 says the latter).
-- [ ] `.\stop-strata.ps1` stops it: no `strata-inkling` process left, both cards back near idle.
-- [ ] Prompt reuse: two Pi turns in one conversation (Pi's `strata` provider replays `reasoning_content`); the
+- [x] `.\stop-strata.ps1` stops it: no `strata-inkling` process left, both cards back near idle.
+- [x] Prompt reuse: two Pi turns in one conversation (Pi's `strata` provider replays `reasoning_content`); the
       second turn's `cached_tokens` covers the first prompt.
 
 Cancel: if SQ-20 does not start on 0.1.66 after one config fix, record the error in README and stop the plan.
+
+Findings (2026-11-24, engine 0.1.66, both cards undervolted as in AGENTS.md):
+
+- Engine: 0.1.66 from the feed; `engine\.previous` holds 0.1.59. Swift: tool calls 3/3, no LOW (1,698 / 1,361
+  MiB free), and its 21.53 GiB RAM copy pinned again.
+- Setup wrote `strata-inkling-2-mini-sq-20.json` and `run-inkling-2-mini-sq-20.bat` (id `inkling-2-mini-sq-20`,
+  `--gpus 2 --layer-split auto`, DSpark drafter on, port 8411 from `--port`, no `--open`). Its menu offers up to
+  256K; `--context 1048576` was taken as asked. It fetched the `strata-inkling` engine (0.1.66, 417 MB) into
+  `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\`, outside the clone, so `stop-strata.ps1` and the
+  tray now match that folder.
+- Start at 1M: `[inkling_thinking] patched serve.inkling_dialect`; 11.8 / 11.2 GB used on GPU 0 / 1 (GPU 1 holds
+  layers 0-10, GPU 0 layers 11-23, all experts in VRAM); 43.7 GB RAM free after load. The engine log prints no
+  host-KV line, so whether the 1M cache is reserved at start or grows on use is for S2's long-context box.
+- Thinking: `high` 141 chars of reasoning, `none` none, no effort 113 chars (default `low`); all answered 391.
+  Red picture: "Red". JSON mode parsed. Tool calls 3/3 (median 4.8 s).
+- Cap: `high` with `reasoning_budget_tokens: 500`, `max_tokens: 4000`, on x^2 + y^2 = 2025: ~8,000 characters of
+  reasoning (far past 500 tokens), 3,927 tokens in all, finish `stop`, correct answer (27, 36). The budget does
+  nothing, as PR #6869 says; `max_tokens` is the only cap.
+- Stop: 1.5 s, no `strata-inkling` left, cards back to 908 / 0 MiB.
+- Prompt reuse: Pi's second turn read 637 of 650 prompt tokens from cache (first prompt 571).
+- **Ruling:** `sampling` carries only `temperature: 1.0` (the plan names no other value).
+- **Ruling:** S3's `StrataSizes` row and the tray's engine folder shipped with S1 so Paul can try it before the
+  bench; the tray-driven switch test and the clients stay in S3.
 
 ### S2 — Bench against ninfer · Opus 5.5 / medium {#s2}
 
@@ -101,7 +125,8 @@ Cancel: if SQ-20 does not start on 0.1.66 after one config fix, record the error
 **After:** S2
 **Seam:** the tray menu and `install-tray.ps1`; each client's model list
 
-- [ ] `StrataSizes` row for the Inkling id; confirm `StrataEngineRunning` sees the running `strata-inkling.exe`
+- [ ] `StrataSizes` row for the Inkling id (row, folder and `install-tray.ps1` done 2026-11-24 with S1; the switch
+      test below is not); confirm `StrataEngineRunning` sees the running `strata-inkling.exe`
       (it matches any path under `F:\AI\strata\`; narrow it to the folder S1 found); `install-tray.ps1`, then switch router → Strata Inkling → router once each
       way with the router model unloaded each time (AGENTS.md "Only one engine may hold the GPUs").
 - [ ] Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),

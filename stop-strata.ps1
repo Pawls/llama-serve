@@ -13,10 +13,12 @@ function Get-StrataServers {
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
         Where-Object { $_.CommandLine -like '*F:\AI\strata\*serve\server.py*' }
 }
+# Setup installs Inkling's engine (strata-inkling.exe) as a component under %LOCALAPPDATA%, not in the clone.
+$InklingEngineDir = Join-Path $env:LOCALAPPDATA 'Strata\components\shapes\inkling2'
 function Test-StrataRunning {
     [bool]((Get-StrataServers) -or
         (Get-Process strata, strata-inkling, strata-vision -ErrorAction SilentlyContinue |
-            Where-Object { -not $_.Path -or $_.Path -like 'F:\AI\strata\*' }))   # an exiting process has no Path
+            Where-Object { -not $_.Path -or $_.Path -like 'F:\AI\strata\*' -or $_.Path -like "$InklingEngineDir\*" }))   # an exiting process has no Path
 }
 # The launcher's Tee-Object holds logs\strata.log until it exits; a start before then cannot rotate the log.
 function Get-StrataLaunchers {

@@ -648,10 +648,13 @@ static class ServerProcesses
     public static bool NinferRunning() { return AnyRunning("ninfer-serve", @"F:\AI\ninfer-3090\"); }
 
     // Strata's engine, which exists only while a model is loading or loaded (it exits on unload).
-    // Inkling has its own engine, installed as a component whose folder is not pinned down yet: any under F:\AI\strata.
+    // Inkling has its own engine, which setup installs as a component under %LOCALAPPDATA%, not in the clone.
+    static readonly string InklingEngineDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Strata\components\shapes\inkling2\");
+
     public static bool StrataEngineRunning()
     {
-        return AnyRunning("strata", @"F:\AI\strata\terminal\engine\") || AnyRunning("strata-inkling", @"F:\AI\strata\");
+        return AnyRunning("strata", @"F:\AI\strata\terminal\engine\") || AnyRunning("strata-inkling", InklingEngineDir);
     }
 
     static bool AnyRunning(string processName, string exeDir)
@@ -778,6 +781,7 @@ sealed class TrayApp : ApplicationContext
         new StrataSize("unsloth-ud-q4_k_xl",
             "Flash-Next UD-Q4_K_XL (4-bit, more accurate, slower)",
             "UD-Q4_K_XL leaves only ~4 GB of RAM free. Turn on the memory saver if other apps are open."),
+        new StrataSize("inkling-2-mini-sq-20", "Inkling 2 Mini SQ-20 (lossless, 1M, images)", null),
     };
 
     // The first is also start-ninfer.ps1's default.
