@@ -648,7 +648,11 @@ static class ServerProcesses
     public static bool NinferRunning() { return AnyRunning("ninfer-serve", @"F:\AI\ninfer-3090\"); }
 
     // Strata's engine, which exists only while a model is loading or loaded (it exits on unload).
-    public static bool StrataEngineRunning() { return AnyRunning("strata", @"F:\AI\strata\terminal\engine\"); }
+    // Inkling has its own engine, installed as a component whose folder is not pinned down yet: any under F:\AI\strata.
+    public static bool StrataEngineRunning()
+    {
+        return AnyRunning("strata", @"F:\AI\strata\terminal\engine\") || AnyRunning("strata-inkling", @"F:\AI\strata\");
+    }
 
     static bool AnyRunning(string processName, string exeDir)
     {
