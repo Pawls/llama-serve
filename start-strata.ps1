@@ -51,17 +51,5 @@ function Resolve-StrataLog([string]$log, [int]$waitSeconds = 30) {
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 $RunLog = Resolve-StrataLog $Log
 
-# Inkling: run the server through strata_overrides\inkling_thinking.py, which lets the model think (README.md
-# § Inkling 2 Mini on Strata). A copy of the run script in logs\ calls it in place of serve\server.py.
-# Strata's server counts a config as Inkling by either key (serve\inkling_kind.py).
-if ($strataConfig.arch -in 'inkling2', 'inkling2_loop' -or $strataConfig.exe -like '*strata-inkling*') {
-    $server = Join-Path $StrataDir 'serve\server.py'
-    $override = Join-Path $PSScriptRoot 'strata_overrides\inkling_thinking.py'
-    $script = Get-Content $RunScript -Raw
-    if (-not $script.Contains("`"$server`"")) { throw "$RunScript does not start $server; update the override." }
-    $RunScript = Join-Path $LogDir "run-$Model.thinking.bat"
-    Set-Content $RunScript $script.Replace("`"$server`"", "`"$override`" `"$server`"") -NoNewline
-}
-
 # The run script ends with "if errorlevel 1 pause"; stdin from nul lets that return instead of hanging hidden.
 cmd /c "`"$RunScript`" < nul 2>&1" | Tee-Object -FilePath $RunLog

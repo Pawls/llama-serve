@@ -13,14 +13,18 @@
 > `none` (S1); bench-depth's thinking-off request really decodes no thinking under the override (S2); the tray and
 > `stop-strata.ps1` see `strata-inkling.exe`, which runs from `%LOCALAPPDATA%\Strata\components\shapes\inkling2\`
 > (S1 stop box, S3).
-> **Next:** Paul's keep-or-drop call on S2's result (README.md § Inkling 2 Mini on Strata); S3 only if he keeps it
+> **Update 2026-11-24:** Paul kept Inkling on Strata and moved to 0.2.21 (code and engines 0.1.67). Its server now
+> handles effort itself, so the override is deleted (S4 done), and the installed config runs on GPU 1 alone, where
+> the DSpark drafter works (S5 re-benches; the 0.2.20 numbers in S2 and the README no longer hold).
+> **Next:** S5 (Paul's night bench), then S3 (clients, tray switch test)
 > **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
 - ~~[S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)~~
 - ~~[S2 — Bench against ninfer](#s2)~~
 - [S3 — Keep it: tray, clients, docs](#s3)
-- [S4 — Retire the override when upstream ships its own](#s4)
+- ~~[S4 — Retire the override when upstream ships its own](#s4)~~ (done 2026-11-24 with the 0.2.21 update)
+- [S5 — Re-bench Inkling on Strata 0.2.21](#s5)
 
 ## Traps
 
@@ -144,11 +148,30 @@ Findings (2026-11-24; numbers, method and logs in README.md § Inkling 2 Mini on
       test below is not); confirm `StrataEngineRunning` sees the running `strata-inkling.exe`
       (it matches any path under `F:\AI\strata\`; narrow it to the folder S1 found); `install-tray.ps1`, then switch router → Strata Inkling → router once each
       way with the router model unloaded each time (AGENTS.md "Only one engine may hold the GPUs").
-- [ ] Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),
+- [x] (done 2026-11-24, all four) Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),
       Hermes, opencode (`.\sync-opencode.ps1`).
 - [ ] AGENTS.md "Strata state" bullet for the Inkling config and the override.
 
-### S4 — Retire the override when upstream ships its own · Sonnet 5.5 / low {#s4}
+### S5 — Re-bench Inkling on Strata 0.2.21 · Sonnet 5.5 / medium {#s5}
+
+**Status:** not started; Paul runs it at night. Installed 2026-11-24: code 0.2.21, engines 0.1.67 (Qwen engine and
+`strata-inkling`), config on GPU 1 alone (`"gpu": 1`, no `--gpus`/`--layer-split`), 256K, DSpark on.
+**Known before the bench (one quick sample each, greedy code prompt, 500 tokens, not a bench):** both GPUs 58 tok/s
+with `draft_n` 0 (the drafter does nothing on the split; "DSpark took 0 MiB"); GPU 1 alone 104-107 tok/s, 369
+drafted / 174 accepted, GPU 1 at 22.6 GiB with ~0.9 GiB free and 205k tokens of KV mapped in host RAM.
+- [ ] `bench-depth.ps1` against ninfer's `inkling-2-mini` at 2k / 51k, 2 rounds interleaved, as in S2.
+- [ ] Compare the split config against GPU 1 alone, and one slot against the app's higher counts only if a client
+      sends parallel requests.
+- [ ] Update README § Inkling 2 Mini on Strata and the keep/drop table.
+
+### ~~S4 — Retire the override when upstream ships its own~~ · Sonnet 5.5 / low {#s4}
+
+**Done 2026-11-24:** Strata 0.2.21's `serve/inkling_dialect.py` passes the request's effort through (default `low`,
+`STRATA_INKLING_EFFORT`), returns `reasoning_content`, and has default thinking budgets, so the override and its
+`start-strata.ps1` block were deleted. Checked on 0.2.21: `none` gives no thinking, `low` and `high` return
+`reasoning_content` with `reasoning_tokens` counted.
+
+(The slice as written:)
 
 **Status:** waiting on upstream: PR #6955 (opt-in `STRATA_INKLING_EFFORT`) or any merged fix for #6612. Check with
 `gh pr view 6955 -R Niko1221/Strata --json state` and after each `UPDATE.bat`.

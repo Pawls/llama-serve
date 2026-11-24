@@ -271,7 +271,14 @@ Other moving parts:
   stops at 256K; 1M is taken as asked). Hand-added: `idle_unload_s`, `sampling` (temperature 1.0), `before_load`.
   **`--max-context` cut to 262144 by hand on 2026-11-24**: at 1M the cache grows in VRAM and the engine died at
   ~400k tokens; 1M works only with `--kv-offload on` (32 GB of host RAM, decode ~30% slower). Measured slower than
-  ninfer's Inkling (README.md § Inkling 2 Mini on Strata); Paul's keep-or-drop call is open.
+  ninfer's Inkling (README.md § Inkling 2 Mini on Strata); Paul kept it on 2026-11-24.
+  **Strata 0.2.21 (code and engines 0.1.67, installed 2026-11-24; the Inkling engine by hand, because `strata update`
+  skipped it: `shape_engine.ensure("inkling2", <feed url>)` from the Strata venv):** the server handles thinking
+  itself (the override is deleted) and the installed config now runs on **GPU 1 alone** (`"gpu": 1`, no `--gpus` or
+  `--layer-split`; for the split add `--gpus 2 --layer-split auto` back). The DSpark drafter does nothing on the split
+  (`draft_n` 0) and works on one GPU: one greedy code sample decoded 58 tok/s split against 104-107 on GPU 1 (not a
+  bench; 22.6 GiB used there, ~0.9 GiB free, 205k tokens of KV in host RAM). The 0.2.20 numbers in README.md
+  § Inkling 2 Mini on Strata are superseded; plans/strata-inkling.md S5 re-benches.
   **Its engine is a component outside the clone**: `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\<version>\strata-inkling.exe`,
   which `stop-strata.ps1` and the tray's `StrataEngineRunning` match by that folder.
 - **Engine 0.1.59 (code v0.2.13.1-160) was installed 2026-11-13 to 2026-11-24**; 0.1.57 (installed 2026-11-05 with
@@ -427,10 +434,9 @@ plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <s
 republish it to the artifact URL named in the plan.
 
 [plans/strata-inkling.md](./plans/strata-inkling.md): Inkling 2 Mini on Strata 0.2.20 (lossless SQ-20, up to 1M
-context with the cache in RAM) against the ninfer setup, run through
-[strata_overrides/inkling_thinking.py](./strata_overrides/inkling_thinking.py) because Strata's server forces
-reasoning effort `none` (README.md § Inkling 2 Mini on Strata). Benches run at night, when Paul is off the PC; S4
-removes the override once upstream ships its own switch.
+context with the cache in RAM) against the ninfer setup (README.md § Inkling 2 Mini on Strata). Paul kept it on
+2026-11-24 and moved to Strata 0.2.21, which fixes the forced reasoning effort (the override is gone). Benches run at
+night, when Paul is off the PC; the 0.2.20 numbers no longer hold.
 
 [plans/context-and-quality-benches.md](./plans/context-and-quality-benches.md): more context for
 `qwen3.8-27b-single` (A1), Inkling 2 Mini on the `rk8v4` cache (A2), and Qwen3.8-27B on ninfer-all (A4), plus
