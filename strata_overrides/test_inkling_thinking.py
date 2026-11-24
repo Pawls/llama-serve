@@ -26,7 +26,9 @@ def effort_line(level: str) -> str:
 
 class PatchedDialect(unittest.TestCase):
     def setUp(self):
-        os.environ.pop(inkling_thinking.ENV, None)
+        saved = os.environ.pop(inkling_thinking.ENV, None)
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, inkling_thinking.ENV, saved)
         self.d = importlib.reload(stock)
         self.assertTrue(inkling_thinking.apply(self.d))
 
@@ -35,6 +37,10 @@ class PatchedDialect(unittest.TestCase):
         self.assertEqual(self.d.normalize_effort("xhigh"), "xhigh")
         self.assertEqual(self.d.normalize_effort(False), "none")
         self.assertEqual(self.d.normalize_effort(0.5), 0.5)
+
+    def test_a_non_finite_effort_gets_the_default(self):
+        self.assertEqual(self.d.normalize_effort("nan"), "low")
+        self.assertEqual(self.d.normalize_effort("inf"), "low")
 
     def test_default_effort_is_low_unless_the_environment_names_one(self):
         self.assertEqual(self.d.normalize_effort(None), "low")
@@ -76,9 +82,19 @@ class UpstreamSupport(unittest.TestCase):
     def test_does_nothing_once_upstream_has_its_own_switch(self):
         d = importlib.reload(stock)
         d.server_effort = lambda: "none"
+        self.addCleanup(delattr, d, "server_effort")
         before = d.normalize_effort
         self.assertFalse(inkling_thinking.apply(d))
         self.assertIs(d.normalize_effort, before)
+
+    def test_does_nothing_once_upstream_passes_effort_through(self):
+        d = importlib.reload(stock)
+        stock_normalize = d.normalize_effort
+        self.addCleanup(setattr, d, "normalize_effort", stock_normalize)
+        d.normalize_effort = lambda value=None: value or "low"
+        before = d.template_kwargs
+        self.assertFalse(inkling_thinking.apply(d))
+        self.assertIs(d.template_kwargs, before)
 
 
 if __name__ == "__main__":
