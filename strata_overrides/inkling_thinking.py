@@ -7,13 +7,14 @@ clone stays untouched and UPDATE.bat keeps working:
     else "low";
   - the thinking streams back as reasoning_content (Pi replays it, so the next turn reuses the prompt cache);
   - above effort 0 the prompt ends at the bare turn opener and the model writes its own thinking tag.
-The env var's name and meaning follow upstream PR #6955. Once the dialect has its own switch (server_effort), this
-patches nothing and the server runs as shipped.
+The env var's name and meaning follow upstream PR #6955. Once upstream fixes this (the dialect has server_effort,
+or no longer turns "high" into "none"), this patches nothing and the server runs as shipped.
 
-    <Strata venv python> inkling_thinking.py <server.py's arguments>
+    <Strata venv python> inkling_thinking.py <path to Strata's serve\\server.py> <server.py's arguments>
 """
 from __future__ import annotations
 
+import math
 import os
 import runpy
 import sys
@@ -21,19 +22,28 @@ from pathlib import Path
 
 ENV = "STRATA_INKLING_EFFORT"
 DEFAULT_EFFORT = "low"
-STRATA = Path(r"F:\AI\strata\terminal")   # strata-dir.ps1's $StrataDir
+STRATA = Path(r"F:\AI\strata\terminal")   # for the tests; main() takes the folder from the server path it is given
 WORDS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")   # the keys of chat_template.jinja's effort_map
 EFFORT_PREFIX = "<|message_system|><|content_text|>Thinking effort level: "
 
 
-def add_strata_to_path() -> None:
-    if str(STRATA) not in sys.path:
-        sys.path.insert(0, str(STRATA))
+def add_strata_to_path(strata: Path = STRATA) -> None:
+    if str(strata) not in sys.path:
+        sys.path.insert(0, str(strata))
+
+
+def upstream_fix(dialect) -> str | None:
+    """Why the stock dialect needs no patch, or None while it still forces effort "none"."""
+    if hasattr(dialect, "server_effort"):
+        return "upstream has its own switch (server_effort)"
+    if dialect.normalize_effort("high") != "none":
+        return "upstream passes the effort through"
+    return None
 
 
 def apply(dialect) -> bool:
-    """Patch Strata's serve.inkling_dialect module in place. False when upstream already has its own switch."""
-    if hasattr(dialect, "server_effort"):
+    """Patch Strata's serve.inkling_dialect module in place. False when upstream_fix() names a reason not to."""
+    if upstream_fix(dialect):
         return False
     stock_finish_prompt = dialect.finish_prompt
 
@@ -52,6 +62,8 @@ def apply(dialect) -> bool:
         try:
             number = float(key)
         except ValueError:
+            return server_default()
+        if not math.isfinite(number):
             return server_default()
         return "none" if number <= 0.0 else min(number, 0.99)
 
@@ -104,13 +116,13 @@ def apply(dialect) -> bool:
 
 
 def main() -> None:
-    add_strata_to_path()
+    server = Path(sys.argv[1])
+    add_strata_to_path(server.parent.parent)
     from serve import inkling_dialect
-    patched = apply(inkling_dialect)
-    print(f"[inkling_thinking] {'patched serve.inkling_dialect' if patched else 'upstream has its own switch; not patched'}",
-          flush=True)
-    server = STRATA / "serve" / "server.py"
-    sys.argv = [str(server), *sys.argv[1:]]
+    reason = upstream_fix(inkling_dialect)
+    apply(inkling_dialect)
+    print(f"[inkling_thinking] {reason + '; not patched' if reason else 'patched serve.inkling_dialect'}", flush=True)
+    sys.argv = [str(server), *sys.argv[2:]]
     runpy.run_path(str(server), run_name="__main__")
 
 

@@ -4,11 +4,15 @@ param([string]$Model = 'swift-iq3_s')
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'strata-dir.ps1')
-$RunScript = Join-Path $StrataDir "run-$Model.bat"
-$LogDir    = Join-Path $PSScriptRoot 'logs'
-$Log       = Join-Path $LogDir 'strata.log'
+$RunScript  = Join-Path $StrataDir "run-$Model.bat"
+$ConfigPath = Join-Path $StrataDir "strata-$Model.json"
+$LogDir     = Join-Path $PSScriptRoot 'logs'
+$Log        = Join-Path $LogDir 'strata.log'
 
-if (-not (Test-Path $RunScript)) { throw "$RunScript not found. Install the model with F:\AI\strata\START-HERE.bat first." }
+foreach ($file in $RunScript, $ConfigPath) {
+    if (-not (Test-Path $file)) { throw "$file not found. Install the model with F:\AI\strata\START-HERE.bat first." }
+}
+$strataConfig = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 
 . (Join-Path $PSScriptRoot 'tray-settings.ps1')
 if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). Strata uses both GPUs; untick it first.' }
@@ -20,8 +24,6 @@ if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray:
 $IdleMinutes = Get-TraySetting 'StrataIdleMinutes'
 if ($null -ne $IdleMinutes) {
     # Strata reads idle_unload_s from its config at start; a missing key means it never unloads.
-    $ConfigPath = Join-Path $StrataDir "strata-$Model.json"
-    $strataConfig = Get-Content $ConfigPath -Raw | ConvertFrom-Json
     $wanted = $IdleMinutes * 60
     if ($strataConfig.idle_unload_s -ne $wanted -and ($wanted -gt 0 -or $strataConfig.idle_unload_s)) {
         Copy-Item $ConfigPath "$ConfigPath.bak" -Force
@@ -51,14 +53,14 @@ $RunLog = Resolve-StrataLog $Log
 
 # Inkling: run the server through strata_overrides\inkling_thinking.py, which lets the model think (README.md
 # § Inkling 2 Mini on Strata). A copy of the run script in logs\ calls it in place of serve\server.py.
-$config = Get-Content (Join-Path $StrataDir "strata-$Model.json") -Raw | ConvertFrom-Json
-if ($config.arch -eq 'inkling2_loop') {
+# Strata's server counts a config as Inkling by either key (serve\inkling_kind.py).
+if ($strataConfig.arch -in 'inkling2', 'inkling2_loop' -or $strataConfig.exe -like '*strata-inkling*') {
     $server = Join-Path $StrataDir 'serve\server.py'
     $override = Join-Path $PSScriptRoot 'strata_overrides\inkling_thinking.py'
     $script = Get-Content $RunScript -Raw
     if (-not $script.Contains("`"$server`"")) { throw "$RunScript does not start $server; update the override." }
     $RunScript = Join-Path $LogDir "run-$Model.thinking.bat"
-    Set-Content $RunScript $script.Replace("`"$server`"", "`"$override`"") -NoNewline
+    Set-Content $RunScript $script.Replace("`"$server`"", "`"$override`" `"$server`"") -NoNewline
 }
 
 # The run script ends with "if errorlevel 1 pause"; stdin from nul lets that return instead of hanging hidden.

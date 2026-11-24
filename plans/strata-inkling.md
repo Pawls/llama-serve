@@ -10,8 +10,8 @@
 > **Sign-off:** every slice's boxes checked with the logs named; numbers in README.md carry date, engine, file and
 > the undervolt; Paul decides from S2's table whether Strata's Inkling stays.
 > **Review focus:** a request with no effort from a client that sends none (VS Code, opencode) gets `low`, not
-> `none` (S1); bench-depth's thinking-off request really decodes no thinking under the override (S2); the tray
-> does not see `strata-inkling.exe` as Strata's engine, so the router handover may miss it (S3).
+> `none` (S1); bench-depth's thinking-off request really decodes no thinking under the override (S2); the tray and
+> `stop-strata.ps1` see `strata-inkling.exe`, which has not run here yet (S1 stop box, S3).
 > **Next:** S1 — install engine 0.1.66 and the Inkling SQ-20 config, check it starts and thinks
 > **Branch:** not cut yet
 > **Flow:** lean
@@ -36,8 +36,8 @@
   `Inkling-2-Mini-Vision.strata` (SHA-256 checked against the repo's `SHA256SUMS.txt` on 2026-11-23) and the
   tokenizer files. Point setup at them; do not download again.
 - **The override fails loudly** if Strata's run script stops naming `terminal\serve\server.py` (start-strata.ps1
-  throws), and it patches nothing once `serve.inkling_dialect` has `server_effort` (upstream PR #6955); its start
-  line in `logs\strata.log` says which.
+  throws), and it patches nothing once `serve.inkling_dialect` has `server_effort` (upstream PR #6955) or no longer
+  turns `high` into `none`; its `[inkling_thinking]` line in `logs\strata.log` says which.
 
 ### S1 — Engine 0.1.66 and the Inkling SQ-20 config · Opus 5.5 / medium {#s1}
 
@@ -63,6 +63,7 @@
       answer; one with `"none"` returns no reasoning; one with no effort thinks (default `low`).
 - [ ] `.\test-tool-calls.ps1 -BaseUrl http://127.0.0.1:8411 -Model <model id>` passes; images (a red test picture
       named red) and JSON mode work.
+- [ ] `.\stop-strata.ps1` stops it: no `strata-inkling` process left, both cards back near idle.
 - [ ] Prompt reuse: two Pi turns in one conversation (Pi's `strata` provider replays `reasoning_content`); the
       second turn's `cached_tokens` covers the first prompt.
 
@@ -94,8 +95,8 @@ Cancel: if SQ-20 does not start on 0.1.66 after one config fix, record the error
 **After:** S2
 **Seam:** the tray menu and `install-tray.ps1`; each client's model list
 
-- [ ] `StrataSizes` row for the Inkling id; `StrataEngineRunning` also matches `strata-inkling` under
-      `F:\AI\strata\terminal\engine\`; `install-tray.ps1`, then switch router → Strata Inkling → router once each
+- [ ] `StrataSizes` row for the Inkling id; confirm `StrataEngineRunning` sees the running `strata-inkling.exe`
+      (it matches any path under `F:\AI\strata\`; narrow it to the folder S1 found); `install-tray.ps1`, then switch router → Strata Inkling → router once each
       way with the router model unloaded each time (AGENTS.md "Only one engine may hold the GPUs").
 - [ ] Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),
       Hermes, opencode (`.\sync-opencode.ps1`).

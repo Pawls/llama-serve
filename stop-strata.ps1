@@ -7,14 +7,15 @@ $Strata = 'http://127.0.0.1:8411'   # "port" in every F:\AI\strata\terminal\stra
 
 # A venv's python.exe is a redirector that starts the real interpreter as a child, so match the command line,
 # not the exe path. The engine and vision encoder sit in the server's job object and end with it. The wildcard also
-# matches a server started before Strata 0.2.20 moved it under terminal\.
+# matches a server started before Strata 0.2.20 moved it under terminal\, and one started through
+# strata_overrides\inkling_thinking.py, which takes server.py's path as its first argument.
 function Get-StrataServers {
     Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
         Where-Object { $_.CommandLine -like '*F:\AI\strata\*serve\server.py*' }
 }
 function Test-StrataRunning {
     [bool]((Get-StrataServers) -or
-        (Get-Process strata, strata-vision -ErrorAction SilentlyContinue |
+        (Get-Process strata, strata-inkling, strata-vision -ErrorAction SilentlyContinue |
             Where-Object { -not $_.Path -or $_.Path -like 'F:\AI\strata\*' }))   # an exiting process has no Path
 }
 # The launcher's Tee-Object holds logs\strata.log until it exits; a start before then cannot rotate the log.
