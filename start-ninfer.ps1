@@ -40,8 +40,17 @@ if ($Inkling.ContainsKey($Model)) {
         if (Get-TraySetting 'ReserveGpu0') { throw 'GPU 0 is reserved for ComfyUI (tray: Reserve GPU 0). This profile uses both GPUs; untick it first.' }
         $VisibleGpus = '0,1'   # ninfer's device 1 is then GPU 1 under PCI_BUS_ID order
     }
+    # The host cache holds one pinned image per retained conversation (~6 GiB at 379k tokens); the 8 GiB default likely
+    # evicted long ones (README § Inkling's context cache). --prefix-cache-file saves it when the server stops through
+    # POST /shutdown, which stop-ninfer.ps1 sends with this admin token, and restores it at the next start of the same
+    # profile. The 2026-11-21.4 rollback build has no --admin-token: drop that flag there.
+    $CacheFile = Join-Path $NinferDir "cache\$Model.pfx"
+    $TokenFile = Join-Path $LogDir 'ninfer-admin-token'
+    New-Item -ItemType Directory -Force (Split-Path $CacheFile), $LogDir | Out-Null
+    if (-not (Test-Path $TokenFile)) { [guid]::NewGuid().ToString('N') | Set-Content -NoNewline $TokenFile }
     $Command = "`"$Server`" `"$Artifact`" --model-id $($Model -replace '^inkling2', 'inkling-2')" +
-        " --host 127.0.0.1 --port 8412 --max-context $($Spec.Context) --vision --structured-output $($Spec.Gpus)"
+        " --host 127.0.0.1 --port 8412 --max-context $($Spec.Context) --vision --structured-output $($Spec.Gpus)" +
+        " --host-cache-mib 20480 --prefix-cache-file `"$CacheFile`" --admin-token $(Get-Content -Raw $TokenFile)"
 } else {
     $RunScript = Join-Path $NinferDir "$Build\run.bat"
     if (-not (Test-Path $RunScript)) { throw "$RunScript not found." }
