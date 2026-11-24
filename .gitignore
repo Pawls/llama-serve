@@ -2,3 +2,4 @@ logs/
 tray/bin/
 memory-saver.choices.json
 tray-settings.json
+__pycache__/
