@@ -138,7 +138,7 @@ Other moving parts:
   2026-11-01 by `setup.py --family swift --model IQ3_S --gpus 0,1 --no-start`; config `strata-swift-iq3_s.json`,
   model id `swift-1.5-iq3_s`. Its per-layer embedding table is in shard 1 (setup's `--ple-gguf` is right; ISTA's is
   in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
-  (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
+  (setup wrote 700), `--vram-reserve-later-mib 2505` (1310 until 2026-11-25, see "Strata 0.2.22" below), `--resident-experts` (required: setup warned a full copy needs
   ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `--adapt-async 1` (2026-11-02), `"env": {"STRATA_PF_FUSED":
   "1"}` (2026-11-02), `--prompt-cache-spread` and `"expert_profile_save": "expert-profile-swift-learned.bin"`
   (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
@@ -221,7 +221,7 @@ Other moving parts:
   2026-11-21; release `2026-11-25.3` since 2026-11-25 (`$InklingBuild` in `start-ninfer.ps1`; `2026-11-23.9` and
   `2026-11-21.4` stay beside it for rollback), artifact `F:\AI\ninfer-3090\models\inkling2-iq4xs-20261124\` (UD-IQ4_XS,
   16.05 GiB, carries the mainline DSpark and DFlash2 drafters), 256K context
-  with vision and `--structured-output` on GPU 1 (22.5 GiB). Two-GPU profiles: `inkling2-mini-2gpu` (same file,
+  with vision and `--structured-output` on GPU 1 (23,040 MiB peak). Two-GPU profiles: `inkling2-mini-2gpu` (same file,
   768K, split 1,7) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl-20261124\`, revision `8063174c` of the
   HF repo, 512K; **its newest revision needs a release after 2026-11-25.3**, do not re-download until one exists;
   the 2026-11-21 artifacts in `models\inkling2-iq4xs\` and `models\inkling2-q8kxl\` are kept for rollback). Only the routed experts
@@ -270,8 +270,8 @@ Other moving parts:
   for `strata-inkling`. **Swift now starts LOW on the desktop card with the old `--vram-reserve-later-mib 1310`**
   (0 MiB free; 0.1.66 left 1,361); it is **2505 since 2026-11-25** (738 MiB free, no LOW line, 6,864 expert slots on
   that card against 7,469). Check the `VRAM free with everything loaded` line after the next engine or desktop-app
-  change. Swift on it: tool calls 3/3, RAM copy page-locked (22.09 GiB in 11 s), code decode 5-15% below 0.1.57/0.1.59
-  at depth and essay unchanged (one run, [README.md](./README.md#engine-0169-strata-0222-measured-2026-11-25)).
+  change. Swift on it: tool calls 3/3, RAM copy page-locked (22.09 GiB in 11 s), code decode 12-15% below 0.1.57/0.1.59
+  at 52k and 128k (5% at 2k) and essay unchanged (one run, [README.md](./README.md#engine-0169-strata-0222-measured-2026-11-25)).
   Untried: `STRATA_SPLIT_LEND_RESERVE=0` in the config's `env`. Inkling SQ-20 starts and passes tool calls on it.
 - **Engine 0.1.66 was installed 2026-11-24 to 2026-11-25** (0.1.59 is in
   `engine\.previous`). Swift on it: tool calls 3/3, no LOW (1,698 and 1,361 MiB free with everything loaded on
@@ -303,10 +303,11 @@ Other moving parts:
   estimate; [README.md](./README.md#engine-0159-strata-0213-measured-2026-11-13)). **Swift's RAM copy has not pinned on
   0.1.57 or 0.1.59** (`page-locking refused (out of memory)`, 23.41 GiB) and prompts read at the unpinned speed;
   whether the engine or that night's lower free RAM caused it is open.
-  **Open: the default Swift config starts LOW on the desktop card.** In rounds 2 and 3 of the 2026-11-13 bench the
+  **The default Swift config started LOW on the desktop card** in rounds 2 and 3 of the 2026-11-13 bench: the
   learned profile had moved one layer onto GPU 0 and the start log asked for `--vram-reserve-later-mib 1764`
-  (installed: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. Check the
-  `VRAM free with everything loaded` line at the next Swift start; if it says LOW, raise the reserve and re-bench.
+  (installed then: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. It
+  came back on 0.1.69 and was raised to 2505 on 2026-11-25 (the "Strata 0.2.22" bullet above); check the
+  `VRAM free with everything loaded` line at every Swift start and raise the reserve if it says LOW.
   **UD-Q4_K_XL is an Unsloth UD file, so since 0.2.13 it gets the Q8_0 hyper-connection read by default** (the
   deleted UD-IQ3_XXS config had set `STRATA_HC_Q8=1` by hand). Not benched or tool-call-checked on 0.1.59, so its
   2026-11-02 numbers may not hold; `STRATA_HC_Q8=0` in its `env` restores the old read.
@@ -451,8 +452,9 @@ republish it to the artifact URL named in the plan.
 
 [plans/strata-inkling.md](./plans/strata-inkling.md): Inkling 2 Mini on Strata 0.2.20 (lossless SQ-20, up to 1M
 context with the cache in RAM) against the ninfer setup (README.md § Inkling 2 Mini on Strata). Paul kept it on
-2026-11-24 and moved to Strata 0.2.21, which fixes the forced reasoning effort (the override is gone). Benches run at
-night, when Paul is off the PC; the 0.2.20 numbers no longer hold.
+2026-11-24 and moved to Strata 0.2.21, which fixes the forced reasoning effort (the override is gone); Strata
+0.2.22 (engine 0.1.69, 2026-11-25) starts it unchanged. Benches run at night, when Paul is off the PC; the 0.2.20
+numbers no longer hold, and S5 should run on 0.1.69.
 
 [plans/context-and-quality-benches.md](./plans/context-and-quality-benches.md): more context for
 `qwen3.8-27b-single` (A1), Inkling 2 Mini on the `rk8v4` cache (A2), and Qwen3.8-27B on ninfer-all (A4), plus
