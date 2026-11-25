@@ -13,13 +13,15 @@ $ErrorActionPreference = 'Stop'
 $NinferDir = 'F:\AI\ninfer-3090'
 $Build     = 'ninfer-rtx3090-windows-x64-0.18.0-rtx3090'
 # ninfer-all continues the ninfer-3090 line and is the only build with Inkling 2; its run.bat has no profile for it.
-$InklingBuild = 'ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-5fdefb3764c9'
-$IQ4XS = 'models\inkling2-iq4xs\Inkling-2-Mini-UD-IQ4_XS-ninfer-v3.ninfer'
-$Q8KXL = 'models\inkling2-q8kxl\Inkling-2-Mini-UD-Q8_K_XL-ninfer-v3.ninfer'
+$InklingBuild = 'ninfer-windows-x64-cuda12.9-sm70-75-80-86-89-5fe3107796c0'
+# The 2026-11-24 artifacts carry the mainline DSpark drafter and incoai's DFlash2; the 2026-11-21 files stay beside them.
+$IQ4XS = 'models\inkling2-iq4xs-20261124\Inkling-2-Mini-UD-IQ4_XS-ninfer-v3.ninfer'
+$Q8KXL = 'models\inkling2-q8kxl-20261124\Inkling-2-Mini-UD-Q8_K_XL-ninfer-v3.ninfer'
 # The KV cache (MXFP8 by default, 16.5 KiB a token) stays whole on the first device, so context is bounded by GPU 1.
 # Two GPUs divide only the routed experts (--tensor-parallel); the split puts most of them on GPU 0 to leave GPU 1
 # room for the cache: 768K starts only with 1,7 (1,3 is 71 MiB short). Measured 2026-11-23 (README § Inkling 2 Mini),
-# GPU 1 / GPU 0 with the desktop: 1 GPU 23.0 GiB; 2gpu 22.5 / 13.5 GiB; q8 21.8 / 15.6 GiB.
+# GPU 1 / GPU 0 with the desktop: 1 GPU 23.0 GiB; 2gpu 22.5 / 13.5 GiB; q8 21.8 / 15.6 GiB. The 2026-11-25.3 build and
+# artifacts start with the same contexts; peaks then, MiB: 1 GPU 23,040; q8 21,790 / 17,242 (README § ninfer-all 2026-11-25.3).
 $TwoGpus = '--devices 1,0 --tensor-parallel'
 $Inkling = @{
     'inkling2-mini'      = @{ File = $IQ4XS; Context = 262144; Gpus = '' }
