@@ -45,14 +45,18 @@ sealed class StrataClient
     }
 
     // /health's "model" (the configured one, also while unloaded) from the last answer, e.g.
-    // "qwen3.8-flash-next-iq3_xxs"; null before Strata answers.
+    // "qwen3.8-flash-next-iq3_xxs"; null while Strata does not answer.
     public string Model { get; private set; }
 
     // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
     public async Task<bool?> GetLoadedAsync()
     {
         string body = await StatusQuery.GetBodyAsync(http, "/health");
-        if (body == null) return null;
+        if (body == null)
+        {
+            Model = null;
+            return null;
+        }
         var root = (Dictionary<string, object>)json.DeserializeObject(body);
         Model = root.ContainsKey("model") ? root["model"] as string : null;
         return root.ContainsKey("loaded") && (bool)root["loaded"];
