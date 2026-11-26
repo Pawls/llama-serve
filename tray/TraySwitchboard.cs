@@ -22,6 +22,8 @@ sealed partial class TrayApp : ISwitchHost
     List<SwitchTarget> switchTargets;
     ToolStripMenuItem switchboardItem, switchboardTokenItem;
     bool switchboardEnabled;   // tray-settings.json's SwitchboardEnabled; only this tray writes it
+    string switchboardBound;   // "network", "local", or null while it is not listening
+    bool switchboardRebindPending;
 
     // ---- Listener ----
 
@@ -44,11 +46,20 @@ sealed partial class TrayApp : ISwitchHost
         return token;
     }
 
-    // Starts, restarts or stops the listener to match SwitchboardEnabled and ShareOnNetwork.
-    void ApplySwitchboard()
+    // Starts, restarts or stops the listener to match SwitchboardEnabled and ShareOnNetwork. Returns where it
+    // listens ("network" or "local"), or null when it is off or could not bind (a notice says why). A listener that is
+    // answering requests is left alone until they end, since closing it aborts their replies.
+    string ApplySwitchboard()
     {
+        if (switchboardEnabled && switchboard != null && switchboard.Busy)
+        {
+            switchboardRebindPending = true;
+            Notify("The front door moves once the replies it is running have finished.", ToolTipIcon.Info);
+            return switchboardBound;
+        }
+        switchboardRebindPending = false;
         StopSwitchboard();
-        if (!switchboardEnabled) return;
+        if (!switchboardEnabled) return null;
         if (switchTargets == null) switchTargets = BuildSwitchTargets();
         var board = new Switchboard(this, ReadOrCreateSwitchboardToken(), WriteSwitchLog);
         try
@@ -60,7 +71,7 @@ sealed partial class TrayApp : ISwitchHost
             if (!shareOnNetwork)
             {
                 Notify("The front door could not listen on port " + Switchboard.Port + ": " + ex.Message, ToolTipIcon.Error);
-                return;
+                return null;
             }
             // Access denied: the one-time URL reservation for all interfaces is missing.
             Notify("The front door cannot listen on the network yet (" + ex.Message + "). It is local only until you run allow-switchboard.ps1 as administrator.", ToolTipIcon.Warning);
@@ -68,10 +79,15 @@ sealed partial class TrayApp : ISwitchHost
             catch (HttpListenerException local)
             {
                 Notify("The front door could not listen on port " + Switchboard.Port + ": " + local.Message, ToolTipIcon.Error);
-                return;
+                return null;
             }
+            switchboard = board;
+            switchboardBound = "local";
+            return switchboardBound;
         }
         switchboard = board;
+        switchboardBound = shareOnNetwork ? "network" : "local";
+        return switchboardBound;
     }
 
     void StopSwitchboard()
@@ -79,16 +95,31 @@ sealed partial class TrayApp : ISwitchHost
         if (switchboard == null) return;
         switchboard.Stop();
         switchboard = null;
+        switchboardBound = null;
+    }
+
+    // Called by every poll: a rebind postponed because replies were running happens once they have ended.
+    void ApplyPendingSwitchboardRebind()
+    {
+        if (switchboardRebindPending && (switchboard == null || !switchboard.Busy)) ApplySwitchboard();
     }
 
     Task ToggleSwitchboardAsync()
     {
-        switchboardEnabled = !switchboardEnabled;
+        bool turnOn = !switchboardEnabled;
+        switchboardEnabled = turnOn;
+        string bound = ApplySwitchboard();
+        if (turnOn && bound == null)
+        {
+            switchboardEnabled = false;   // ApplySwitchboard has said why; the item must not stay ticked
+            return Task.FromResult(0);
+        }
         TraySettings.SetFlag(root, TraySettings.SwitchboardKey, switchboardEnabled);
-        ApplySwitchboard();
-        Notify(switchboardEnabled
-            ? "Front door on port " + Switchboard.Port + (shareOnNetwork ? " (LAN and Tailscale)." : " (this PC only; tick Share router on the network for other machines).")
-                + " A request that names a model starts the engine for it. Token: logs\\switchboard-token."
+        string where = bound == "network" ? " (LAN and Tailscale)."
+            : shareOnNetwork ? " (this PC only until allow-switchboard.ps1 has been run)."
+            : " (this PC only; tick Share router on the network for other machines).";
+        Notify(turnOn
+            ? "Front door on port " + Switchboard.Port + where + " A request that names a model starts the engine for it. Token: logs\\switchboard-token."
             : "Front door off.", ToolTipIcon.Info);
         return Task.FromResult(0);
     }
@@ -120,30 +151,33 @@ sealed partial class TrayApp : ISwitchHost
     List<SwitchTarget> BuildSwitchTargets()
     {
         var targets = new List<SwitchTarget>();
-        targets.AddRange(presetOrder.Select(id => new SwitchTarget("router", id, RouterClient.BaseUrl)));
-        targets.AddRange(StrataSizes.Where(size => size.ModelId != null).Select(size => new SwitchTarget("strata", size.ModelId, StrataClient.BaseUrl)));
-        targets.AddRange(NinferModels.Select(model => new SwitchTarget("ninfer", model.ModelId, NinferClient.BaseUrl)));
+        foreach (string id in presetOrder) AddSwitchTarget(targets, "router", id, RouterClient.BaseUrl);
+        foreach (StrataSize size in StrataSizes.Where(size => size.ModelId != null)) AddSwitchTarget(targets, "strata", size.ModelId, StrataClient.BaseUrl);
+        foreach (NinferModel model in NinferModels) AddSwitchTarget(targets, "ninfer", model.ModelId, NinferClient.BaseUrl);
         return targets;
     }
 
-    IList<SwitchTarget> ISwitchHost.Targets { get { return switchTargets; } }
-
-    Task<bool> ISwitchHost.IsReadyAsync(SwitchTarget target)
+    // Two engines can report the same id (ninfer's qwen3.8-27b is also a router preset). The later one is listed as
+    // "<engine>/<id>"; the switchboard rewrites the request's model back to the engine's own id.
+    static void AddSwitchTarget(List<SwitchTarget> targets, string engine, string id, string baseUrl)
     {
-        return OnUi(() => Task.FromResult(IsTargetReady(target)));
+        string frontDoorId = targets.Any(t => t.ModelId == id) ? engine + "/" + id : id;
+        targets.Add(new SwitchTarget(engine, frontDoorId, baseUrl, id));
     }
+
+    IList<SwitchTarget> ISwitchHost.Targets { get { return switchTargets; } }
 
     bool IsTargetReady(SwitchTarget target)
     {
         switch (target.Engine)
         {
             case "router":
-                return activeModel != null && activeModel.Id == target.ModelId && activeModel.Status == "loaded"
+                return activeModel != null && activeModel.Id == target.UpstreamId && activeModel.Status == "loaded"
                     && strataState != StrataState.Loaded && ninferState == NinferState.Stopped;
             case "strata":
-                return strataState == StrataState.Loaded && strata.Model == target.ModelId;
+                return strataState == StrataState.Loaded && strata.Model == target.UpstreamId;
             default:
-                return ninferState == NinferState.Ready && ninfer.Model == target.ModelId;
+                return ninferState == NinferState.Ready && ninfer.Model == target.UpstreamId;
         }
     }
 
@@ -156,7 +190,7 @@ sealed partial class TrayApp : ISwitchHost
             if (ninferState == NinferState.Ready) { engine = "ninfer"; id = ninfer.Model; }
             else if (strataState == StrataState.Loaded) { engine = "strata"; id = strata.Model; }
             else if (activeModel != null) { engine = "router"; id = activeModel.Id; }
-            return Task.FromResult(switchTargets.FirstOrDefault(t => t.Engine == engine && t.ModelId == id));
+            return Task.FromResult(switchTargets.FirstOrDefault(t => t.Engine == engine && t.UpstreamId == id));
         });
     }
 
@@ -176,6 +210,8 @@ sealed partial class TrayApp : ISwitchHost
     {
         return OnUi(async () =>
         {
+            string waited = await WaitWhileStrataLoadsAsync();   // else its load finishes on GPUs just reported free
+            if (waited != null) return waited;
             if (ninferState != NinferState.Stopped && !ninferStopping) await StopNinferAsync();
             if (strataState == StrataState.Loaded && !await UnloadStrataAsync(null)) return "Could not unload Strata's model.";
             if (activeModel != null)
@@ -199,9 +235,9 @@ sealed partial class TrayApp : ISwitchHost
             string error;
             switch (target.Engine)
             {
-                case "router": error = await EnsureRouterAsync(target.ModelId); break;
-                case "strata": error = await EnsureStrataAsync(StrataSizes.First(s => s.ModelId == target.ModelId)); break;
-                default: error = await EnsureNinferAsync(NinferModels.First(m => m.ModelId == target.ModelId)); break;
+                case "router": error = await EnsureRouterAsync(target.UpstreamId); break;
+                case "strata": error = await EnsureStrataAsync(StrataSizes.First(s => s.ModelId == target.UpstreamId)); break;
+                default: error = await EnsureNinferAsync(NinferModels.First(m => m.ModelId == target.UpstreamId)); break;
             }
             WriteSwitchLog(error == null
                 ? target.Key + " ready after " + (int)(DateTime.Now - began).TotalSeconds + " s"
@@ -235,6 +271,12 @@ sealed partial class TrayApp : ISwitchHost
     // the router loads the preset, which unloads the router's previous one.
     async Task<string> EnsureRouterAsync(string id)
     {
+        if (reserveGpu0)
+        {
+            // start-router.ps1 wrote the presets it still serves; a missing file means no check.
+            List<string> served = ReadPresetOrder(Path.Combine(root, "logs", "presets.run.ini"));
+            if (served.Count > 0 && !served.Contains(id)) return "GPU 0 is reserved for ComfyUI in the tray, and " + id + " needs both cards.";
+        }
         string waited = await WaitWhileStrataLoadsAsync();
         if (waited != null) return waited;
         if (ninferState != NinferState.Stopped && !ninferStopping) await StopNinferAsync();   // brings the router back if the tray stopped it for ninfer
@@ -247,7 +289,7 @@ sealed partial class TrayApp : ISwitchHost
             SwitchRouterWait, "The router did not answer in time.");
         if (up != null) return up;
 
-        string problem = await TryLoadAsync(id);
+        string problem = await TryLoadAsync(id, null);   // the caller reports it
         if (problem != null) return problem;
         bool seenLoading = false;
         DateTime asked = DateTime.Now;

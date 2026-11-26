@@ -37,7 +37,6 @@ sealed class SwitchTarget
 interface ISwitchHost
 {
     IList<SwitchTarget> Targets { get; }
-    Task<bool> IsReadyAsync(SwitchTarget target);
     Task<string> EnsureAsync(SwitchTarget target);   // null once the target answers; otherwise why not
     Task<SwitchTarget> CurrentAsync();               // the engine that is up now, or null
     Task<string> FreeAsync();                        // null once the GPUs are free; otherwise why not
@@ -51,9 +50,17 @@ sealed class Switchboard
 
     public TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(10);
     public TimeSpan BusyWait = TimeSpan.FromMinutes(15);
+    // A streaming request whose switch or wait is still going after this long is answered with headers and keepalives.
     public TimeSpan StreamHeadersAfter = TimeSpan.FromSeconds(2);
 
-    public bool Busy { get { return false; } }
+    // Whether a request is running or queued. The tray moves the listener only while this is false.
+    public bool Busy
+    {
+        get
+        {
+            lock (gate) return activeCount > 0 || waiting.Values.Any(count => count > 0);
+        }
+    }
 
     readonly ISwitchHost host;
     readonly string token;
@@ -203,7 +210,8 @@ sealed class Switchboard
         SwitchTarget target;
         if (info.Model != null)
         {
-            target = host.Targets.FirstOrDefault(t => string.Equals(t.ModelId, info.Model, StringComparison.OrdinalIgnoreCase));
+            target = host.Targets.FirstOrDefault(t => t.ModelId == info.Model)
+                ?? host.Targets.FirstOrDefault(t => string.Equals(t.ModelId, info.Model, StringComparison.OrdinalIgnoreCase));
             if (target == null)
             {
                 await WriteErrorAsync(response, 404, "model_not_found",
@@ -261,6 +269,21 @@ sealed class Switchboard
     {
         public string Model;
         public bool Stream;
+        public Dictionary<string, object> Root;   // the parsed body, kept for a rewrite of "model"
+    }
+
+    static JavaScriptSerializer BodySerializer()
+    {
+        return new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 1000 };
+    }
+
+    // The body the engine receives: the client's, with "model" in the id the engine knows. Only a request whose name
+    // differs (another case, or a front-door prefix that tells two engines' equal names apart) is re-serialized.
+    static byte[] BodyFor(SwitchTarget target, RequestInfo info, byte[] body)
+    {
+        if (info.Root == null || info.Model == target.UpstreamId) return body;
+        info.Root["model"] = target.UpstreamId;
+        return Encoding.UTF8.GetBytes(BodySerializer().Serialize(info.Root));
     }
 
     static RequestInfo ReadRequest(byte[] body)
@@ -269,9 +292,9 @@ sealed class Switchboard
         if (body.Length == 0) return info;
         try
         {
-            var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 1000 };
-            var root = serializer.DeserializeObject(Encoding.UTF8.GetString(body)) as Dictionary<string, object>;
+            var root = BodySerializer().DeserializeObject(Encoding.UTF8.GetString(body)) as Dictionary<string, object>;
             if (root == null) return info;
+            info.Root = root;
             info.Model = root.ContainsKey("model") ? root["model"] as string : null;
             info.Stream = root.ContainsKey("stream") && root["stream"] is bool && (bool)root["stream"];
         }
@@ -296,10 +319,10 @@ sealed class Switchboard
     async Task ServeAsync(HttpListenerContext context, SwitchTarget target, byte[] body, RequestInfo info)
     {
         HttpListenerResponse response = context.Response;
-        // Streaming clients are answered at once and kept warm, so their read timeouts do not fire while an
-        // engine loads. Everything else waits in silence.
-        bool early = info.Stream && !await host.IsReadyAsync(target);
+        // A streaming request that is still waiting after a moment (a switch, or a queue behind another model) is
+        // answered with headers and kept warm, so its read timeout does not fire. Everything else waits in silence.
         Task<string> prepare = PrepareAsync(target);
+        bool early = info.Stream && await Task.WhenAny(prepare, Task.Delay(StreamHeadersAfter)) != prepare;
         if (early)
         {
             try
@@ -343,7 +366,7 @@ sealed class Switchboard
         }
         try
         {
-            await ForwardAsync(context, target, body, early);
+            await ForwardAsync(context, target, BodyFor(target, info, body), early);
         }
         finally
         {

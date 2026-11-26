@@ -1171,6 +1171,7 @@ sealed partial class TrayApp : ApplicationContext
             ninferState = ClassifyNinfer(ninferAnswering, ServerProcesses.NinferRunning());
             Apply(latest);
             KeepGpusExclusive();
+            ApplyPendingSwitchboardRebind();
             // ninfer exited without the menu's Stop (it crashed, failed to start, or a script stopped it).
             if (ninferState == NinferState.Stopped && !ninferStopping && routerYieldedToNinfer)
             {
@@ -1433,16 +1434,17 @@ sealed partial class TrayApp : ApplicationContext
 
     async Task LoadAsync(string id)
     {
-        string problem = await TryLoadAsync(id);
-        if (problem != null) Notify(problem, ToolTipIcon.Warning);
+        await TryLoadAsync(id, Notify);
     }
 
     // Asks the router to load `id`, after unloading Strata's model. Null once the request is sent (the router
-    // answers before the load finishes; FollowRequestedLoad reports the end); otherwise why not.
-    async Task<string> TryLoadAsync(string id)
+    // answers before the load finishes; FollowRequestedLoad reports the end); otherwise why not, which `show` also
+    // shows (null shows nothing: the switchboard reports it to its caller).
+    async Task<string> TryLoadAsync(string id, Action<string, ToolTipIcon> show)
     {
         if (activeModel != null && activeModel.Id == id) return null;
-        if (StrataIsLoading()) return "Strata is loading its model; load " + id + " once it has finished.";
+        if (StrataIsLoading()) return Reported(show, "Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
+        // UnloadStrataAsync has already shown why it failed.
         if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for"))
             return "Could not unload Strata's model, so " + id + " was not loaded.";
         requestedModel = id;
@@ -1451,7 +1453,13 @@ sealed partial class TrayApp : ApplicationContext
         string error = await client.LoadAsync(id);
         if (error == null) return null;
         requestedModel = null;
-        return "Could not load " + id + ": " + error;
+        return Reported(show, "Could not load " + id + ": " + error, ToolTipIcon.Error);
+    }
+
+    static string Reported(Action<string, ToolTipIcon> show, string text, ToolTipIcon icon)
+    {
+        if (show != null) show(text, icon);
+        return text;
     }
 
     async Task UnloadAsync()

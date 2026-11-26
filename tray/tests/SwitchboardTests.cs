@@ -65,13 +65,11 @@ sealed class FakeHost : ISwitchHost
     public readonly List<string> EnsureLog = new List<string>();
     public readonly List<DateTime> EnsureTimes = new List<DateTime>();
     public Func<SwitchTarget, Task<string>> Ensure = t => Task.FromResult<string>(null);
-    public Func<SwitchTarget, bool> Ready = t => true;
     public SwitchTarget Current;
     public int FreeCalls;
     public string FreeError;
 
     public IList<SwitchTarget> Targets { get { return TargetList; } }
-    public Task<bool> IsReadyAsync(SwitchTarget t) { return Task.FromResult(Ready(t)); }
     public Task<SwitchTarget> CurrentAsync() { return Task.FromResult(Current); }
     public Task<Dictionary<string, object>> StatusAsync()
     {
@@ -307,7 +305,6 @@ static class Tests
 
         await Run("keepalive while a stream waits for a switch", async rig =>
         {
-            rig.Host.Ready = t => false;
             rig.Host.Ensure = async t => { await Task.Delay(800); return null; };
             rig.B.Handler = async ctx =>
             {
@@ -332,7 +329,6 @@ static class Tests
 
         await Run("a failed switch under a stream ends in an error event", async rig =>
         {
-            rig.Host.Ready = t => false;
             rig.Host.Ensure = async t => { await Task.Delay(300); return "no VRAM"; };
             var response = await rig.Http.SendAsync(rig.Post("model-b", true));
             string text = await response.Content.ReadAsStringAsync();
@@ -376,7 +372,6 @@ static class Tests
                 if (Interlocked.Increment(ref calls) == 1) await Task.Delay(2000);
                 await JsonReply("{}")(ctx);
             };
-            rig.Host.Ready = t => t.ModelId != "model-b";
             Task<HttpResponseMessage> busy = rig.Http.SendAsync(rig.Post("model-a"));
             await Task.Delay(150);
             using (var leaver = new HttpClient { Timeout = TimeSpan.FromMilliseconds(400) })

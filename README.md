@@ -94,8 +94,8 @@ Invoke-RestMethod http://127.0.0.1:8409/switchboard/status -Headers $h
 
 What it does with a request, and what it will not do:
 
-- **A cold start takes as long as the engine does** (router 15-60 s, Strata 1-3 min, ninfer 10-60 s, plus stopping what
-  ran). A request with `"stream": true` is answered at once with `: waiting for ...` comment lines every 10 s, so client
+- **A cold start takes as long as the engine does** (estimates from each engine's own load times, not yet measured
+  through the front door: router 15-60 s, Strata 30-110 s, ninfer 10-60 s, plus stopping what ran). A request with `"stream": true` that is still waiting after 2 s (a switch, or a queue behind another model) gets `: waiting for ...` comment lines every 10 s, so client
   timeouts do not fire; a failed start ends the stream with an error event. A non-streaming request waits in silence, so
   give such a client a timeout over two minutes.
 - **One model at a time.** Requests for the model in use run together. A request for another model waits (up to 15
@@ -105,6 +105,10 @@ What it does with a request, and what it will not do:
 - `POST /switchboard/free` unloads Strata's and the router's model and stops ninfer (409 while a reply is running);
   `GET /switchboard/status` shows what is up. Every switch and failure is in `logs\switchboard.log`.
 - A request with no `model` goes to whichever engine is up, or gets a 400.
+- **Equal ids.** ninfer's `qwen3.8-27b` is also a router preset, so the list shows the second one as
+  `ninfer/qwen3.8-27b`; the front door sends the engine its own id. Ids match exactly first, then ignoring case.
+- Toggling **Share router on the network** moves the front door's listener, but waits until its running replies
+  have ended (closing a listener aborts them).
 - Clients keep their current configs; to use the front door, point their base URL at 8409 and give them the token
   (none of their configs are in this repo).
 

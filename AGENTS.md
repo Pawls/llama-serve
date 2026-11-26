@@ -129,8 +129,11 @@ Other moving parts:
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
   it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
-- **The tray** is one C# file, [tray/LlamaTray.cs](./tray/LlamaTray.cs), compiled with the C# compiler built into
-  Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\` (untracked). After editing it, re-run
+- **The tray** is three C# files, [tray/LlamaTray.cs](./tray/LlamaTray.cs) (menu, engine state),
+  [tray/Switchboard.cs](./tray/Switchboard.cs) (the front door's proxy) and
+  [tray/TraySwitchboard.cs](./tray/TraySwitchboard.cs) (its engine switching, a `partial` of `TrayApp`), compiled
+  together with the C# compiler built into Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\`
+  (untracked). `tray\tests` is built only by `test-switchboard.ps1`. After editing the tray, re-run
   `install-tray.ps1`; that restarts the user's tray, so say so.
 
 ## Strata state and updating it
