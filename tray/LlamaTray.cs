@@ -380,6 +380,7 @@ static class TraySettings
     public const string StrataIdleKey = "StrataIdleMinutes";
     public const string ReserveGpu0Key = "ReserveGpu0";
     public const string ShareOnNetworkKey = "ShareOnNetwork";
+    public const string SwitchboardKey = "SwitchboardEnabled";   // the front door on :8409, see Switchboard.cs
 
     // A hand-edited file that does not parse reads as false (not reserved, not shared) rather than throwing out of
     // the poll timer.
@@ -733,7 +734,7 @@ static class Gpus
     }
 }
 
-sealed class TrayApp : ApplicationContext
+sealed partial class TrayApp : ApplicationContext
 {
     const string AppName = "Llama Router";
     const int PollIntervalMs = 2000;
@@ -833,6 +834,7 @@ sealed class TrayApp : ApplicationContext
         presetOrder = ReadPresetOrder(Path.Combine(root, "presets.ini"));
         reserveGpu0 = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
         shareOnNetwork = TraySettings.GetFlag(root, TraySettings.ShareOnNetworkKey);
+        switchboardEnabled = TraySettings.GetFlag(root, TraySettings.SwitchboardKey);
 
         int iconSize = SystemInformation.SmallIconSize.Width;
         foreach (RouterState each in Enum.GetValues(typeof(RouterState)))
@@ -861,6 +863,7 @@ sealed class TrayApp : ApplicationContext
         if (current == null && !ServerProcesses.RouterRunning() && !ServerProcesses.NinferRunning()) StartRouter();
         await RefreshAsync();
         pollTimer.Start();
+        ApplySwitchboard();
     }
 
     // ---- Menu ----
@@ -888,6 +891,9 @@ sealed class TrayApp : ApplicationContext
             (s, e) => RunAction(ToggleReserveGpuAsync));
         shareItem = new ToolStripMenuItem("Share router on the network (LAN and Tailscale)", null,
             (s, e) => RunAction(ToggleShareAsync));
+        switchboardItem = new ToolStripMenuItem("Front door on :" + Switchboard.Port + " (loads any model on request)", null,
+            (s, e) => RunAction(ToggleSwitchboardAsync));
+        switchboardTokenItem = new ToolStripMenuItem("Open front-door token", null, (s, e) => OpenPath(SwitchboardTokenPath()));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
         strataModelsMenu = new ToolStripMenuItem("Start Strata");
         foreach (StrataSize size in StrataSizes)
@@ -906,7 +912,7 @@ sealed class TrayApp : ApplicationContext
         ninferModelsMenu = new ToolStripMenuItem("Start ninfer (stops the router and Strata)");
         foreach (NinferModel model in NinferModels)
         {
-            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferStartAsync(model))) { Tag = model });
+            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferSelectAsync(model))) { Tag = model });
         }
         ninferStopItem = new ToolStripMenuItem("Stop ninfer", null, (s, e) => RunAction(StopNinferAsync));
         var ninferLogItem = new ToolStripMenuItem("Open ninfer log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "ninfer.log")));
@@ -925,6 +931,7 @@ sealed class TrayApp : ApplicationContext
             chatItem, logItem, presetsItem, folderItem,
             new ToolStripSeparator(),
             startStopItem, restartItem, reserveGpuItem, shareItem,
+            switchboardItem, switchboardTokenItem,
             new ToolStripSeparator(),
             strataStatusItem, strataModelsMenu, strataStopItem,
             strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
@@ -1008,6 +1015,7 @@ sealed class TrayApp : ApplicationContext
         reserveGpuItem.Enabled = state != RouterState.Starting && state != RouterState.Stopping;
         shareItem.Checked = shareOnNetwork;
         shareItem.Enabled = reserveGpuItem.Enabled;
+        switchboardItem.Checked = switchboardEnabled;
 
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
@@ -1019,10 +1027,17 @@ sealed class TrayApp : ApplicationContext
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
         ninferStatusItem.Text = NinferStatusText();
-        ninferModelsMenu.Visible = ninferStopped;
-        ninferModelsMenu.Enabled = !ninferLaunching;
+        // The list stays while ninfer runs: picking another profile replaces it (Strata's menu works the same way).
+        ninferModelsMenu.Text = ninferStopped ? "Start ninfer (stops the router and Strata)" : "ninfer model";
+        ninferModelsMenu.Enabled = !ninferLaunching && !ninferStopping && ninferState != NinferState.Starting;
         foreach (ToolStripMenuItem item in ninferModelsMenu.DropDownItems)
-            item.Enabled = !(reserved && ((NinferModel)item.Tag).BothGpus);
+        {
+            var model = (NinferModel)item.Tag;
+            bool running = !ninferStopped && ninfer.Model == model.ModelId;
+            item.Checked = running;
+            item.Text = model.Label + (running ? "  (running)" : "");
+            item.Enabled = !(reserved && model.BothGpus);
+        }
         ninferStopItem.Visible = !ninferStopped;
         ninferStopItem.Text = routerYieldedToNinfer ? "Stop ninfer and restart the router" : "Stop ninfer";
         ninferStopItem.Enabled = !ninferStopping && !ninferLaunching;
@@ -1156,6 +1171,7 @@ sealed class TrayApp : ApplicationContext
             ninferState = ClassifyNinfer(ninferAnswering, ServerProcesses.NinferRunning());
             Apply(latest);
             KeepGpusExclusive();
+            ApplyPendingSwitchboardRebind();
             // ninfer exited without the menu's Stop (it crashed, failed to start, or a script stopped it).
             if (ninferState == NinferState.Stopped && !ninferStopping && routerYieldedToNinfer)
             {
@@ -1418,20 +1434,32 @@ sealed class TrayApp : ApplicationContext
 
     async Task LoadAsync(string id)
     {
-        if (activeModel != null && activeModel.Id == id) return;
-        if (StrataIsLoading())
-        {
-            Notify("Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
-            return;
-        }
-        if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for")) return;
+        await TryLoadAsync(id, Notify);
+    }
+
+    // Asks the router to load `id`, after unloading Strata's model. Null once the request is sent (the router
+    // answers before the load finishes; FollowRequestedLoad reports the end); otherwise why not, which `show` also
+    // shows (null shows nothing: the switchboard reports it to its caller).
+    async Task<string> TryLoadAsync(string id, Action<string, ToolTipIcon> show)
+    {
+        if (activeModel != null && activeModel.Id == id) return null;
+        if (StrataIsLoading()) return Reported(show, "Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
+        // UnloadStrataAsync has already shown why it failed.
+        if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for"))
+            return "Could not unload Strata's model, so " + id + " was not loaded.";
         requestedModel = id;
         requestedModelSeenLoading = false;
         requestedAt = DateTime.Now;
         string error = await client.LoadAsync(id);
-        if (error == null) return;
+        if (error == null) return null;
         requestedModel = null;
-        Notify("Could not load " + id + ": " + error, ToolTipIcon.Error);
+        return Reported(show, "Could not load " + id + ": " + error, ToolTipIcon.Error);
+    }
+
+    static string Reported(Action<string, ToolTipIcon> show, string text, ToolTipIcon icon)
+    {
+        if (show != null) show(text, icon);
+        return text;
     }
 
     async Task UnloadAsync()
@@ -1502,6 +1530,7 @@ sealed class TrayApp : ApplicationContext
         bool share = !shareOnNetwork;
         if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
         shareOnNetwork = share;
+        ApplySwitchboard();   // the front door follows the same bind choice
         string when = state == RouterState.Stopped ? " once the router is started." : ".";
         Notify(share
             ? "Router shared on port 8410 (LAN and Tailscale)" + when
@@ -1630,6 +1659,15 @@ sealed class TrayApp : ApplicationContext
         strataState = StrataState.Stopped;
         ShowState(state);
         return exitCode;
+    }
+
+    // A click in the ninfer model menu: starts that profile when ninfer is stopped, replaces the one that runs
+    // (stop, then start; the router stays down), or does nothing for the profile already running.
+    async Task NinferSelectAsync(NinferModel model)
+    {
+        if (ninferStopping || ninferLaunching) return;
+        if (ninferState == NinferState.Stopped) await NinferStartAsync(model);
+        else if (ninferState == NinferState.Ready && ninfer.Model != model.ModelId) await ReplaceNinferAsync(model);
     }
 
     // ninfer needs its GPUs to itself. The router is stopped, not just unloaded, because any client request would load a
@@ -1774,6 +1812,7 @@ sealed class TrayApp : ApplicationContext
     {
         pollTimer.Stop();
         quitting = true;
+        StopSwitchboard();
         tray.Visible = false;
         try
         {
