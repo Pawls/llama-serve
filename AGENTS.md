@@ -152,7 +152,7 @@ Other moving parts:
   2026-11-01 by `setup.py --family swift --model IQ3_S --gpus 0,1 --no-start`; config `strata-swift-iq3_s.json`,
   model id `swift-1.5-iq3_s`. Its per-layer embedding table is in shard 1 (setup's `--ple-gguf` is right; ISTA's is
   in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
-  (setup wrote 700), `--vram-reserve-later-mib 2505` (1310 until 2026-11-25, see "Strata 0.2.22" below), `--resident-experts` (required: setup warned a full copy needs
+  (setup wrote 700), `--vram-reserve-later-mib 3092` (1310, then 2505 on 2026-11-25, see "Strata 0.2.22" below), `--resident-experts` (required: setup warned a full copy needs
   ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `--adapt-async 1` (2026-11-02), `"env": {"STRATA_PF_FUSED":
   "1"}` (2026-11-02), `--prompt-cache-spread` and `"expert_profile_save": "expert-profile-swift-learned.bin"`
   (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
@@ -283,8 +283,8 @@ Other moving parts:
   for the code (configs and `run-*.bat` byte-identical; copies in `F:\AI\strata-backup-pre-0.2.22`), the
   `engine_from_feed` snippet above for the Qwen engine (0.1.66 is in `engine\.previous`), and the Inkling snippet below
   for `strata-inkling`. **Swift now starts LOW on the desktop card with the old `--vram-reserve-later-mib 1310`**
-  (0 MiB free; 0.1.66 left 1,361); it is **2505 since 2026-11-25** (738 MiB free, no LOW line, 6,864 expert slots on
-  that card against 7,469). Check the `VRAM free with everything loaded` line after the next engine or desktop-app
+  (0 MiB free; 0.1.66 left 1,361); it was 2505 from 2026-11-25 (738 MiB free, no LOW line, 6,864 expert slots on
+  that card against 7,469), and is **3092 since that evening** (a front-door start the same day logged LOW, 181 MiB free, and asked for 3092; not restarted since). Check the `VRAM free with everything loaded` line after the next engine or desktop-app
   change. Swift on it: tool calls 3/3, RAM copy page-locked (22.09 GiB in 11 s), code decode 12-15% below 0.1.57/0.1.59
   at 52k and 128k (5% at 2k) and essay unchanged (one run, [README.md](./README.md#engine-0169-strata-0222-measured-2026-11-25)).
   Untried: `STRATA_SPLIT_LEND_RESERVE=0` in the config's `env`. Inkling SQ-20 starts and passes tool calls on it.
@@ -321,7 +321,7 @@ Other moving parts:
   **The default Swift config started LOW on the desktop card** in rounds 2 and 3 of the 2026-11-13 bench: the
   learned profile had moved one layer onto GPU 0 and the start log asked for `--vram-reserve-later-mib 1764`
   (installed then: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. It
-  came back on 0.1.69 and was raised to 2505 on 2026-11-25 (the "Strata 0.2.22" bullet above); check the
+  came back on 0.1.69 and was raised to 2505, then 3092, on 2026-11-25 (the "Strata 0.2.22" bullet above); check the
   `VRAM free with everything loaded` line at every Swift start and raise the reserve if it says LOW.
   **UD-Q4_K_XL is an Unsloth UD file, so since 0.2.13 it gets the Q8_0 hyper-connection read by default** (the
   deleted UD-IQ3_XXS config had set `STRATA_HC_Q8=1` by hand). Not benched or tool-call-checked on 0.1.59, so its

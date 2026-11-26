@@ -16,7 +16,7 @@
 > router/Strata/ninfer handover racing the switch (S2: switch-state box) · a Windows URL reservation or firewall
 > step that silently leaves the port unreachable (S2: bind box).
 >
-> **Next:** S3, Paul's live check (S2's code is built and installed; its last two boxes need his hands)
+> **Next:** S2 menu click and one request from the laptop (Paul); then strike S2 and S3
 >
 > **Branch:** `feat/switchboard`, one PR
 
@@ -66,7 +66,7 @@ does throw is defensive and cannot be driven from a test.
 
 ### S2 — Tray integration, token, toggle, docs · Opus 5.5 / high {#s2}
 
-**Status:** built, installed 2026-11-25, admin script run, answering on the LAN; open: the Ensure* wiring (S3) and a menu click.
+**Status:** built, installed 2026-11-25, admin script run, answering on the LAN; Ensure* driven in S3; open: a menu click.
 **Touches:** `tray/LlamaTray.cs` (`partial`), `tray/TraySwitchboard.cs` (new), `install-tray.ps1`,
 `allow-switchboard.ps1` (new), `README.md`, `AGENTS.md`, `.gitignore` unchanged (`logs/` already ignored).
 **After:** S1.
@@ -74,7 +74,7 @@ does throw is defensive and cannot be driven from a test.
 
 - [x] `install-tray.ps1` compiles every `tray\*.cs`; the build succeeds and `test-switchboard.ps1` is green.
 - [x] Targets: every `presets.ini` section, each `StrataSize.ModelId`, each `NinferModel.ModelId`.
-- [ ] (written and compiled; driven only in S3, because the GPUs were busy) `EnsureAsync` per engine reuses `StrataStartAsync`, `StrataLoadAsync`, `StopStrataAsync`,
+- [x] (driven in S3 2026-11-25: ninfer to router to Strata to ninfer) `EnsureAsync` per engine reuses `StrataStartAsync`, `StrataLoadAsync`, `StopStrataAsync`,
       `NinferStartAsync`, `StartRouter`, `UnloadStrataAsync` and `client.LoadAsync`; waits poll the tray's own
       state; Reserve GPU 0 refuses Strata and two-GPU ninfer with a message.
 - [ ] (menu click not driven; the listener started from the saved flag) Menu item "Front door on :8409" toggles `SwitchboardEnabled`; the listener
@@ -90,11 +90,11 @@ does throw is defensive and cannot be driven from a test.
 
 ### S3 — Live check from the laptop · Opus 5.5 / medium {#s3}
 
-**Status:** blocked on Paul (GPUs are his, and it replaces what is running).
+**Status:** three switches run 2026-11-25 over the Tailscale address from the PC itself; open: one request from the laptop.
 **Touches:** the running engines.
 **After:** S2.
 **Seam:** `curl` against `http://<tailscale ip>:8409/v1/chat/completions`.
 
-- [ ] From the laptop: one request each for a router preset, a Strata id and a ninfer id, from a different engine
+- [ ] (run from the PC over its Tailscale address, all three answered; GPU 0 hit 23,808 MiB under Swift, a LOW start, so its reserve went to 3092; the laptop request is open) From the laptop: one request each for a router preset, a Strata id and a ninfer id, from a different engine
       each time; every one answers, and `nvidia-smi` shows no card near 24,576 MiB afterwards.
-- [ ] Record the cold-switch times in README, dated, with the undervolt stated.
+- [x] Record the cold-switch times in README, dated, with the undervolt stated.

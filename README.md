@@ -94,8 +94,17 @@ Invoke-RestMethod http://127.0.0.1:8409/switchboard/status -Headers $h
 
 What it does with a request, and what it will not do:
 
-- **A cold start takes as long as the engine does** (estimates from each engine's own load times, not yet measured
-  through the front door: router 15-60 s, Strata 30-110 s, ninfer 10-60 s, plus stopping what ran). A request with `"stream": true` that is still waiting after 2 s (a switch, or a queue behind another model) gets `: waiting for ...` comment lines every 10 s, so client
+- **A cold start takes as long as the engine does.** Measured 2026-11-25 over the Tailscale address, one
+  non-streaming request each, both GPUs undervolted (850 mV; 1680 / 1650 MHz), switch time from
+  `logs\switchboard.log`, then the whole request:
+
+  | Request | Was running | Switch | Request |
+  |---|---|---|---|
+  | `qwen3.8-27b` (router) | ninfer `inkling-2-mini-2gpu` | 31 s | 32.9 s |
+  | `swift-1.5-iq3_s` (Strata) | router `qwen3.8-27b` | 52 s | 54.6 s |
+  | `ninfer/qwen3.8-27b` (ninfer) | Strata Swift | 26 s | 26.9 s |
+
+  One run each, so a guide, not a bench; other router presets and Strata sizes load in 15-60 s and 30-110 s. A request with `"stream": true` that is still waiting after 2 s (a switch, or a queue behind another model) gets `: waiting for ...` comment lines every 10 s, so client
   timeouts do not fire; a failed start ends the stream with an error event. A non-streaming request waits in silence, so
   give such a client a timeout over two minutes.
 - **One model at a time.** Requests for the model in use run together. A request for another model waits (up to 15
