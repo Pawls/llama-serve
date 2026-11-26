@@ -131,6 +131,7 @@ static class Tests
             Board = new Switchboard(Host, Token, line => Console.WriteLine("       [board] " + line));
             Board.KeepAliveInterval = TimeSpan.FromMilliseconds(150);
             Board.BusyWait = TimeSpan.FromSeconds(10);
+            Board.StreamHeadersAfter = TimeSpan.FromMilliseconds(100);
             Board.Start(new[] { Url + "/" });
         }
 
@@ -389,6 +390,58 @@ static class Tests
             var next = await rig.Http.SendAsync(rig.Post("model-a"));
             Check("the next request is not stuck behind the one that left", next.StatusCode == HttpStatusCode.OK && clock.ElapsedMilliseconds < 1500,
                 clock.ElapsedMilliseconds + " ms");
+        });
+
+        await Run("the model name is rewritten for the engine", async rig =>
+        {
+            rig.Host.TargetList.Add(new SwitchTarget("ninfer", "ninfer/model-a", rig.B.BaseUrl, "model-a"));
+            await rig.Http.SendAsync(rig.Post("MODEL-A"));
+            Check("a name that differs in case reaches the engine in its canonical form",
+                rig.A.Bodies.Count == 1 && rig.A.Bodies[0].Contains("\"model\":\"model-a\""), rig.A.Bodies.Count == 1 ? rig.A.Bodies[0] : "no request");
+            await rig.Http.SendAsync(rig.Post("ninfer/model-a"));
+            Check("a prefixed front-door id reaches its engine under the engine's own id",
+                rig.B.Bodies.Count == 1 && rig.B.Bodies[0].Contains("\"model\":\"model-a\"") && !rig.B.Bodies[0].Contains("ninfer/"),
+                rig.B.Bodies.Count == 1 ? rig.B.Bodies[0] : "no request");
+            Check("the other fields survive the rewrite", rig.B.Bodies.Count == 1 && rig.B.Bodies[0].Contains("\"content\":\"hi\""));
+            Check("an exact id still wins over a case-insensitive match", rig.Host.EnsureLog.SequenceEqual(new[] { "model-a", "ninfer/model-a" }));
+        });
+
+        await Run("a stream queued behind another model gets keepalives", async rig =>
+        {
+            rig.A.Handler = async ctx => { await Task.Delay(1500); await JsonReply("{}")(ctx); };
+            rig.B.Handler = async ctx =>
+            {
+                byte[] chunk = Encoding.UTF8.GetBytes("data: hello\n\n");
+                ctx.Response.ContentType = "text/event-stream";
+                ctx.Response.SendChunked = true;
+                await ctx.Response.OutputStream.WriteAsync(chunk, 0, chunk.Length);
+            };
+            Task<HttpResponseMessage> busy = rig.Http.SendAsync(rig.Post("model-a"));
+            await Task.Delay(200);
+            var clock = Stopwatch.StartNew();
+            var comments = new List<double>();
+            using (var response = await rig.Http.SendAsync(rig.Post("model-b", true), HttpCompletionOption.ResponseHeadersRead))
+            using (var reader = new StreamReader(await response.Content.ReadAsStreamAsync()))
+            {
+                Check("headers arrive while the other model's reply is still running", clock.ElapsedMilliseconds < 900, clock.ElapsedMilliseconds + " ms");
+                string line;
+                while ((line = await reader.ReadLineAsync()) != null)
+                    if (line.StartsWith(":")) comments.Add(clock.Elapsed.TotalMilliseconds);
+            }
+            Check("with comment lines while it waits", comments.Count > 0 && comments[0] < 900);
+            await busy;
+        });
+
+        await Run("busy reports replies in flight", async rig =>
+        {
+            rig.A.Handler = async ctx => { await Task.Delay(700); await JsonReply("{}")(ctx); };
+            Check("idle at first", !rig.Board.Busy);
+            Task<HttpResponseMessage> pending = rig.Http.SendAsync(rig.Post("model-a"));
+            await Task.Delay(250);
+            Check("busy while a reply runs", rig.Board.Busy);
+            await pending;
+            await Task.Delay(100);
+            Check("idle again once it ends", !rig.Board.Busy);
         });
 
         await Run("status and free", async rig =>

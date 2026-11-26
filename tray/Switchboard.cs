@@ -18,12 +18,14 @@ sealed class SwitchTarget
     public readonly string Engine;    // "router", "strata" or "ninfer"
     public readonly string ModelId;
     public readonly string BaseUrl;   // where the engine listens, e.g. http://127.0.0.1:8411
+    public readonly string UpstreamId;   // the id the engine knows it by; differs from ModelId when two engines share a name
 
-    public SwitchTarget(string engine, string modelId, string baseUrl)
+    public SwitchTarget(string engine, string modelId, string baseUrl, string upstreamId = null)
     {
         Engine = engine;
         ModelId = modelId;
         BaseUrl = baseUrl;
+        UpstreamId = upstreamId ?? modelId;
     }
 
     // Requests with the same key share the engine; a different key waits for them to end. Every router preset
@@ -49,6 +51,9 @@ sealed class Switchboard
 
     public TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(10);
     public TimeSpan BusyWait = TimeSpan.FromMinutes(15);
+    public TimeSpan StreamHeadersAfter = TimeSpan.FromSeconds(2);
+
+    public bool Busy { get { return false; } }
 
     readonly ISwitchHost host;
     readonly string token;
