@@ -16,11 +16,11 @@
 > router/Strata/ninfer handover racing the switch (S2: switch-state box) · a Windows URL reservation or firewall
 > step that silently leaves the port unreachable (S2: bind box).
 >
-> **Next:** S1, switchboard core with tests
+> **Next:** S3, Paul's live check (S2's code is built and installed; its last two boxes need his hands)
 >
 > **Branch:** `feat/switchboard`, one PR
 
-- [S1 — Switchboard core and its tests](#s1)
+- [~~S1 — Switchboard core and its tests~~ — SHIPPED 2026-11-25](#s1)
 - [S2 — Tray integration, token, toggle, docs](#s2)
 - [S3 — Live check from the laptop](#s3)
 
@@ -54,53 +54,39 @@
 - Rejected: a separate control endpoint clients must call first (Pi, Hermes, VS Code cannot), a standalone proxy
   process (races the tray).
 
-<a id="s1"></a>
-### S1 — Switchboard core and its tests · Opus 5.5 / high {#s1}
+### ~~S1 — Switchboard core and its tests~~ — SHIPPED 2026-11-25 {#s1}
 
-**Status:** not started.
-**Touches:** `tray/Switchboard.cs` (new), `tray/tests/SwitchboardTests.cs` (new), `test-switchboard.ps1` (new).
-**After:** none.
-**Seam:** `Switchboard` over HTTP, driven against a fake `ISwitchHost` and fake upstream servers on loopback.
+Shipped on `feat/switchboard`: `tray/Switchboard.cs` and 42 checks in `.\test-switchboard.ps1`, all green. Body in
+[switchboard_SHIPPED.md](./switchboard_SHIPPED.md#s1).
 
-- [ ] Red tests committed first and shown failing (stubs only).
-- [ ] Auth: no token, wrong token, `Bearer` and `x-api-key` right token (401, 401, 200 on `/v1/models`).
-- [ ] `/v1/models` lists every host target; unknown model answers 404 naming the known ids; a body with no
-      `model` uses the host's current engine, or 400 when none is up.
-- [ ] Routing: each model's body reaches its own upstream unchanged, `Authorization` is not forwarded, status and
-      content type come back; an upstream 400 passes through.
-- [ ] Stream: three SSE chunks 300 ms apart reach the client one by one (first chunk before the last is sent).
-- [ ] Keepalive: a streaming request whose switch takes longer than the interval gets a `:` comment before the
-      switch ends, then the stream; a failed switch ends in a `data:` error event.
-- [ ] Switch failure on a non-stream request: 503 with the host's message, upstream untouched.
-- [ ] Busy gate: while a slow reply for model A runs, a request for model B does not call `EnsureAsync` until A's
-      reply ends; two requests for A overlap; a client that drops mid-wait does not leak its slot.
-- [ ] `/switchboard/status` and `POST /switchboard/free` reach the host.
+**Note (from S1):** `HttpListener` never raised on a write to a client that had left (a 2 s wait with 150 ms
+keepalive writes logged nothing), so a gone client is noticed only when the engine's reply is written. Its queued
+switch still runs, which leaves the engine loaded for the next caller. The `catch` that releases a slot when a write
+does throw is defensive and cannot be driven from a test.
 
-<a id="s2"></a>
 ### S2 — Tray integration, token, toggle, docs · Opus 5.5 / high {#s2}
 
-**Status:** not started.
+**Status:** built, installed 2026-11-25 and smoke-tested on loopback; two boxes wait on Paul (the admin script, a menu click).
 **Touches:** `tray/LlamaTray.cs` (`partial`), `tray/TraySwitchboard.cs` (new), `install-tray.ps1`,
 `allow-switchboard.ps1` (new), `README.md`, `AGENTS.md`, `.gitignore` unchanged (`logs/` already ignored).
 **After:** S1.
 **Seam:** `install-tray.ps1` build plus `test-switchboard.ps1`; the tray's engine logic is driven by S3.
 
-- [ ] `install-tray.ps1` compiles every `tray\*.cs`; the build succeeds and `test-switchboard.ps1` is green.
-- [ ] Targets: every `presets.ini` section, each `StrataSize.ModelId`, each `NinferModel.ModelId`.
-- [ ] `EnsureAsync` per engine reuses `StrataStartAsync`, `StrataLoadAsync`, `StopStrataAsync`,
+- [x] `install-tray.ps1` compiles every `tray\*.cs`; the build succeeds and `test-switchboard.ps1` is green.
+- [x] Targets: every `presets.ini` section, each `StrataSize.ModelId`, each `NinferModel.ModelId`.
+- [ ] (written and compiled; driven only in S3, because the GPUs were busy) `EnsureAsync` per engine reuses `StrataStartAsync`, `StrataLoadAsync`, `StopStrataAsync`,
       `NinferStartAsync`, `StartRouter`, `UnloadStrataAsync` and `client.LoadAsync`; waits poll the tray's own
       state; Reserve GPU 0 refuses Strata and two-GPU ninfer with a message.
-- [ ] Menu item "Front door (:8409): load any model on request" toggles `SwitchboardEnabled`; the listener
+- [ ] (menu click not driven; the listener started from the saved flag) Menu item "Front door on :8409" toggles `SwitchboardEnabled`; the listener
       follows it live and re-binds when Share on network changes.
-- [ ] Token file is created on first enable; a bind failure on `http://+:8409/` falls back to loopback with a
+- [x] Token file is created on first enable; a bind failure on `http://+:8409/` falls back to loopback with a
       notice that names `allow-switchboard.ps1`.
-- [ ] `allow-switchboard.ps1` (admin): URL reservation for the current user and a firewall rule for TCP 8409 scoped
+- [ ] (needs an administrator shell: Paul) `allow-switchboard.ps1`: URL reservation for the current user and a firewall rule for TCP 8409 scoped
       to the LAN and Tailscale ranges README already uses.
-- [ ] README "Using it from another machine" and AGENTS.md "How the pieces fit" describe the front door, the token,
+- [x] README "Using it from another machine" and AGENTS.md "How the pieces fit" describe the front door, the token,
       the one-time admin script and the rule that it takes the GPUs from whatever is running.
-- [ ] Loopback smoke with the real tray (no engine started): `/v1/models` lists all ids with the right token.
+- [x] Loopback smoke with the real tray (no engine started): `/v1/models` lists all ids with the right token.
 
-<a id="s3"></a>
 ### S3 — Live check from the laptop · Opus 5.5 / medium {#s3}
 
 **Status:** blocked on Paul (GPUs are his, and it replaces what is running).
