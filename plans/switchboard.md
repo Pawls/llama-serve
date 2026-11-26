@@ -66,7 +66,7 @@ does throw is defensive and cannot be driven from a test.
 
 ### S2 — Tray integration, token, toggle, docs · Opus 5.5 / high {#s2}
 
-**Status:** built, installed 2026-11-25 and smoke-tested on loopback; two boxes wait on Paul (the admin script, a menu click).
+**Status:** built, installed 2026-11-25, admin script run, answering on the LAN; open: the Ensure* wiring (S3) and a menu click.
 **Touches:** `tray/LlamaTray.cs` (`partial`), `tray/TraySwitchboard.cs` (new), `install-tray.ps1`,
 `allow-switchboard.ps1` (new), `README.md`, `AGENTS.md`, `.gitignore` unchanged (`logs/` already ignored).
 **After:** S1.
@@ -81,7 +81,8 @@ does throw is defensive and cannot be driven from a test.
       follows it live and re-binds when Share on network changes.
 - [x] Token file is created on first enable; a bind failure on `http://+:8409/` falls back to loopback with a
       notice that names `allow-switchboard.ps1`.
-- [ ] (needs an administrator shell: Paul) `allow-switchboard.ps1`: URL reservation for the current user and a firewall rule for TCP 8409 scoped
+- [x] (Paul ran it 2026-11-25; checked: reservation for `http://+:8409/`, rule enabled, the tray registered on `+`,
+      the LAN address answers 200 with the token and 401 without) `allow-switchboard.ps1`: URL reservation for the current user and a firewall rule for TCP 8409 scoped
       to the LAN and Tailscale ranges README already uses.
 - [x] README "Using it from another machine" and AGENTS.md "How the pieces fit" describe the front door, the token,
       the one-time admin script and the rule that it takes the GPUs from whatever is running.
