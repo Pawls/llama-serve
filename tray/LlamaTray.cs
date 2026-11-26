@@ -912,7 +912,7 @@ sealed partial class TrayApp : ApplicationContext
         ninferModelsMenu = new ToolStripMenuItem("Start ninfer (stops the router and Strata)");
         foreach (NinferModel model in NinferModels)
         {
-            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferStartAsync(model))) { Tag = model });
+            ninferModelsMenu.DropDownItems.Add(new ToolStripMenuItem(model.Label, null, (s, e) => RunAction(() => NinferSelectAsync(model))) { Tag = model });
         }
         ninferStopItem = new ToolStripMenuItem("Stop ninfer", null, (s, e) => RunAction(StopNinferAsync));
         var ninferLogItem = new ToolStripMenuItem("Open ninfer log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "ninfer.log")));
@@ -1027,10 +1027,17 @@ sealed partial class TrayApp : ApplicationContext
         strataAppItem.Enabled = strataState == StrataState.Loaded || strataState == StrataState.Unloaded;
 
         ninferStatusItem.Text = NinferStatusText();
-        ninferModelsMenu.Visible = ninferStopped;
-        ninferModelsMenu.Enabled = !ninferLaunching;
+        // The list stays while ninfer runs: picking another profile replaces it (Strata's menu works the same way).
+        ninferModelsMenu.Text = ninferStopped ? "Start ninfer (stops the router and Strata)" : "ninfer model";
+        ninferModelsMenu.Enabled = !ninferLaunching && !ninferStopping && ninferState != NinferState.Starting;
         foreach (ToolStripMenuItem item in ninferModelsMenu.DropDownItems)
-            item.Enabled = !(reserved && ((NinferModel)item.Tag).BothGpus);
+        {
+            var model = (NinferModel)item.Tag;
+            bool running = !ninferStopped && ninfer.Model == model.ModelId;
+            item.Checked = running;
+            item.Text = model.Label + (running ? "  (running)" : "");
+            item.Enabled = !(reserved && model.BothGpus);
+        }
         ninferStopItem.Visible = !ninferStopped;
         ninferStopItem.Text = routerYieldedToNinfer ? "Stop ninfer and restart the router" : "Stop ninfer";
         ninferStopItem.Enabled = !ninferStopping && !ninferLaunching;
@@ -1644,6 +1651,15 @@ sealed partial class TrayApp : ApplicationContext
         strataState = StrataState.Stopped;
         ShowState(state);
         return exitCode;
+    }
+
+    // A click in the ninfer model menu: starts that profile when ninfer is stopped, replaces the one that runs
+    // (stop, then start; the router stays down), or does nothing for the profile already running.
+    async Task NinferSelectAsync(NinferModel model)
+    {
+        if (ninferStopping || ninferLaunching) return;
+        if (ninferState == NinferState.Stopped) await NinferStartAsync(model);
+        else if (ninferState == NinferState.Ready && ninfer.Model != model.ModelId) await ReplaceNinferAsync(model);
     }
 
     // ninfer needs its GPUs to itself. The router is stopped, not just unloaded, because any client request would load a
