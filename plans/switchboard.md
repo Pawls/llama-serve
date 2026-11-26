@@ -16,13 +16,13 @@
 > router/Strata/ninfer handover racing the switch (S2: switch-state box) · a Windows URL reservation or firewall
 > step that silently leaves the port unreachable (S2: bind box).
 >
-> **Next:** S3, one request from the Linux laptop (Paul); then strike S3
+> **Next:** every slice shipped. Leftover, one PR: `/switchboard/status` keeps `strata.model` after Strata stops (seen 2026-11-25: `"state":"Stopped","model":"swift-1.5-iq3_s"`); fix it test-first, then archive this plan and `switchboard_SHIPPED.md` and repoint `tray/Switchboard.cs:3`, `tray/TraySwitchboard.cs:2` and AGENTS.md
 >
 > **Branch:** `feat/switchboard`, one PR
 
 - [~~S1 — Switchboard core and its tests~~ — SHIPPED 2026-11-25](#s1)
 - [~~S2 — Tray integration, token, toggle, docs~~ — SHIPPED 2026-11-25](#s2)
-- [S3 — Live check from the laptop](#s3)
+- [~~S3 — Live check from the laptop~~ — SHIPPED 2026-11-25](#s3)
 
 ## Traps
 
@@ -88,13 +88,13 @@ does throw is defensive and cannot be driven from a test.
       the one-time admin script and the rule that it takes the GPUs from whatever is running.
 - [x] Loopback smoke with the real tray (no engine started): `/v1/models` lists all ids with the right token.
 
-### S3 — Live check from the laptop · Opus 5.5 / medium {#s3}
+### ~~S3 — Live check from the laptop~~ — SHIPPED 2026-11-25 {#s3}
 
-**Status:** three switches run 2026-11-25 over the Tailscale address from the PC itself; open: one request from the laptop.
+**Status:** done 2026-11-25: three switches over the Tailscale address from the PC, then one request from the Linux laptop.
 **Touches:** the running engines.
 **After:** S2.
 **Seam:** `curl` against `http://<tailscale ip>:8409/v1/chat/completions`.
 
-- [ ] (run from the PC over its Tailscale address, all three answered; GPU 0 hit 23,808 MiB under Swift, a LOW start, so its reserve went to 3092; the laptop request is open) From the laptop: one request each for a router preset, a Strata id and a ninfer id, from a different engine
+- [x] (switches run from the PC over its Tailscale address, all three answered; the laptop sent one request to the running ninfer model, answered; GPU 0 hit 23,808 MiB under Swift, a LOW start, so its reserve went to 3092) From the laptop: one request each for a router preset, a Strata id and a ninfer id, from a different engine
       each time; every one answers, and `nvidia-smi` shows no card near 24,576 MiB afterwards.
 - [x] Record the cold-switch times in README, dated, with the undervolt stated.
