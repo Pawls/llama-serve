@@ -16,12 +16,12 @@
 > router/Strata/ninfer handover racing the switch (S2: switch-state box) · a Windows URL reservation or firewall
 > step that silently leaves the port unreachable (S2: bind box).
 >
-> **Next:** S2 menu click and one request from the laptop (Paul); then strike S2 and S3
+> **Next:** S3, one request from the Linux laptop (Paul); then strike S3
 >
 > **Branch:** `feat/switchboard`, one PR
 
 - [~~S1 — Switchboard core and its tests~~ — SHIPPED 2026-11-25](#s1)
-- [S2 — Tray integration, token, toggle, docs](#s2)
+- [~~S2 — Tray integration, token, toggle, docs~~ — SHIPPED 2026-11-25](#s2)
 - [S3 — Live check from the laptop](#s3)
 
 ## Traps
@@ -64,9 +64,9 @@ keepalive writes logged nothing), so a gone client is noticed only when the engi
 switch still runs, which leaves the engine loaded for the next caller. The `catch` that releases a slot when a write
 does throw is defensive and cannot be driven from a test.
 
-### S2 — Tray integration, token, toggle, docs · Opus 5.5 / high {#s2}
+### ~~S2 — Tray integration, token, toggle, docs~~ — SHIPPED 2026-11-25 {#s2}
 
-**Status:** built, installed 2026-11-25, admin script run, answering on the LAN; Ensure* driven in S3; open: a menu click.
+**Status:** built, installed 2026-11-25, admin script run, answering on the LAN; Ensure* driven in S3; menu toggle clicked by Paul.
 **Touches:** `tray/LlamaTray.cs` (`partial`), `tray/TraySwitchboard.cs` (new), `install-tray.ps1`,
 `allow-switchboard.ps1` (new), `README.md`, `AGENTS.md`, `.gitignore` unchanged (`logs/` already ignored).
 **After:** S1.
@@ -77,7 +77,7 @@ does throw is defensive and cannot be driven from a test.
 - [x] (driven in S3 2026-11-25: ninfer to router to Strata to ninfer) `EnsureAsync` per engine reuses `StrataStartAsync`, `StrataLoadAsync`, `StopStrataAsync`,
       `NinferStartAsync`, `StartRouter`, `UnloadStrataAsync` and `client.LoadAsync`; waits poll the tray's own
       state; Reserve GPU 0 refuses Strata and two-GPU ninfer with a message.
-- [ ] (menu click not driven; the listener started from the saved flag) Menu item "Front door on :8409" toggles `SwitchboardEnabled`; the listener
+- [x] (Paul unticked and re-ticked it 2026-11-25; the Tailscale address answered after) Menu item "Front door on :8409" toggles `SwitchboardEnabled`; the listener
       follows it live and re-binds when Share on network changes.
 - [x] Token file is created on first enable; a bind failure on `http://+:8409/` falls back to loopback with a
       notice that names `allow-switchboard.ps1`.
