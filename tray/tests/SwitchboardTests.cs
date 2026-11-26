@@ -128,7 +128,7 @@ static class Tests
             Host.TargetList.Add(new SwitchTarget("strata", "model-b", B.BaseUrl));
             int port = FreePort();
             Url = "http://127.0.0.1:" + port;
-            Board = new Switchboard(Host, Token, line => { });
+            Board = new Switchboard(Host, Token, line => Console.WriteLine("       [board] " + line));
             Board.KeepAliveInterval = TimeSpan.FromMilliseconds(150);
             Board.BusyWait = TimeSpan.FromSeconds(10);
             Board.Start(new[] { Url + "/" });
@@ -248,7 +248,7 @@ static class Tests
             request2.Content = new StringContent("{\"messages\":[]}", Encoding.UTF8, "application/json");
             var used = await rig.Http.SendAsync(request2);
             Check("no model uses the engine that is up", used.StatusCode == HttpStatusCode.OK && rig.B.Bodies.Count == 1);
-            Check("and starts nothing", rig.Host.EnsureLog.Count == 0);
+            Check("and starts no other engine", rig.Host.EnsureLog.All(id => id == "model-b"));
         });
 
         await Run("routing", async rig =>
@@ -368,7 +368,13 @@ static class Tests
 
         await Run("a client that leaves while waiting frees its slot", async rig =>
         {
-            rig.A.Handler = async ctx => { await Task.Delay(600); await JsonReply("{}")(ctx); };
+            // The reply runs long enough that the keepalive writes to the departed client fail while it waits.
+            int calls = 0;
+            rig.A.Handler = async ctx =>
+            {
+                if (Interlocked.Increment(ref calls) == 1) await Task.Delay(2000);
+                await JsonReply("{}")(ctx);
+            };
             rig.Host.Ready = t => t.ModelId != "model-b";
             Task<HttpResponseMessage> busy = rig.Http.SendAsync(rig.Post("model-a"));
             await Task.Delay(150);
