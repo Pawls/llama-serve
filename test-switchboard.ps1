@@ -12,7 +12,8 @@ $References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.We
     ForEach-Object { "/reference:$(Join-Path $FrameworkDir $_)" }
 
 $output = & (Join-Path $FrameworkDir 'csc.exe') /nologo /target:exe /debug+ "/out:$Exe" @References `
-    (Join-Path $Root 'tray\Switchboard.cs') (Join-Path $Root 'tray\tests\SwitchboardTests.cs')
+    (Join-Path $Root 'tray\Switchboard.cs') (Join-Path $Root 'tray\EngineClients.cs') `
+    (Join-Path $Root 'tray\tests\SwitchboardTests.cs')
 if ($LASTEXITCODE -ne 0) { $output; throw "csc failed with exit code $LASTEXITCODE" }
 
 & $Exe
