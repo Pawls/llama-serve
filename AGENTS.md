@@ -114,6 +114,17 @@ Other moving parts:
   decided by the firewall: the `llama-server` program rules Windows created, scoped as in README.md § Using it from
   another machine. A remote request can load a model and so evict Strata, like any router load. Checked 2026-11-19
   through `tray-settings.json` and a tray relaunch; the menu click was not driven.
+- **Front door (switchboard), port 8409.** The tray toggle `SwitchboardEnabled` (off by default) starts a listener in
+  the tray ([tray/Switchboard.cs](./tray/Switchboard.cs) is the proxy, [tray/TraySwitchboard.cs](./tray/TraySwitchboard.cs)
+  the engine switching). A request that names a model (router preset, Strata id or ninfer id, listed by `GET /v1/models`)
+  starts or swaps whatever engine serves it with the tray's own menu methods, waits until it answers, then proxies the
+  request. **It is the one path that starts Strata, ninfer or a router model without Paul at the PC**, and it takes the
+  GPUs from whatever is running, so only the token holder (`logs\switchboard-token`, Bearer or `x-api-key`, no loopback
+  exemption) may use it. A request waits for in-flight replies of a different model (15 min), switches run one at a
+  time, and `POST /switchboard/free` unloads everything. Binds `127.0.0.1` and `localhost`, or every interface with
+  `ShareOnNetwork` (needs [allow-switchboard.ps1](./allow-switchboard.ps1) once, as admin; without it the tray falls
+  back to loopback with a notice). Tests: `.\test-switchboard.ps1` (fake engines, no GPUs). Log: `logs\switchboard.log`.
+  Plan: [plans/switchboard.md](./plans/switchboard.md); usage: README.md § Using the front door.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
   it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
@@ -163,6 +174,7 @@ Other moving parts:
   0.115 in budget mode) and a CPU picture reader to free ~1.3 GB of VRAM for experts.
 - Strata is not started at login because loading locks 17-36 GiB and can leave the PC unresponsive for up to a minute.
   **Do not start it, load a router model, or stop the router unprompted**: it takes the GPUs from whatever Paul is doing.
+  (The front door does these on a remote request, by design; a session of yours must not call it to test.)
 - Installed engine version: `"version"` in `F:\AI\strata\terminal\engine\BUILD.json`. The `session is up (engine X)` line in
   `F:\AI\strata\terminal\strata-<size>.log` shows the engine that last ran, so it lags until the next start. Latest upstream:
   `gh api repos/Niko1221/Strata/releases/latest --jq .tag_name`.

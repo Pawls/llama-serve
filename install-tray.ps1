@@ -1,10 +1,10 @@
-# Builds the tray app (tray\LlamaTray.cs -> tray\bin\LlamaTray.exe), adds a "Llama Router" Start menu
+# Builds the tray app (tray\*.cs -> tray\bin\LlamaTray.exe), adds a "Llama Router" Start menu
 # shortcut, points the llama-router logon task at the tray, and launches it. Safe to re-run after edits.
 param([switch]$NoLaunch)
 $ErrorActionPreference = 'Stop'
 
 $Root     = $PSScriptRoot
-$Source   = Join-Path $Root 'tray\LlamaTray.cs'
+$Sources  = (Get-ChildItem (Join-Path $Root 'tray') -Filter *.cs).FullName   # tray\tests is not compiled in
 $BinDir   = Join-Path $Root 'tray\bin'
 $Exe      = Join-Path $BinDir 'LlamaTray.exe'
 $Ico      = Join-Path $BinDir 'LlamaTray.ico'
@@ -19,7 +19,7 @@ $References = 'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Win
     ForEach-Object { "/reference:$(Join-Path $FrameworkDir $_)" }
 
 function Invoke-Csc([string[]]$ExtraArgs) {
-    $output = & $Csc /nologo /target:winexe /optimize+ "/out:$Exe" @References @ExtraArgs $Source
+    $output = & $Csc /nologo /target:winexe /optimize+ "/out:$Exe" @References @ExtraArgs $Sources
     if ($LASTEXITCODE -ne 0) { $output; throw "csc failed with exit code $LASTEXITCODE" }
 }
 

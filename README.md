@@ -38,6 +38,7 @@ The llama icon's color shows the state: grey stopped, blue ready with no model, 
 | Stop / Start router, Restart router | Restart after editing `presets.ini` |
 | Reserve GPU 0 for ComfyUI | Serves only presets pinned to CUDA1, stops Strata and the two-GPU Inkling profiles and blocks them from starting; restarts the router. Saved as `ReserveGpu0` in `tray-settings.json`, which `start-router.ps1` reads into `logs\presets.run.ini` |
 | Share router on the network | Listens on every interface instead of only this PC, so the laptop can use it; restarts the router. Saved as `ShareOnNetwork`. See [Using it from another machine](#using-it-from-another-machine) |
+| Front door on :8409, Open front-door token | One port that starts whatever engine serves the model a request names. Off by default. See [Using the front door](#using-the-front-door) |
 | Strata status, Start / Stop Strata, Unload Strata model, Open Strata app / log | Qwen3.8-Flash-Next on its own server; see [Strata](#strata-qwen38-flash-next-125b-moe) |
 | Memory saver | Closes the background apps you tick to give Strata more RAM; click again to reopen them. See [Memory saver](#memory-saver) |
 | ninfer status, Start ninfer, Stop ninfer, Open ninfer log | One model: Qwen3.8-27B on GPU 1 through ninfer-3090, or Inkling 2 Mini through ninfer-all on GPU 1 or on both GPUs. Starting it stops the router and Strata, and stopping it starts the router again. See [ninfer-3090](#ninfer-3090-measured-2026-10-18) and [Inkling 2 Mini](#inkling-2-mini-measured-2026-11-21) |
@@ -67,6 +68,47 @@ On its own, Pi treats llama.cpp thinking as on/off and never sends an effort, so
 3. On the other machine, use `http://100.112.21.82:8410/v1` (this PC's Tailscale IPv4) as the OpenAI-compatible base URL. The name `pawl-desktop` also resolves to a Tailscale IPv6 address that the router doesn't listen on, and clients that try IPv6 first wait out a timeout. `curl http://100.112.21.82:8410/v1/models` lists the presets.
 
 The router has no API key, so anything the firewall lets through can load models and send prompts. A remote request that loads a model also evicts Strata, like any router load. Untick the item to go back to local only.
+
+### Using the front door
+
+The router, Strata and ninfer are separate servers on 8410, 8411 and 8412, and only one may hold the GPUs. The front door
+is a fourth port, **8409**, that hides that: send any OpenAI-style request, name a model, and the tray starts or swaps
+whatever engine serves it, waits until it answers, and forwards the request. Nothing else changes; 8410-8412 still work.
+
+1. Tick **Front door on :8409** in the tray. It is off by default. `GET /v1/models` then lists every router preset, every
+   Strata model id and every ninfer id, whether or not that engine is running.
+2. **Token.** Every request needs it, from the local PC too (a reverse proxy such as `tailscale serve` arrives from
+   loopback, so loopback gets no pass). The tray makes it on first use in `logs\switchboard-token`; **Open front-door
+   token** in the menu opens the file. Send it as `Authorization: Bearer <token>` or `x-api-key: <token>`. Anyone with
+   the token can take the GPUs from whatever you are running.
+3. **From another machine**, once, in an administrator PowerShell: `.\allow-switchboard.ps1` (URL reservation and a
+   firewall rule for TCP 8409 from the LAN and Tailscale ranges). Then tick **Share router on the network** (the front
+   door follows it; without the reservation the tray says so and stays local). Base URL
+   `http://100.112.21.82:8409/v1`, API key = the token.
+
+```powershell
+$h = @{ Authorization = "Bearer $(Get-Content F:\AI\llama-serve\logs\switchboard-token)" }
+Invoke-RestMethod http://127.0.0.1:8409/v1/models -Headers $h | % data | % id
+Invoke-RestMethod http://127.0.0.1:8409/switchboard/status -Headers $h
+```
+
+What it does with a request, and what it will not do:
+
+- **A cold start takes as long as the engine does** (router 15-60 s, Strata 1-3 min, ninfer 10-60 s, plus stopping what
+  ran). A request with `"stream": true` is answered at once with `: waiting for ...` comment lines every 10 s, so client
+  timeouts do not fire; a failed start ends the stream with an error event. A non-streaming request waits in silence, so
+  give such a client a timeout over two minutes.
+- **One model at a time.** Requests for the model in use run together. A request for another model waits (up to 15
+  minutes, then 503) until the replies in flight have ended, so it never kills someone else's answer. Switches run one at
+  a time. Replies in flight on 8410-8412 directly are not seen.
+- **Reserve GPU 0** is honored: Strata and the two-GPU ninfer profiles refuse with a message.
+- `POST /switchboard/free` unloads Strata's and the router's model and stops ninfer (409 while a reply is running);
+  `GET /switchboard/status` shows what is up. Every switch and failure is in `logs\switchboard.log`.
+- A request with no `model` goes to whichever engine is up, or gets a 400.
+- Clients keep their current configs; to use the front door, point their base URL at 8409 and give them the token
+  (none of their configs are in this repo).
+
+Tests: `.\test-switchboard.ps1` runs the proxy against fake engines on loopback ports (no GPU use).
 
 ### Using it from VS Code chat
 

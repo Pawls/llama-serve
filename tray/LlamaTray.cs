@@ -380,6 +380,7 @@ static class TraySettings
     public const string StrataIdleKey = "StrataIdleMinutes";
     public const string ReserveGpu0Key = "ReserveGpu0";
     public const string ShareOnNetworkKey = "ShareOnNetwork";
+    public const string SwitchboardKey = "SwitchboardEnabled";   // the front door on :8409, see Switchboard.cs
 
     // A hand-edited file that does not parse reads as false (not reserved, not shared) rather than throwing out of
     // the poll timer.
@@ -733,7 +734,7 @@ static class Gpus
     }
 }
 
-sealed class TrayApp : ApplicationContext
+sealed partial class TrayApp : ApplicationContext
 {
     const string AppName = "Llama Router";
     const int PollIntervalMs = 2000;
@@ -833,6 +834,7 @@ sealed class TrayApp : ApplicationContext
         presetOrder = ReadPresetOrder(Path.Combine(root, "presets.ini"));
         reserveGpu0 = TraySettings.GetFlag(root, TraySettings.ReserveGpu0Key);
         shareOnNetwork = TraySettings.GetFlag(root, TraySettings.ShareOnNetworkKey);
+        switchboardEnabled = TraySettings.GetFlag(root, TraySettings.SwitchboardKey);
 
         int iconSize = SystemInformation.SmallIconSize.Width;
         foreach (RouterState each in Enum.GetValues(typeof(RouterState)))
@@ -861,6 +863,7 @@ sealed class TrayApp : ApplicationContext
         if (current == null && !ServerProcesses.RouterRunning() && !ServerProcesses.NinferRunning()) StartRouter();
         await RefreshAsync();
         pollTimer.Start();
+        ApplySwitchboard();
     }
 
     // ---- Menu ----
@@ -888,6 +891,9 @@ sealed class TrayApp : ApplicationContext
             (s, e) => RunAction(ToggleReserveGpuAsync));
         shareItem = new ToolStripMenuItem("Share router on the network (LAN and Tailscale)", null,
             (s, e) => RunAction(ToggleShareAsync));
+        switchboardItem = new ToolStripMenuItem("Front door on :" + Switchboard.Port + " (loads any model on request)", null,
+            (s, e) => RunAction(ToggleSwitchboardAsync));
+        switchboardTokenItem = new ToolStripMenuItem("Open front-door token", null, (s, e) => OpenPath(SwitchboardTokenPath()));
         strataStatusItem = new ToolStripMenuItem { Enabled = false };
         strataModelsMenu = new ToolStripMenuItem("Start Strata");
         foreach (StrataSize size in StrataSizes)
@@ -925,6 +931,7 @@ sealed class TrayApp : ApplicationContext
             chatItem, logItem, presetsItem, folderItem,
             new ToolStripSeparator(),
             startStopItem, restartItem, reserveGpuItem, shareItem,
+            switchboardItem, switchboardTokenItem,
             new ToolStripSeparator(),
             strataStatusItem, strataModelsMenu, strataStopItem,
             strataUnloadItem, strataAppItem, strataLogItem, memorySaverItem,
@@ -1008,6 +1015,7 @@ sealed class TrayApp : ApplicationContext
         reserveGpuItem.Enabled = state != RouterState.Starting && state != RouterState.Stopping;
         shareItem.Checked = shareOnNetwork;
         shareItem.Enabled = reserveGpuItem.Enabled;
+        switchboardItem.Checked = switchboardEnabled;
 
         strataStatusItem.Text = StrataStatusText();
         // Strata stops answering as soon as it is killed, so the poll says Stopped while stop-strata.ps1 still waits.
@@ -1418,20 +1426,25 @@ sealed class TrayApp : ApplicationContext
 
     async Task LoadAsync(string id)
     {
-        if (activeModel != null && activeModel.Id == id) return;
-        if (StrataIsLoading())
-        {
-            Notify("Strata is loading its model; load " + id + " once it has finished.", ToolTipIcon.Warning);
-            return;
-        }
-        if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for")) return;
+        string problem = await TryLoadAsync(id);
+        if (problem != null) Notify(problem, ToolTipIcon.Warning);
+    }
+
+    // Asks the router to load `id`, after unloading Strata's model. Null once the request is sent (the router
+    // answers before the load finishes; FollowRequestedLoad reports the end); otherwise why not.
+    async Task<string> TryLoadAsync(string id)
+    {
+        if (activeModel != null && activeModel.Id == id) return null;
+        if (StrataIsLoading()) return "Strata is loading its model; load " + id + " once it has finished.";
+        if (strataState == StrataState.Loaded && !await UnloadStrataAsync(id + " was asked for"))
+            return "Could not unload Strata's model, so " + id + " was not loaded.";
         requestedModel = id;
         requestedModelSeenLoading = false;
         requestedAt = DateTime.Now;
         string error = await client.LoadAsync(id);
-        if (error == null) return;
+        if (error == null) return null;
         requestedModel = null;
-        Notify("Could not load " + id + ": " + error, ToolTipIcon.Error);
+        return "Could not load " + id + ": " + error;
     }
 
     async Task UnloadAsync()
@@ -1502,6 +1515,7 @@ sealed class TrayApp : ApplicationContext
         bool share = !shareOnNetwork;
         if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
         shareOnNetwork = share;
+        ApplySwitchboard();   // the front door follows the same bind choice
         string when = state == RouterState.Stopped ? " once the router is started." : ".";
         Notify(share
             ? "Router shared on port 8410 (LAN and Tailscale)" + when
@@ -1774,6 +1788,7 @@ sealed class TrayApp : ApplicationContext
     {
         pollTimer.Stop();
         quitting = true;
+        StopSwitchboard();
         tray.Visible = false;
         try
         {
