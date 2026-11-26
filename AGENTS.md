@@ -19,7 +19,7 @@ configs, launch scripts and a tray app. It does not contain any inference engine
 | Autostart | Yes, through the tray | No, on purpose (see Strata below) |
 
 **Strata is not this repo and not llama.cpp.** `F:\AI\strata` is a clone of the upstream repo (remote
-`Niko1221/Strata`) with the user's generated configs in it. Since code 0.2.20 (2026-11-23) the configs (`strata-*.json`,
+`Niko1221/Strata`, not a fork; no local commits, checked 2026-11-25) with the user's generated configs in it. Since code 0.2.20 (2026-11-23) the configs (`strata-*.json`,
 `run-*.bat`), engine logs, `engine\`, `.venv`, `setup.py`, `strata.py` and `serve\` live in `F:\AI\strata\terminal`;
 `UPDATE.bat`, `START-HERE.bat` and `docs\` stay at the root, and the `run-*.bat` still `cd` to the root, so the relative
 `expert_profile_save` file stays there. Never commit there, and do not edit its source. This repo
@@ -138,13 +138,13 @@ Other moving parts:
   2026-11-01 by `setup.py --family swift --model IQ3_S --gpus 0,1 --no-start`; config `strata-swift-iq3_s.json`,
   model id `swift-1.5-iq3_s`. Its per-layer embedding table is in shard 1 (setup's `--ple-gguf` is right; ISTA's is
   in shard 2), so its shard 2 cannot be a hardlink of ISTA's. Hand-added to setup's config: `--vram-reserve-mib 1344`
-  (setup wrote 700), `--vram-reserve-later-mib 1310`, `--resident-experts` (required: setup warned a full copy needs
+  (setup wrote 700), `--vram-reserve-later-mib 2505` (1310 until 2026-11-25, see "Strata 0.2.22" below), `--resident-experts` (required: setup warned a full copy needs
   ~78 GB of RAM at 262k), `--conversation-cache-mib 0`, `--adapt-async 1` (2026-11-02), `"env": {"STRATA_PF_FUSED":
   "1"}` (2026-11-02), `--prompt-cache-spread` and `"expert_profile_save": "expert-profile-swift-learned.bin"`
   (2026-11-02), `idle_unload_s`, `sampling` and `before_load`. Without `STRATA_PF_FUSED` Windows refuses to pin its
   24.59 GiB RAM copy (`page-locking refused (out of memory)`, locked with `VirtualLock` instead) and it reads prompts at
   a third to a half of IQ3_XXS's speed; with it the copy was 23.15 GiB, fully page-locked, on 2026-11-02 (not on
-  engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below), and prompts read 9-22% faster
+  engines 0.1.57 and 0.1.59, see "Engine 0.1.59" below; pinned again on 0.1.66 and 0.1.69), and prompts read 9-22% faster
   ([README.md](./README.md#swift-15-cpu-and-kernel-switches-measured-2026-11-02)). GPU caches were pre-filled
   from `F:\AI\strata\terminal\data\expert-profile.bin`, built on the original model (decode hit rate 95-97% against ~99%);
   since 2026-11-02 from the learned `F:\AI\strata\expert-profile-swift-learned.bin` once it exists.
@@ -218,10 +218,13 @@ Other moving parts:
   (tested; `127.0.0.1` and `localhost` pass); per its release notes other Host names need `NINFER_ALLOWED_HOST`. Upstream
   status, known bugs and which build has which fix are in the README section.
 - **Inkling 2 Mini runs through ninfer-all** (iamwavecut/ninfer-all, which carries the ninfer-3090 line on) since
-  2026-11-21; release `2026-11-23.9` since 2026-11-23 (`$InklingBuild` in `start-ninfer.ps1`; `2026-11-21.4` stays
-  beside it for rollback), artifact `F:\AI\ninfer-3090\models\inkling2-iq4xs\` (UD-IQ4_XS, 15.4 GiB), 256K context
-  with vision and `--structured-output` on GPU 1 (23.0 GiB). Two-GPU profiles: `inkling2-mini-2gpu` (same file,
-  768K, split 1,7) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl\`, 512K). Only the routed experts
+  2026-11-21; release `2026-11-25.3` since 2026-11-25 (`$InklingBuild` in `start-ninfer.ps1`; `2026-11-23.9` and
+  `2026-11-21.4` stay beside it for rollback), artifact `F:\AI\ninfer-3090\models\inkling2-iq4xs-20261124\` (UD-IQ4_XS,
+  16.05 GiB, carries the mainline DSpark and DFlash2 drafters), 256K context
+  with vision and `--structured-output` on GPU 1 (23,040 MiB peak). Two-GPU profiles: `inkling2-mini-2gpu` (same file,
+  768K, split 1,7) and `inkling2-mini-q8` (UD-Q8_K_XL in `models\inkling2-q8kxl-20261124\`, revision `8063174c` of the
+  HF repo, 512K; **its newest revision needs a release after 2026-11-25.3**, do not re-download until one exists;
+  the 2026-11-21 artifacts in `models\inkling2-iq4xs\` and `models\inkling2-q8kxl\` are kept for rollback). Only the routed experts
   split; the KV cache (MXFP8 since 2026-11-23.9, half of F16) stays whole on GPU 1, so GPU 1's free memory bounds the
   context; RAM cannot extend it. Each profile answers only under its own
   model id (`inkling-2-mini[-2gpu|-q8]`), and Pi, VS Code and Hermes list all three. Measured against llama.cpp
@@ -247,8 +250,8 @@ Other moving parts:
   **Since 0.2.10 `UPDATE.bat` no longer brings a newer engine**: setup fetches one only when the installed engine is
   older than `MIN_ENGINE`, which stayed at 0.1.46. On 2026-11-13 it moved the code from v0.2.11-4 to
   v0.2.13.1-160 and left engine 0.1.57. On 2026-11-23 it moved the code to v0.2.20 (`6a6db7ff5`), moved the user
-  files into `terminal\` (above), rewrote every config's paths to match and left engine 0.1.59; the feed (sequence 132)
-  offers 0.1.66. The engine's test start loads an installed model and generates one token, so it needs the GPUs free.
+  files into `terminal\` (above), rewrote every config's paths to match and left engine 0.1.59; 0.1.66 from the feed was installed by
+  hand on 2026-11-24 (below). The engine's test start loads an installed model and generates one token, so it needs the GPUs free.
   To install the feed's newest engine the way setup does (test start, old
   engine kept in `engine\.previous`), run with `F:\AI\strata\terminal\.venv\Scripts\python.exe`:
   `import sys; sys.path.insert(0, r'F:\AI\strata\terminal'); import setup; from pathlib import Path;
@@ -261,16 +264,50 @@ Other moving parts:
   (`idle_unload_s`, `before_load`, `sampling`) and carries hand-added `args` into `user_args` (`SETUP_KEYS`,
   `carry_user_args`); read in the code, not yet run here. After a setup run, check those keys and the `args` flags
   listed under "Installed sizes" above and in the Swift and UD-Q4_K_XL bullets, and re-add any that dropped.
-- **Engine 0.1.59 (code v0.2.13.1-160) is installed since 2026-11-13**; 0.1.57 (installed 2026-11-05 with
+- **Strata 0.2.22 (code v0.2.22, Qwen engine and Inkling engine 0.1.69) is installed since 2026-11-25**: `UPDATE.bat`
+  for the code (configs and `run-*.bat` byte-identical; copies in `F:\AI\strata-backup-pre-0.2.22`), the
+  `engine_from_feed` snippet above for the Qwen engine (0.1.66 is in `engine\.previous`), and the Inkling snippet below
+  for `strata-inkling`. **Swift now starts LOW on the desktop card with the old `--vram-reserve-later-mib 1310`**
+  (0 MiB free; 0.1.66 left 1,361); it is **2505 since 2026-11-25** (738 MiB free, no LOW line, 6,864 expert slots on
+  that card against 7,469). Check the `VRAM free with everything loaded` line after the next engine or desktop-app
+  change. Swift on it: tool calls 3/3, RAM copy page-locked (22.09 GiB in 11 s), code decode 12-15% below 0.1.57/0.1.59
+  at 52k and 128k (5% at 2k) and essay unchanged (one run, [README.md](./README.md#engine-0169-strata-0222-measured-2026-11-25)).
+  Untried: `STRATA_SPLIT_LEND_RESERVE=0` in the config's `env`. Inkling SQ-20 starts and passes tool calls on it.
+- **Engine 0.1.66 was installed 2026-11-24 to 2026-11-25** (0.1.59 is in
+  `engine\.previous`). Swift on it: tool calls 3/3, no LOW (1,698 and 1,361 MiB free with everything loaded on
+  the two cards), and **its 21.53 GiB RAM copy is page-locked again** (pinned in 11 s). Never benched.
+- **Inkling 2 Mini SQ-20 on Strata** (installed 2026-11-24, [plans/strata-inkling.md](./plans/strata-inkling.md)):
+  config `strata-inkling-2-mini-sq-20.json`, run script `run-inkling-2-mini-sq-20.bat`, model id
+  `inkling-2-mini-sq-20`, written by `setup.py --family inkling-2-mini --model SQ-20 --gpus 0,1 --no-start
+  --models-dir F:\AI\Strata-data\models --context 1048576 --port 8411 --no-browser --vision yes --yes` (setup's menu
+  stops at 256K; 1M is taken as asked). Hand-added: `idle_unload_s`, `sampling` (temperature 1.0), `before_load`.
+  **`--max-context` cut to 262144 by hand on 2026-11-24**: at 1M the cache grows in VRAM and the engine died at
+  ~400k tokens; 1M works only with `--kv-offload on` (32 GB of host RAM, decode ~30% slower). Measured slower than
+  ninfer's Inkling (README.md § Inkling 2 Mini on Strata); Paul kept it on 2026-11-24.
+  **Strata 0.2.21 (code and engines 0.1.67, installed 2026-11-24; the Inkling engine by hand, because `strata update`
+  skipped it: `shape_engine.ensure("inkling2", <feed url>)` from the Strata venv):** the server handles thinking
+  itself (the override is deleted). **Since 2026-11-24 afternoon the installed config runs the two-GPU split at
+  `--max-context 368640`** (`--gpus 2 --layer-split auto`, no `"gpu"`): on GPU 1 alone the cache held only 56k
+  tokens in VRAM and decode fell from 48 to 2.7 tok/s at 108k (the rest streamed from host RAM over the x4 link);
+  Paul's rule is no config under 262k. Needle prompts of 299,538, 330,384 and 355,260 tokens were found, peak
+  20.7 GiB on GPU 1 (README.md § Inkling 2 Mini on Strata, "Context ceiling on the split"). Between 2026-11-24
+  morning and afternoon it ran on **GPU 1 alone** (`"gpu": 1`). The DSpark drafter does nothing on the split
+  (`draft_n` 0) and works on one GPU: one greedy code sample decoded 58 tok/s split against 104-107 on GPU 1 (not a
+  bench; 22.6 GiB used there, ~0.9 GiB free, 205k tokens of KV in host RAM). The 0.2.20 numbers in README.md
+  § Inkling 2 Mini on Strata are superseded; plans/strata-inkling.md S5 re-benches.
+  **Its engine is a component outside the clone**: `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\<version>\strata-inkling.exe`,
+  which `stop-strata.ps1` and the tray's `StrataEngineRunning` match by that folder.
+- **Engine 0.1.59 (code v0.2.13.1-160) was installed 2026-11-13 to 2026-11-24**; 0.1.57 (installed 2026-11-05 with
   UD-IQ3_XXS; Swift was benched on it on 2026-11-13, just before the update) is in `engine\.previous`. Swift on
   0.1.59 decodes within 8% of 0.1.57 at 2k code and 1% elsewhere (one run per engine, not interleaved, so an
   estimate; [README.md](./README.md#engine-0159-strata-0213-measured-2026-11-13)). **Swift's RAM copy has not pinned on
   0.1.57 or 0.1.59** (`page-locking refused (out of memory)`, 23.41 GiB) and prompts read at the unpinned speed;
   whether the engine or that night's lower free RAM caused it is open.
-  **Open: the default Swift config starts LOW on the desktop card.** In rounds 2 and 3 of the 2026-11-13 bench the
+  **The default Swift config started LOW on the desktop card** in rounds 2 and 3 of the 2026-11-13 bench: the
   learned profile had moved one layer onto GPU 0 and the start log asked for `--vram-reserve-later-mib 1764`
-  (installed: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. Check the
-  `VRAM free with everything loaded` line at the next Swift start; if it says LOW, raise the reserve and re-bench.
+  (installed then: 1310), leaving 314 MiB free. Per-round speed did not drop, but under WDDM a full card pages. It
+  came back on 0.1.69 and was raised to 2505 on 2026-11-25 (the "Strata 0.2.22" bullet above); check the
+  `VRAM free with everything loaded` line at every Swift start and raise the reserve if it says LOW.
   **UD-Q4_K_XL is an Unsloth UD file, so since 0.2.13 it gets the Q8_0 hyper-connection read by default** (the
   deleted UD-IQ3_XXS config had set `STRATA_HC_Q8=1` by hand). Not benched or tool-call-checked on 0.1.59, so its
   2026-11-02 numbers may not hold; `STRATA_HC_Q8=0` in its `env` restores the old read.
@@ -407,17 +444,17 @@ Open handoffs live in [dev-notes/handoffs/](./dev-notes/handoffs/), one file per
 dual-boot Ubuntu 26.04 on the spare 477 GB NVMe (disk 3) to measure whether Strata gains on Linux (Windows pins only
 8 GiB of a full-copy expert arena on a multi-GPU split; Linux pins all of it). Since 2026-11-01 the installed configs
 run `--resident-experts`: IQ3_XXS's 17 GiB copy pins fully on Windows, and since 2026-11-02 (`STRATA_PF_FUSED=1`) so
-does Swift's 23.15 GiB copy (on engine 0.1.55; it did not pin on 0.1.57 or 0.1.59, cause open), so
+does Swift's 23.15 GiB copy (on engine 0.1.55; it did not pin on 0.1.57 or 0.1.59, and pins again on 0.1.66), so
 pinning alone no longer argues for Linux unless that persists; the full-copy mode is the remaining case. Slices U1-U5; U1 is Paul's hands-on
 install and nothing is started. Windows stays the main OS and the four 2 TB drives must not be touched. After editing the
 plan or guide, rebuild the phone copy with `python plans/build-ubuntu-page.py <scratch>/ubuntu-dual-boot.html` and
 republish it to the artifact URL named in the plan.
 
 [plans/strata-inkling.md](./plans/strata-inkling.md): Inkling 2 Mini on Strata 0.2.20 (lossless SQ-20, up to 1M
-context with the cache in RAM) against the ninfer setup, run through
-[strata_overrides/inkling_thinking.py](./strata_overrides/inkling_thinking.py) because Strata's server forces
-reasoning effort `none` (README.md § Inkling 2 Mini on Strata). Benches run at night, when Paul is off the PC; S4
-removes the override once upstream ships its own switch.
+context with the cache in RAM) against the ninfer setup (README.md § Inkling 2 Mini on Strata). Paul kept it on
+2026-11-24 and moved to Strata 0.2.21, which fixes the forced reasoning effort (the override is gone); Strata
+0.2.22 (engine 0.1.69, 2026-11-25) starts it unchanged. Benches run at night, when Paul is off the PC; the 0.2.20
+numbers no longer hold, and S5 should run on 0.1.69.
 
 [plans/context-and-quality-benches.md](./plans/context-and-quality-benches.md): more context for
 `qwen3.8-27b-single` (A1), Inkling 2 Mini on the `rk8v4` cache (A2), and Qwen3.8-27B on ninfer-all (A4), plus
