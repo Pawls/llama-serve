@@ -120,6 +120,13 @@ What it does with a request, and what it will not do:
   have ended (closing a listener aborts them).
 - Clients keep their current configs; to use the front door, point their base URL at 8409 and give them the token
   (none of their configs are in this repo).
+- **opencode** has a `llama-serve` provider for it, written by `.\sync-opencode.ps1` beside the three direct ones
+  (`llama-router`, `strata`, `ninfer`; restart opencode after a rerun). It lists every model id of `GET /v1/models`
+  (checked against the live list 2026-11-25: 26 ids, no difference), so `opencode run -m llama-serve/swift-1.5-iq3_s#high "..."`
+  or `-m llama-serve/ninfer/qwen3.8-27b "..."` starts that engine. The token is not in `opencode.jsonc`: the provider's
+  `headers.Authorization` is `Bearer {file:F:/AI/llama-serve/logs/switchboard-token}`, which opencode reads when it loads
+  the config. (`settings.apiKey` with `{file:}` sent no request at all in opencode 2.4.1; the header does.) The front
+  door must be ticked in the tray. Add `--archived` to `opencode run` for scripted runs.
 
 Tests: `.\test-switchboard.ps1` runs the proxy against fake engines on loopback ports (no GPU use).
 
