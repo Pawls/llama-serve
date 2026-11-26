@@ -464,5 +464,19 @@ static class Tests
             loaded = await strata.GetLoadedAsync();
             Check("a stopped Strata reports no model", loaded == null && strata.Model == null, strata.Model);
         });
+
+        await Run("an unexpected /health body counts as no answer", async rig =>
+        {
+            var strata = new StrataClient(rig.B.BaseUrl);
+            foreach (string body in new[] { "{\"model\":\"m\",\"loaded\":null}", "[1,2]", "not json", "{\"model\":7,\"loaded\":\"yes\"}" })
+            {
+                rig.B.Handler = JsonReply(body);
+                bool? loaded = null;
+                string error = null;
+                try { loaded = await strata.GetLoadedAsync(); }
+                catch (Exception ex) { error = ex.GetType().Name; }
+                Check("body " + body + " gives null, no throw", error == null && loaded == null && strata.Model == null, error ?? strata.Model);
+            }
+        });
     }
 }
