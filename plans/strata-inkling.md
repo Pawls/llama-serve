@@ -16,13 +16,13 @@
 > **Update 2026-11-24:** Paul kept Inkling on Strata and moved to 0.2.21 (code and engines 0.1.67). Its server now
 > handles effort itself, so the override is deleted (S4 done), and the installed config runs on GPU 1 alone, where
 > the DSpark drafter works (S5 re-benches; the 0.2.20 numbers in S2 and the README no longer hold).
-> **Next:** S5 (Paul's night bench), then S3 (tray switch test)
+> **Next:** S5 (Paul's night bench)
 > **Branch:** feat/strata-inkling-s1
 > **Flow:** lean
 
 - ~~[S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)~~
 - ~~[S2 — Bench against ninfer](#s2)~~
-- [S3 — Keep it: tray, clients, docs](#s3)
+- ~~[S3 — Keep it: tray, clients, docs](#s3)~~
 - ~~[S4 — Retire the override when upstream ships its own](#s4)~~ (done 2026-11-24 with the 0.2.21 update)
 - [S6 — Safe context ceiling without KV offload](#s6)
 - [S5 — Re-bench Inkling on Strata 0.2.21](#s5)
@@ -139,19 +139,22 @@ Findings (2026-11-24; numbers, method and logs in README.md § Inkling 2 Mini on
 
 ### S3 — Keep it: tray, clients, docs · Sonnet 5.5 / medium {#s3}
 
-**Status:** not started; only if Paul keeps it after S2.
+**Status:** done 2026-11-26 (Paul kept it). Switch run with `start-strata.ps1` and a router request, not a tray menu click.
 **Touches:** `tray/LlamaTray.cs` (`StrataSizes`, `StrataEngineRunning`), `~\.pi\agent\models.json`,
 `%APPDATA%\Code\User\chatLanguageModels.json`, Hermes `config.yaml`, `sync-opencode.ps1` run, AGENTS.md, README.md
 **After:** S2
 **Seam:** the tray menu and `install-tray.ps1`; each client's model list
 
-- [ ] `StrataSizes` row for the Inkling id (row, folder and `install-tray.ps1` done 2026-11-24 with S1; the switch
+- [x] `StrataSizes` row for the Inkling id (row, folder and `install-tray.ps1` done 2026-11-24 with S1; the switch
       test below is not); confirm `StrataEngineRunning` sees the running `strata-inkling.exe`
       (it matches any path under `F:\AI\strata\`; narrow it to the folder S1 found); `install-tray.ps1`, then switch router → Strata Inkling → router once each
       way with the router model unloaded each time (AGENTS.md "Only one engine may hold the GPUs").
+      Done 2026-11-26: `StrataEngineRunning` already matched only the Inkling component folder; a router request while Inkling was loaded
+      unloaded it (engine gone, `/health` `loaded: false`); `POST /load` with the router model loaded unloaded the router model first,
+      no LOW line, 368,640 context. The tray menu click itself was not driven.
 - [x] (done 2026-11-24, all four) Clients list the model id with its context and reasoning on: Pi (`strata` provider), VS Code (Strata group),
       Hermes, opencode (`.\sync-opencode.ps1`).
-- [ ] AGENTS.md "Strata state" bullet for the Inkling config and the override.
+- [x] AGENTS.md "Strata state" bullet for the Inkling config and the override.
 
 ### S6 — Find the safe context ceiling without `--kv-offload` · Sonnet 5.5 / medium {#s6}
 
