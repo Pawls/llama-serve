@@ -643,7 +643,7 @@ Strata 0.2.20 added Inkling 2 Mini with its own engine (`strata-inkling`) and pa
 
 **Result: ninfer stays the way to run Inkling.** On this PC Strata's Inkling decodes at about half of ninfer's speed, reads prompts at about 60% of it, and reaches 1M only by putting the whole cache in host RAM, which slows it further. Its edges are lossless weights and context past ninfer's 768K. Measured 2026-11-24 on Strata engine 0.1.66 (`strata-inkling` 0.1.66, SQ-20) against ninfer-all 2026-11-23.9 (`inkling2-mini`, UD-IQ4_XS, GPU 1, 256K), both cards undervolted ([AGENTS.md](AGENTS.md#the-machine)); work and logs in [plans/strata-inkling.md](./plans/strata-inkling.md#s2).
 
-**Start it** from the tray (**Start Strata → Inkling 2 Mini SQ-20**) or `.\start-strata.ps1 -Model inkling-2-mini-sq-20`; model id `inkling-2-mini-sq-20`. The installed config runs both GPUs (layer split) at 256K with the cache in VRAM.
+**Start it** from the tray (**Start Strata → Inkling 2 Mini SQ-20**) or `.\start-strata.ps1 -Model inkling-2-mini-sq-20`; model id `inkling-2-mini-sq-20`. The installed config runs both GPUs (layer split) at 368,640 tokens with the cache in VRAM.
 
 `bench-depth.ps1`, thinking off, 3 measured runs per cell, 2 rounds interleaved (Strata, ninfer, Strata, ninfer), each engine at its default temperature 1.0. Net tok/s with decode in brackets, the two round medians:
 
