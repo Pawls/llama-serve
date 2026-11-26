@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
-// The status queries every server client polls with.
 static class StatusQuery
 {
     static readonly TimeSpan QueryTimeout = TimeSpan.FromSeconds(5);
@@ -48,18 +47,23 @@ sealed class StrataClient
     // "qwen3.8-flash-next-iq3_xxs"; null while Strata does not answer.
     public string Model { get; private set; }
 
-    // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start).
+    // /health's "loaded", or null when the server is not answering (stopped, or still loading at its start) or
+    // answers a body of another shape. A body without "loaded" means unloaded.
     public async Task<bool?> GetLoadedAsync()
     {
-        string body = await StatusQuery.GetBodyAsync(http, "/health");
-        if (body == null)
-        {
-            Model = null;
-            return null;
-        }
-        var root = (Dictionary<string, object>)json.DeserializeObject(body);
-        Model = root.ContainsKey("model") ? root["model"] as string : null;
-        return root.ContainsKey("loaded") && (bool)root["loaded"];
+        Dictionary<string, object> root = ParseObject(await StatusQuery.GetBodyAsync(http, "/health"));
+        bool? loaded = null;
+        if (root != null) loaded = root.ContainsKey("loaded") ? root["loaded"] as bool? : false;
+        Model = loaded.HasValue && root.ContainsKey("model") ? root["model"] as string : null;
+        return loaded;
+    }
+
+    // The JSON object in `body`; null for no body or any other JSON.
+    Dictionary<string, object> ParseObject(string body)
+    {
+        if (body == null) return null;
+        try { return json.DeserializeObject(body) as Dictionary<string, object>; }
+        catch (ArgumentException) { return null; }
     }
 
     // Null when the model is now unloaded; otherwise why not.
