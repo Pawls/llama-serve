@@ -1,6 +1,6 @@
 // The switchboard: one OpenAI-compatible port that starts whatever engine serves the model a request names,
 // waits until it answers, and proxies the request. Compiled into the tray by install-tray.ps1
-// (C# 5: no string interpolation, no ?. operator). Design and rules: plans/switchboard.md.
+// (C# 5: no string interpolation, no ?. operator). Design and rules: dev-notes/archive/switchboard.md.
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -1,5 +1,5 @@
 // The tray's half of the switchboard (Switchboard.cs): which model belongs to which engine, and how to bring an
-// engine up using the same start/stop methods the menu uses. Design and rules: plans/switchboard.md.
+// engine up using the same start/stop methods the menu uses. Design and rules: dev-notes/archive/switchboard.md.
 using System;
 using System.Collections.Generic;
 using System.IO;

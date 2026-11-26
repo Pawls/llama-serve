@@ -124,13 +124,14 @@ Other moving parts:
   time, and `POST /switchboard/free` unloads everything. Binds `127.0.0.1` and `localhost`, or every interface with
   `ShareOnNetwork` (needs [allow-switchboard.ps1](./allow-switchboard.ps1) once, as admin; without it the tray falls
   back to loopback with a notice). Tests: `.\test-switchboard.ps1` (fake engines, no GPUs). Log: `logs\switchboard.log`.
-  Plan: [plans/switchboard.md](./plans/switchboard.md); usage: README.md § Using the front door.
+  Plan (shipped, archived): [dev-notes/archive/switchboard.md](./dev-notes/archive/switchboard.md); usage: README.md § Using the front door.
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
   it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
-- **The tray** is three C# files, [tray/LlamaTray.cs](./tray/LlamaTray.cs) (menu, engine state),
-  [tray/Switchboard.cs](./tray/Switchboard.cs) (the front door's proxy) and
+- **The tray** is four C# files, [tray/LlamaTray.cs](./tray/LlamaTray.cs) (menu, engine state),
+  [tray/EngineClients.cs](./tray/EngineClients.cs) (the status query and Strata's client, kept out of the WinForms
+  file so the tests can build them), [tray/Switchboard.cs](./tray/Switchboard.cs) (the front door's proxy) and
   [tray/TraySwitchboard.cs](./tray/TraySwitchboard.cs) (its engine switching, a `partial` of `TrayApp`), compiled
   together with the C# compiler built into Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\`
   (untracked). `tray\tests` is built only by `test-switchboard.ps1`. After editing the tray, re-run

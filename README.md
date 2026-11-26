@@ -798,8 +798,8 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | `start-ninfer.ps1` / `stop-ninfer.ps1` | Start ninfer on port 8412 (Qwen3.8-27B through ninfer-3090 on GPU 1, or an Inkling 2 Mini profile through ninfer-all on GPU 1 or both GPUs) after stopping Strata and the router, logging to `logs\ninfer.log`, and stop it. |
 | `memory-saver.ps1` | Lists, closes and reopens background apps for the tray's Memory saver. |
 | `unload-router-model.ps1` | Unloads the router's model and waits until its VRAM is free. Strata runs it before every load. |
-| `tray\LlamaTray.cs` | The tray app. It starts and stops the router, Strata and ninfer through the scripts above, and unloads Strata when a router model loads. |
-| `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing `LlamaTray.cs`. |
+| `tray\*.cs` | The tray app. It starts and stops the router, Strata and ninfer through the scripts above, and unloads Strata when a router model loads. `LlamaTray.cs` is the menu and engine state, `EngineClients.cs` the status query and Strata's client, `Switchboard.cs` and `TraySwitchboard.cs` the front door. |
+| `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing any `tray\*.cs`. |
 | `bench-depth.ps1` | Speed bench at ~2k / 52k / 128k context, for choosing between drafter lanes. Results in `logs\bench-depth-*.txt`. |
 | `bench-thinking.ps1` | Thinking-token and accuracy A/B of logit-bias arms (`bench\logit-bias-arms.json`) on math and code tasks (`bench\tasks-*.jsonl`). Results in `logs\bench-thinking-*.txt`. |
 | `test-tool-calls.ps1` | Checks that every model's tool calls parse and round-trip. |

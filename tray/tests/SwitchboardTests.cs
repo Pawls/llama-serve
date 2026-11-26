@@ -452,5 +452,31 @@ static class Tests
             string failedText = await failed.Content.ReadAsStringAsync();
             Check("a failed free is 503 with the reason", failed.StatusCode == HttpStatusCode.ServiceUnavailable && failedText.Contains("ninfer did not stop"), failedText);
         });
+
+        // /switchboard/status reports strata.Model, so a stopped Strata must not keep the last size's id.
+        await Run("Strata's model is forgotten once it stops answering", async rig =>
+        {
+            rig.B.Handler = JsonReply("{\"model\":\"swift-1.5-iq3_s\",\"loaded\":true}");
+            var strata = new StrataClient(rig.B.BaseUrl);
+            bool? loaded = await strata.GetLoadedAsync();
+            Check("a loaded Strata reports its model", loaded == true && strata.Model == "swift-1.5-iq3_s", strata.Model);
+            rig.B.Listener.Close();
+            loaded = await strata.GetLoadedAsync();
+            Check("a stopped Strata reports no model", loaded == null && strata.Model == null, strata.Model);
+        });
+
+        await Run("an unexpected /health body counts as no answer", async rig =>
+        {
+            var strata = new StrataClient(rig.B.BaseUrl);
+            foreach (string body in new[] { "{\"model\":\"m\",\"loaded\":null}", "[1,2]", "not json", "{\"model\":7,\"loaded\":\"yes\"}" })
+            {
+                rig.B.Handler = JsonReply(body);
+                bool? loaded = null;
+                string error = null;
+                try { loaded = await strata.GetLoadedAsync(); }
+                catch (Exception ex) { error = ex.GetType().Name; }
+                Check("body " + body + " gives null, no throw", error == null && loaded == null && strata.Model == null, error ?? strata.Model);
+            }
+        });
     }
 }

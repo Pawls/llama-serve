@@ -16,7 +16,9 @@
 > router/Strata/ninfer handover racing the switch (S2: switch-state box) · a Windows URL reservation or firewall
 > step that silently leaves the port unreachable (S2: bind box).
 >
-> **Next:** every slice shipped. Leftover, one PR: `/switchboard/status` keeps `strata.model` after Strata stops (seen 2026-11-25: `"state":"Stopped","model":"swift-1.5-iq3_s"`); fix it test-first, then archive this plan and `switchboard_SHIPPED.md` and repoint `tray/Switchboard.cs:3`, `tray/TraySwitchboard.cs:2` and AGENTS.md
+> **Next:** none; archived 2026-11-25. The last leftover (`/switchboard/status` kept `strata.model` after Strata
+> stopped) was fixed in `StrataClient.GetLoadedAsync` (tray/EngineClients.cs), which now forgets the model when
+> Strata does not answer.
 >
 > **Branch:** `feat/switchboard`, one PR
 
