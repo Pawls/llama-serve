@@ -151,7 +151,7 @@ enum StrataState { Stopped, Starting, Unloaded, Loaded }
 // One installed Strata size. A server serves one size, fixed when it starts.
 sealed class StrataSize
 {
-    const string StrataDir = @"F:\AI\strata\terminal";   // strata-dir.ps1's $StrataDir
+    public const string StrataDir = @"F:\AI\strata\terminal";   // strata-dir.ps1's $StrataDir
 
     public readonly string Script;       // start-strata.ps1's -Model value
     public readonly string Label;
@@ -276,14 +276,29 @@ sealed class ScriptProcess
     // with Windows Terminal as the default terminal, the window it opens stays visible.
     Process RunScriptHidden(string script, string arguments)
     {
-        var startInfo = new ProcessStartInfo("pwsh.exe",
+        return Process.Start(HiddenScript.StartInfo(root, script, arguments, false));
+    }
+}
+
+// pwsh scripts of this folder, run with no console window (see ScriptProcess.RunScriptHidden).
+static class HiddenScript
+{
+    public static ProcessStartInfo StartInfo(string root, string script, string arguments, bool redirect)
+    {
+        return new ProcessStartInfo("pwsh.exe",
             ("-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, script) + "\" " + arguments).TrimEnd())
         {
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = root,
+            RedirectStandardOutput = redirect,
+            RedirectStandardError = redirect,
         };
-        return Process.Start(startInfo);
+    }
+
+    public static string LastLine(string text)
+    {
+        return text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()).LastOrDefault();
     }
 }
 
@@ -408,20 +423,12 @@ static class MemorySaver
     // Runs -Mode On, Reapply or Off. Returns the script's summary line; throws with its error when it fails.
     public static async Task<string> SwitchAsync(string root, string mode)
     {
-        return LastLine(await RunAsync(root, mode));
+        return HiddenScript.LastLine(await RunAsync(root, mode));
     }
 
     static Task<string> RunAsync(string root, string mode)
     {
-        var startInfo = new ProcessStartInfo("pwsh.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + Path.Combine(root, "memory-saver.ps1") + "\" -Mode " + mode)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            WorkingDirectory = root,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        ProcessStartInfo startInfo = HiddenScript.StartInfo(root, "memory-saver.ps1", "-Mode " + mode, true);
         return Task.Run(() =>
         {
             using (Process process = Process.Start(startInfo))
@@ -429,15 +436,10 @@ static class MemorySaver
                 Task<string> errors = process.StandardError.ReadToEndAsync();
                 string output = process.StandardOutput.ReadToEnd();
                 process.WaitForExit();
-                if (process.ExitCode != 0) throw new InvalidOperationException(LastLine(errors.Result) ?? "memory-saver.ps1 failed.");
+                if (process.ExitCode != 0) throw new InvalidOperationException(HiddenScript.LastLine(errors.Result) ?? "memory-saver.ps1 failed.");
                 return output;
             }
         });
-    }
-
-    static string LastLine(string text)
-    {
-        return text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(line => line.Trim()).LastOrDefault();
     }
 }
 
@@ -780,6 +782,7 @@ sealed partial class TrayApp : ApplicationContext
         await RefreshAsync();
         pollTimer.Start();
         ApplySwitchboard();
+        StartModelFinder();
     }
 
     // ---- Menu ----
@@ -796,6 +799,7 @@ sealed partial class TrayApp : ApplicationContext
         unloadItem = new ToolStripMenuItem("Unload model (free GPUs)", null, (s, e) => RunAction(UnloadAsync));
 
         chatItem = new ToolStripMenuItem("Open chat in browser", null, (s, e) => OpenPath(RouterClient.BaseUrl + "/"));
+        var finderItem = new ToolStripMenuItem("Model finder (which models fit)", null, (s, e) => OpenPath(ModelFinderUrl));
         var logItem = new ToolStripMenuItem("Open server log", null, (s, e) => OpenPath(Path.Combine(root, "logs", "server.log")));
         var presetsItem = new ToolStripMenuItem("Edit presets.ini", null, (s, e) => OpenPath(Path.Combine(root, "presets.ini")));
         var folderItem = new ToolStripMenuItem("Open llama-serve folder", null, (s, e) => OpenPath(root));
@@ -844,7 +848,7 @@ sealed partial class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             modelsMenu, unloadItem,
             new ToolStripSeparator(),
-            chatItem, logItem, presetsItem, folderItem,
+            chatItem, finderItem, logItem, presetsItem, folderItem,
             new ToolStripSeparator(),
             startStopItem, restartItem, reserveGpuItem, shareItem,
             switchboardItem, switchboardTokenItem,

@@ -51,7 +51,7 @@ static class ModelFinderTests
             RebuildBody = () => { File.WriteAllText(Catalog, "{\"built\":" + Rebuilds + "}"); return null; };
             Finder = new ModelFinder(WebDir, Catalog, () => new[] { Source, Path.Combine(Dir, "absent.json") },
                 () => { Rebuilds++; return RebuildBody(); },
-                () => new Dictionary<string, object> { { "reserveGpu0", true } });
+                () => Task.FromResult<object>(new Dictionary<string, object> { { "reserveGpu0", true } }));
             int port = FreePort();
             BaseUrl = "http://127.0.0.1:" + port;
             Finder.Start(new[] { BaseUrl + "/" });

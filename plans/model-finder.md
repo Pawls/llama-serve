@@ -16,7 +16,7 @@
 > benchmark score with no source or from another model size (S3: the source box) · a text-only preset that loads
 > but spills under WDDM (S4: the `nvidia-smi` box) · a new download to make room (S4: the no-download box).
 >
-> **Next:** S1, the catalog builder, the page and the tray item, on this PC
+> **Next:** S2, the page reachable from the laptop
 >
 > **Branch:** per slice, `feat/model-finder-<slice id>` off `main`, one PR each
 >
@@ -24,7 +24,7 @@
 >
 > **Flow:** lean
 
-- [S1 — The catalog, the page and the tray item, on this PC](#s1)
+- [~~S1 — The catalog, the page and the tray item, on this PC~~ — SHIPPED 2026-11-27](#s1)
 - [S2 — Reachable from the laptop](#s2)
 - [S3 — Benchmark scores, sortable, each explained](#s3)
 - [S4 — Text-only presets where dropping the picture reader buys context](#s4)
@@ -45,69 +45,18 @@
 - **Do not load models, start Strata or stop the router to test S1-S3.** The page only reads files and the tray's
   own state. S4's loads happen in a bench session Paul starts, with `nvidia-smi` idle first.
 
-### S1 — The catalog, the page and the tray item, on this PC · Opus 5.5 / medium {#s1}
+### ~~S1 — The catalog, the page and the tray item, on this PC~~ · Opus 5.5 / medium — SHIPPED 2026-11-27 {#s1}
 
-**Status:** not started.
-**Touches:** `model-sources.ps1` (new), `sync-opencode.ps1`, `model-catalog.ps1` (new), `model-catalog.json` (new),
-`web/model-finder.html`, `web/model-finder.js`, `web/model-finder.test.mjs` (new), `tray/ModelFinder.cs` (new),
-`tray/LlamaTray.cs`, `tray/tests/ModelFinderTests.cs` (new), `test-model-finder.ps1` (new), README.md, AGENTS.md;
-port 8407.
-**After:** none.
-**Seam:** `model-catalog.ps1 -Out <file>` (the JSON), `GET /`, `GET /model-finder.js`, `GET /catalog.json` and
-`GET /status.json` on `127.0.0.1:8407`, and the pure `filterModels` / `sortModels` exports of `web/model-finder.js`.
-
-How it is built:
-
-- **Sources.** `model-sources.ps1` (dot-sourced) exports `Get-RouterPresets`, `Get-StrataSizes` and
-  `Get-NinferProfiles`, lifted from `sync-opencode.ps1`, which then uses them. Strata sizes are the
-  `strata-<size>.json` files that have a `run-<size>.bat` beside them (what `start-strata.ps1 -Model <size>`
-  accepts). ninfer profiles are the `$Inkling` rows plus `qwen38-27b` (context 188416, the constant
-  `sync-opencode.ps1` already uses, moved here).
-- **Entry fields**, by rule: `id` (preset id, Strata size, ninfer profile), `engine`; `context` (`ctx-size`,
-  `--max-context`, `Context`); `vision` (`mmproj` present; Strata `--vision` not `off`; ninfer Inkling yes, Qwen
-  no); `gpus` = `gpu1` when every `device` / `spec-draft-device` line says `CUDA1`, Strata's `"gpu": 1`, ninfer's
-  empty `Gpus` or Qwen, else `both`; `drafter` from `spec-type` (`draft-mtp` → `mtp`, `draft-dflash` → `dflash`);
-  `thinking` for router presets: `reasoning-budget = -1` → `always`, `reasoning = on` → `on`, `reasoning = off` →
-  `off`, neither key → `none`; for Strata and ninfer from `model-catalog.json`.
-- **`model-catalog.json`**, keyed by entry id: `family`, `description`, `speed` (`{"code": t/s, "prose": t/s}` at
-  2k, from README.md § The models and the Strata / ninfer sections; absent where never measured), `codeOnly`,
-  and `thinking` for Strata / ninfer. A `families` table (empty until S3). An entry id the builder finds but the
-  JSON lacks still appears, with `family` = its id; the test fails and names it, so a new preset gets its row.
-- **Serving.** `ModelFinder` (an `HttpListener` on `127.0.0.1:8407` and `localhost:8407`, started in
-  `StartUp()`) serves the two `web\` files, `logs\model-catalog.json` and `status.json`; anything else 404. Before
-  serving the catalog it runs `pwsh -NoProfile -File model-catalog.ps1 -Out logs\model-catalog.json` (30 s
-  timeout) when that file is missing or older than `presets.ini`, `model-catalog.json`, `start-ninfer.ps1` or any
-  `strata-*.json`; on failure it serves the old file, or a 500 with the script's error when there is none.
-  `status.json` = `{"reserveGpu0": bool, "loaded": {"router": id|null, "strata": id|null, "ninfer": id|null}}`
-  from the tray's fields, read on the UI thread. The page polls it every 5 s.
-- **The page.** Filters: context (a log-scale slider 8K-1M with a number field, kept in step; an entry shows when
-  its context ≥ the value), images required, GPUs (any / GPU 1 only, preset to GPU 1 only while Reserve GPU 0 is
-  on), engine (router / Strata / ninfer), thinking (any / can think / no thinking), hide code-only drafter lanes,
-  minimum code speed. Sort: code speed (default until S3), context, name; missing values last. The loaded model is
-  marked. It is product UI, not a scratch page, so its look follows the `impeccable` skill.
-- **Tests.** `test-model-finder.ps1` runs `node --test web/` (node 24 is installed), the catalog builder on
-  fixtures in `tray\tests\fixtures\`, and builds `ModelFinder.cs` with `tray\tests\ModelFinderTests.cs` the way
-  `test-switchboard.ps1` builds its tests (a fake host, a free port).
-
-Boxes:
-
-- [ ] Red tests first (filter at the context boundary, images, GPU 1 only; the builder's rules on fixtures; the
-      listener's routes, a 404 and a stale catalog rebuilt); commit and show the red run.
-- [ ] `sync-opencode.ps1 -WhatIf` prints no change after the move to `model-sources.ps1`.
-- [ ] The builder on the real files: `gemma4-31b` 65536 with images, `qwen3.8-27b-single` gpu1 text, every Strata
-      size's context equals its `--max-context`, and no entry lacks a `model-catalog.json` row.
-- [ ] Tray item "Model finder" opens `http://127.0.0.1:8407/`; `install-tray.ps1` builds; `test-switchboard.ps1`
-      still passes. Playwright: at 32K every entry shows; at 262K `gemma4-31b`, `gemma4-31b-mtp` and
-      `qwen3.8-27b-single` drop; screenshot checked.
-- [ ] README.md § Using the model finder; AGENTS.md "Other moving parts" bullet.
-
-Strike when every box is checked. Cancel if a second listener breaks the front door (`test-switchboard.ps1`).
+Shipped: the tray serves the page on `127.0.0.1:8407` from `model-catalog.ps1` + `model-catalog.json`; `status.json` is the front door's engine status. Body and rulings: [model-finder_SHIPPED.md](./model-finder_SHIPPED.md#s1).
 
 ### S2 — Reachable from the laptop · Sonnet 5.5 / medium {#s2}
 
 **Status:** not started.
-**Touches:** `tray/ModelFinder.cs`, `tray/TraySwitchboard.cs`, `tray/LlamaTray.cs` (the Share toggle),
-`allow-switchboard.ps1` → `allow-tray-ports.ps1`, README.md, AGENTS.md.
+- **Note (from S1):** `RequestLoop.Prefixes(port, shared)` in `tray/RequestLoop.cs` already gives both prefix sets;
+  `ModelFinder.Prefixes()` calls it with `false`. The finder is started by `StartModelFinder()` in
+  `tray/TrayModelFinder.cs`; put `BindListener` beside it in `RequestLoop.cs` and test it from `ModelFinderTests.cs`.
+**Touches:** `tray/RequestLoop.cs`, `tray/ModelFinder.cs`, `tray/TrayModelFinder.cs`, `tray/TraySwitchboard.cs`,
+`tray/LlamaTray.cs` (the Share toggle), `allow-switchboard.ps1` → `allow-tray-ports.ps1`, README.md, AGENTS.md.
 **After:** S1.
 **Seam:** the listener's prefixes for `shareOnNetwork` true and false, and the allow script.
 
@@ -126,6 +75,10 @@ adds one firewall rule per port with the front door's scope (192.168.1.0/24, 100
 ### S3 — Benchmark scores, sortable, each explained · Opus 5.5 / high {#s3}
 
 **Status:** not started.
+- **Note (from S1):** entries carry `family` already (`model-catalog.json`); scores go in its `families` table and
+  `model-catalog.ps1` passes `families` and `benchmarks` through unchanged. Add the sort key to `SORT_VALUES` in
+  `web/model-finder.js`. Paul asked on 2026-11-27 that research run on the API credit (the `offload` skill's Batch
+  route) while it lasts; it expires in early December 2026.
 **Touches:** `model-catalog.json` (`families`, `benchmarks`), `web/model-finder.js`, `web/model-finder.html`,
 `web/model-finder.test.mjs`.
 **After:** S1.

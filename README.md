@@ -130,6 +130,21 @@ What it does with a request, and what it will not do:
 
 Tests: `.\test-switchboard.ps1` runs the proxy against fake engines on loopback ports (no GPU use).
 
+### Using the model finder
+
+Tray menu: **Model finder (which models fit)** opens `http://127.0.0.1:8407/`, a page that lists every router
+preset, Strata size and ninfer profile and drops the ones that miss what you need: the context (a slider from 8K to
+1M, or type `32k`, `262144` or `1M`), images, GPU 1 only (ticked by itself while Reserve GPU 0 is on), engine,
+thinking, code-only drafter lanes and a minimum speed. Sort by speed on code, context or name. The model an engine is
+serving now is marked **loaded**, and the list of models that do not fit says what each one misses. Filters are kept
+in the browser between visits. It only reads: nothing on the page loads or starts a model.
+
+Context, images, GPUs and thinking are read from the files the engines start with (`presets.ini`, the Strata
+configs, `start-ninfer.ps1`, through `model-sources.ps1`). Descriptions and measured speeds are in
+`model-catalog.json`; add a row there for a new preset (`.\test-model-finder.ps1` fails and names any preset
+without one). The tray rebuilds the list with `model-catalog.ps1` when one of those files changes. Tests:
+`.\test-model-finder.ps1` (no engine, no GPU). For now the page answers on this PC only.
+
 ### Using it from VS Code chat
 
 VS Code's own chat lists every router preset (group **llama.cpp Router**) and Strata (group **Strata**) in its model picker. They come from VS Code's custom endpoint provider, configured in `%APPDATA%\Code\User\chatLanguageModels.json`. That file was generated from `presets.ini` on 2026-10-04: image support and context sizes come from each preset, and tool calling is on for all. After adding a preset, add its entry there too, or regenerate the file.
@@ -820,7 +835,8 @@ To try it on another model, add its preset, then run `.\bench-thinking.ps1 -Mode
 | `start-ninfer.ps1` / `stop-ninfer.ps1` | Start ninfer on port 8412 (Qwen3.8-27B through ninfer-3090 on GPU 1, or an Inkling 2 Mini profile through ninfer-all on GPU 1 or both GPUs) after stopping Strata and the router, logging to `logs\ninfer.log`, and stop it. |
 | `memory-saver.ps1` | Lists, closes and reopens background apps for the tray's Memory saver. |
 | `unload-router-model.ps1` | Unloads the router's model and waits until its VRAM is free. Strata runs it before every load. |
-| `tray\*.cs` | The tray app. It starts and stops the router, Strata and ninfer through the scripts above, and unloads Strata when a router model loads. `LlamaTray.cs` is the menu and engine state, `EngineClients.cs` the status query and Strata's client, `Switchboard.cs` and `TraySwitchboard.cs` the front door. |
+| `tray\*.cs` | The tray app. It starts and stops the router, Strata and ninfer through the scripts above, and unloads Strata when a router model loads. `LlamaTray.cs` is the menu and engine state, `EngineClients.cs` the status query and Strata's client, `Switchboard.cs` and `TraySwitchboard.cs` the front door, `ModelFinder.cs` and `TrayModelFinder.cs` the model finder, `RequestLoop.cs` the listener both use. |
+| `model-sources.ps1`, `model-catalog.ps1`, `model-catalog.json`, `web\` | The model finder: the launch-file readers (shared with `sync-opencode.ps1`), the catalog builder, the hand-kept descriptions and speeds, and the page. |
 | `install-tray.ps1` | Builds the tray app into `tray\bin\` (with the C# compiler built into Windows, no SDK), adds the Start menu shortcut, points the logon task at it, and launches it. Re-run after editing any `tray\*.cs`. |
 | `bench-depth.ps1` | Speed bench at ~2k / 52k / 128k context, for choosing between drafter lanes. Results in `logs\bench-depth-*.txt`. |
 | `bench-thinking.ps1` | Thinking-token and accuracy A/B of logit-bias arms (`bench\logit-bias-arms.json`) on math and code tasks (`bench\tasks-*.jsonl`). Results in `logs\bench-thinking-*.txt`. |

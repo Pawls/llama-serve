@@ -22,7 +22,8 @@ Write-Host '== listener'
 $References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.Web.Extensions.dll' |
     ForEach-Object { "/reference:$(Join-Path $FrameworkDir $_)" }
 $output = & (Join-Path $FrameworkDir 'csc.exe') /nologo /target:exe /debug+ "/out:$Exe" @References `
-    (Join-Path $Root 'tray\ModelFinder.cs') (Join-Path $Root 'tray\tests\ModelFinderTests.cs')
+    (Join-Path $Root 'tray\ModelFinder.cs') (Join-Path $Root 'tray\RequestLoop.cs') `
+    (Join-Path $Root 'tray\tests\ModelFinderTests.cs')
 if ($LASTEXITCODE -ne 0) { $output; $failed += 'listener (build)' }
 else {
     & $Exe

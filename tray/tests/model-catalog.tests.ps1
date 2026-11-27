@@ -33,7 +33,7 @@ $fx = Build @{ Presets = (Join-Path $Fixtures 'presets.ini'); NinferScript = (Jo
     Metadata = (Join-Path $Fixtures 'model-catalog.json'); StrataDir = (Join-Path $Fixtures 'strata') }
 
 Check 'entry order: router, Strata, ninfer' ($fx.entries.id) @('vision-mtp', 'short-dflash', 'gpu1-always', 'half-gpu1',
-    'not-in-json', 'big', 'big-gpu1', 'blind', 'inkling2-mini', 'inkling2-mini-q8', 'qwen38-27b')
+    'not-in-json', 'big-gpu1', 'big', 'blind', 'inkling2-mini', 'inkling2-mini-q8', 'qwen38-27b')
 Check 'router: mmproj, mtp, reasoning on' (Pick $fx 'vision-mtp') ([ordered]@{ engine = 'router'; modelId = 'vision-mtp'
     context = 262144; vision = $true; gpus = 'both'; thinking = 'on'; drafter = 'mtp'; codeOnly = $false })
 Check 'router: dflash, reasoning off, codeOnly from the JSON' (Pick $fx 'short-dflash') ([ordered]@{ engine = 'router'

@@ -71,13 +71,14 @@ sealed class Switchboard
     readonly Dictionary<string, int> waiting = new Dictionary<string, int>();
     string activeKey;
     int activeCount;
-    HttpListener listener;
+    readonly RequestLoop loop;
 
     public Switchboard(ISwitchHost host, string token, Action<string> log)
     {
         this.host = host;
         this.token = token;
         this.log = log;
+        loop = new RequestLoop(HandleSafelyAsync);
         // .NET Framework allows 2 connections per host unless raised; two streams to one engine would serialize.
         ServicePointManager.DefaultConnectionLimit = Math.Max(ServicePointManager.DefaultConnectionLimit, 64);
         upstream = new HttpClient(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false })
@@ -86,43 +87,17 @@ sealed class Switchboard
         };
     }
 
-    // The prefixes for a bind: this PC only, or every interface (which needs the URL reservation that
-    // allow-switchboard.ps1 makes).
     public static string[] Prefixes(bool shared)
     {
-        if (shared) return new[] { "http://+:" + Port + "/" };
-        return new[] { "http://127.0.0.1:" + Port + "/", "http://localhost:" + Port + "/" };
+        return RequestLoop.Prefixes(Port, shared);
     }
 
     // Throws HttpListenerException when a prefix cannot be bound (access denied without the URL reservation).
-    public void Start(IEnumerable<string> prefixes)
-    {
-        var fresh = new HttpListener();
-        foreach (string prefix in prefixes) fresh.Prefixes.Add(prefix);
-        fresh.Start();
-        listener = fresh;
-        AcceptLoop(fresh);
-    }
+    public void Start(IEnumerable<string> prefixes) { loop.Start(prefixes); }
 
-    public void Stop()
-    {
-        HttpListener old = listener;
-        listener = null;
-        if (old != null) old.Close();
-    }
+    public void Stop() { loop.Stop(); }
 
-    public bool Running { get { return listener != null; } }
-
-    async void AcceptLoop(HttpListener source)
-    {
-        while (source.IsListening)
-        {
-            HttpListenerContext context;
-            try { context = await source.GetContextAsync(); }
-            catch (Exception) { return; }   // the listener was stopped
-            var ignored = HandleSafelyAsync(context);
-        }
-    }
+    public bool Running { get { return loop.Running; } }
 
     async Task HandleSafelyAsync(HttpListenerContext context)
     {
