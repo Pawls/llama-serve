@@ -27,15 +27,33 @@ export function filterModels(entries, filters) {
   return entries.filter(e => whyHidden(e, filters) === null);
 }
 
+// A model's lanes share its family's published scores (model-catalog.json "families"); a fine-tune nobody scored
+// has none.
+export function scoreOf(e, bench, families) {
+  return families?.[e.family]?.scores?.[bench];
+}
+
+// The benchmarks that get a column: reported by at least three families, the most reported first.
+export function benchmarkColumns(families) {
+  const counts = {};
+  for (const row of Object.values(families ?? {})) {
+    for (const bench of Object.keys(row.scores ?? {})) counts[bench] = (counts[bench] ?? 0) + 1;
+  }
+  return Object.keys(counts).filter(bench => counts[bench] >= 3)
+    .sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+}
+
 // Each key reads one number, larger first; a missing number sorts last. Name sorts by id.
 const SORT_VALUES = {
   speed: e => e.speed?.code,
   context: e => e.context,
 };
+const BENCH_SORT = 'bench:';   // a sort key for a benchmark is this plus its id
 
-export function sortModels(entries, key) {
+export function sortModels(entries, key, families) {
   const byId = (a, b) => a.id.localeCompare(b.id);
-  const value = SORT_VALUES[key];
+  const bench = key?.startsWith(BENCH_SORT) ? key.slice(BENCH_SORT.length) : null;
+  const value = bench ? e => scoreOf(e, bench, families)?.value : SORT_VALUES[key];
   if (!value) return [...entries].sort(byId);
   return [...entries].sort((a, b) => {
     const va = value(a), vb = value(b);
@@ -114,11 +132,15 @@ function contextToSlider(tokens) {
 function startPage() {
   const $ = id => document.getElementById(id);
   const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-  const state = { filters: { ...defaultFilters(), ...(saved?.filters ?? {}) }, sort: saved?.sort ?? 'speed',
-    gpuChosen: saved?.gpuChosen ?? false, entries: [], loaded: new Set(), status: null };
+  // Until a sort is picked by hand the list follows the default: the benchmark the most families report.
+  const sortChosen = saved?.sortChosen ?? false;
+  const state = { filters: { ...defaultFilters(), ...(saved?.filters ?? {}) }, sort: sortChosen ? saved.sort : 'speed',
+    sortChosen, gpuChosen: saved?.gpuChosen ?? false, entries: [], families: {}, benchmarks: {}, columns: [],
+    loaded: new Set(), status: null };
 
   function save() {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ filters: state.filters, sort: state.sort, gpuChosen: state.gpuChosen }));
+    localStorage.setItem(STORE_KEY, JSON.stringify({ filters: state.filters, sort: state.sort,
+      sortChosen: state.sortChosen, gpuChosen: state.gpuChosen }));
   }
 
   function cell(tag, text, className) {
@@ -126,6 +148,47 @@ function startPage() {
     if (text != null) el.textContent = text;
     if (className) el.className = className;
     return el;
+  }
+
+  // A score links to the publisher's page it was read from; its tooltip has the number as published, the model and the setting.
+  function scoreCell(e, bench) {
+    const score = scoreOf(e, bench, state.families);
+    const sorted = state.sort === BENCH_SORT + bench ? ' sorted' : '';
+    if (!score) return cell('td', '–', 'num muted' + sorted);
+    const td = cell('td', null, 'num' + sorted);
+    const family = state.families[e.family];
+    const link = cell('a', score.value.toFixed(1));
+    link.href = family.source;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.title = score.value + ' measured on ' + family.measuredOn + (score.setting ? '; ' + score.setting : '') + '. Opens the publisher\'s page.';
+    td.append(link);
+    return td;
+  }
+
+  // The benchmark columns and their sort options follow the catalog, so a new benchmark needs no page edit.
+  function showBenchmarks() {
+    const name = bench => state.benchmarks[bench]?.name ?? bench;
+    for (const head of document.querySelectorAll('thead tr')) {
+      head.querySelectorAll('th.bench').forEach(th => th.remove());
+      head.append(...state.columns.map(bench => cell('th', name(bench), 'num bench')));
+    }
+    $('sort').querySelectorAll('option.bench').forEach(option => option.remove());
+    $('sort').prepend(...state.columns.map(bench => {
+      const option = cell('option', name(bench), 'bench');
+      option.value = BENCH_SORT + bench;
+      return option;
+    }));
+    const known = [...$('sort').options].some(option => option.value === state.sort);
+    if (!state.sortChosen || !known) state.sort = state.columns.length ? BENCH_SORT + state.columns[0] : 'speed';
+  }
+
+  function explainSort() {
+    const b = state.sort.startsWith(BENCH_SORT) ? state.benchmarks[state.sort.slice(BENCH_SORT.length)] : null;
+    $('explain').hidden = !b;
+    if (!b) return;
+    $('explain-name').textContent = b.name;
+    $('explain-text').textContent = b.tests + ' ' + b.higher;
   }
 
   function row(e, reason) {
@@ -143,7 +206,8 @@ function startPage() {
       cell('td', e.gpus === 'gpu1' ? 'GPU 1' : 'both'),
       cell('td', thinkingName(e.thinking)),
       cell('td', e.speed?.code ?? '–', 'num'),
-      cell('td', e.speed?.prose ?? '–', 'num'));
+      cell('td', e.speed?.prose ?? '–', 'num'),
+      ...state.columns.map(bench => scoreCell(e, bench)));
     if (e.codeOnly) tr.classList.add('code-only');
     return tr;
   }
@@ -168,8 +232,10 @@ function startPage() {
     $('sort').value = state.sort;
     $('reserved').hidden = !state.status?.reserve_gpu0;
 
-    const fitting = sortModels(filterModels(state.entries, f), state.sort);
-    const rest = sortModels(state.entries.filter(e => whyHidden(e, f) !== null), state.sort);
+    explainSort();
+
+    const fitting = sortModels(filterModels(state.entries, f), state.sort, state.families);
+    const rest = sortModels(state.entries.filter(e => whyHidden(e, f) !== null), state.sort, state.families);
     $('fit').replaceChildren(...fitting.map(e => row(e)));
     $('nofit').replaceChildren(...rest.map(e => row(e, whyHidden(e, f))));
     $('count').textContent = fitting.length + ' of ' + state.entries.length + ' fit';
@@ -208,7 +274,7 @@ function startPage() {
   }
   $('code-only').addEventListener('change', ev => update(f => { f.hideCodeOnly = ev.target.checked; }));
   $('min-speed').addEventListener('input', ev => update(f => { f.minSpeed = Math.max(0, Number(ev.target.value) || 0); }));
-  $('sort').addEventListener('change', ev => { state.sort = ev.target.value; save(); render(); });
+  $('sort').addEventListener('change', ev => { state.sort = ev.target.value; state.sortChosen = true; save(); render(); });
   $('reset').addEventListener('click', () => {
     state.gpuChosen = false;
     update(f => Object.assign(f, defaultFilters(), { gpu1Only: Boolean(state.status?.reserve_gpu0) }));
@@ -233,6 +299,10 @@ function startPage() {
       if (!response.ok) throw new Error(await response.text());
       const catalog = await response.json();
       state.entries = catalog.entries;
+      state.families = catalog.families ?? {};
+      state.benchmarks = catalog.benchmarks ?? {};
+      state.columns = benchmarkColumns(state.families);
+      showBenchmarks();
       $('error').hidden = true;
     } catch (err) {
       $('error').textContent = 'The model list could not be loaded: ' + err.message;

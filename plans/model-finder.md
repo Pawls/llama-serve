@@ -16,7 +16,7 @@
 > benchmark score with no source or from another model size (S3: the source box) · a text-only preset that loads
 > but spills under WDDM (S4: the `nvidia-smi` box) · a new download to make room (S4: the no-download box).
 >
-> **Next:** S3, benchmark scores (S2 is in review; Paul's laptop check is its last box)
+> **Next:** S4, text-only presets (a bench session Paul starts). S2's PR #34 is merged; Paul's laptop check is its last box.
 >
 > **Branch:** per slice, `feat/model-finder-<slice id>` off `main`, one PR each
 >
@@ -26,7 +26,7 @@
 
 - [~~S1 — The catalog, the page and the tray item, on this PC~~ — SHIPPED 2026-11-27](#s1)
 - [S2 — Reachable from the laptop](#s2)
-- [S3 — Benchmark scores, sortable, each explained](#s3)
+- [~~S3 — Benchmark scores, sortable, each explained~~ — SHIPPED 2026-11-27](#s3)
 - [S4 — Text-only presets where dropping the picture reader buys context](#s4)
 
 ## Traps
@@ -51,7 +51,7 @@ Shipped: the tray serves the page on `127.0.0.1:8407` from `model-catalog.ps1` +
 
 ### S2 — Reachable from the laptop · Sonnet 5.5 / medium {#s2}
 
-**Status:** code and tests done, PR open; the last box is Paul's.
+**Status:** code and tests merged (PR #34); the last box is Paul's.
 - **Note (from S1):** `RequestLoop.Prefixes(port, shared)` in `tray/RequestLoop.cs` already gives both prefix sets;
   `ModelFinder.Prefixes()` calls it with `false`. The finder is started by `StartModelFinder()` in
   `tray/TrayModelFinder.cs`; put `BindListener` beside it in `RequestLoop.cs` and test it from `ModelFinderTests.cs`.
@@ -72,31 +72,15 @@ adds one firewall rule per port with the front door's scope (192.168.1.0/24, 100
 - [ ] Paul runs the script once as admin, then opens `http://<PC>:8407/` from the laptop (his laptop and an admin
       prompt; nothing here reaches either).
 
-### S3 — Benchmark scores, sortable, each explained · Opus 5.5 / high {#s3}
+### ~~S3 — Benchmark scores, sortable, each explained~~ · Opus 5.5 / high — SHIPPED 2026-11-27 {#s3}
 
-**Status:** not started.
-- **Note (from S1):** entries carry `family` already (`model-catalog.json`); scores go in its `families` table and
-  `model-catalog.ps1` passes `families` and `benchmarks` through unchanged. Add the sort key to `SORT_VALUES` in
-  `web/model-finder.js`. Paul asked on 2026-11-27 that research run on the API credit (the `offload` skill's Batch
-  route) while it lasts; it expires in early December 2026.
-**Touches:** `model-catalog.json` (`families`, `benchmarks`), `web/model-finder.js`, `web/model-finder.html`,
-`web/model-finder.test.mjs`.
-**After:** S1.
-**Seam:** `sortModels` with a benchmark key, and the catalog's `benchmarks` table.
-
-Scores are the publisher's (model card or paper), per family, each with its source URL and the model size it was
-measured on; a fine-tune with no published score shows a dash and sorts last. A benchmark gets a column when at
-least three families report it. Each benchmark has a line on what it tests and what a higher number means. The
-default sort is the benchmark the most families report. Publishers use different harnesses, so the page says once
-that scores within a few points are a tie.
-
-- [ ] Red test: sorting by a benchmark puts missing scores last and keeps ties in name order.
-- [ ] Every score has a source URL naming that exact model, checked by reading each page.
-- [ ] Playwright: picking each benchmark re-sorts the list and shows its explanation.
+Shipped: eleven benchmark columns from ten publishers' pages (57 scores in `model-catalog.json`), each sortable with its explanation; the page opens sorted by GPQA Diamond. Body and rulings: [model-finder_SHIPPED.md](./model-finder_SHIPPED.md#s3).
 
 ### S4 — Text-only presets where dropping the picture reader buys context · Opus 5.5 / medium {#s4}
 
 **Status:** not started; needs a bench session Paul starts.
+- **Note (from S3):** a text-only twin belongs to its model's `family` in `model-catalog.json`, so it shows that
+  family's benchmark scores with no further edit.
 **Touches:** `presets.ini`, `start-ninfer.ps1`, `model-catalog.json`, Pi's `models.json`, VS Code's
 `chatLanguageModels.json`, `sync-opencode.ps1` run, README.md; both GPUs.
 **After:** S1.

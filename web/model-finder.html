@@ -86,6 +86,12 @@
   }
   .code-only .id::after { content: "code only"; font-size: 0.72rem; font-weight: 500; color: var(--muted); }
   .reason { color: var(--warn); font-size: 0.82rem; margin-top: 0.2rem; }
+  td a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  td a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+  td.sorted { color: var(--accent); font-weight: 600; }
+  td.sorted.muted { color: var(--faint); font-weight: 400; }
+  .explain { margin: 1rem 0 0; color: var(--muted); font-size: 0.9rem; max-width: 80ch; }
+  .explain strong { color: var(--text); }
 
   #nofit-section { margin-top: 2rem; }
   #nofit-section summary { cursor: pointer; color: var(--muted); padding: 0.4rem 0; }
@@ -96,6 +102,13 @@
   .notice { margin: 1rem 0 0; padding: 0.7rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); }
   .notice.error { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); color: var(--text); }
   footer { color: var(--faint); font-size: 0.8rem; margin-top: 2rem; max-width: 75ch; }
+
+  th.bench { padding-left: 0.5rem; padding-right: 0.5rem; white-space: normal; text-align: right; vertical-align: bottom; }
+  th.bench ~ th.bench, td.num ~ td.num { padding-left: 0.5rem; padding-right: 0.5rem; }
+  /* The benchmark columns need more width than most windows have; below it the table scrolls sideways. */
+  @media (max-width: 1750px) {
+    .results { overflow-x: auto; }
+  }
 
   @media (max-width: 860px) {
     main { grid-template-columns: 1fr; }
@@ -170,6 +183,8 @@
   <section class="results">
     <p class="notice error" id="error" hidden></p>
     <p class="notice" id="offline" hidden>The tray is not answering, so the loaded model is not shown.</p>
+    <p class="explain" id="explain" hidden><strong id="explain-name"></strong> <span id="explain-text"></span>
+      Scores are each publisher's own, run on different setups: a few points apart is a tie.</p>
     <table>
       <thead>
         <tr><th>Model</th><th>Engine</th><th class="num">Context</th><th>Images</th><th>GPUs</th><th>Thinking</th><th class="num">Code t/s</th><th class="num">Prose t/s</th></tr>
@@ -192,6 +207,8 @@
       Context, images, GPUs and thinking come from the files each engine starts with. Speeds are net tokens a second
       at 2K context from README.md: router rows are one short reply each, so rough; a dash means not measured.
       Lanes marked code only use a drafter that guesses code well and prose badly.
+      Benchmark scores are the publisher's, for the full-precision model: every lane and quant of a model shows the
+      same number, each links to the page it came from, and a dash means the publisher gave none.
     </footer>
   </section>
 </main>

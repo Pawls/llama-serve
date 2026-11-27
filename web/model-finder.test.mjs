@@ -198,17 +198,18 @@ test('benchmarkColumns: a column needs three families; the most reported comes f
 // The shipped table (model-catalog.json): the rules the page and the plan rely on.
 const shipped = JSON.parse(readFileSync(new URL('../model-catalog.json', import.meta.url), 'utf8'));
 
-test('model-catalog.json: every score names a described benchmark, its source page and the model measured', () => {
+test('model-catalog.json: every scored family names its source page and the model measured, every score a described benchmark', () => {
   const entryFamilies = new Set(Object.values(shipped.entries).map(e => e.family));
   assert.ok(Object.keys(shipped.families).length > 0, 'no families');
   for (const [family, row] of Object.entries(shipped.families)) {
     assert.ok(entryFamilies.has(family), family + ' is no entry\'s family');
+    assert.match(row.source, /^https:\/\/\S+$/, family + ': source');
+    assert.ok(row.measuredOn, family + ': measuredOn');
+    assert.ok(Object.keys(row.scores).length > 0, family + ': no scores');
     for (const [bench, score] of Object.entries(row.scores)) {
       const where = family + ' / ' + bench;
       assert.ok(shipped.benchmarks[bench], where + ': benchmark not described');
       assert.equal(typeof score.value, 'number', where + ': value');
-      assert.match(score.source, /^https:\/\/\S+$/, where + ': source');
-      assert.ok(score.measuredOn, where + ': measuredOn');
     }
   }
 });
@@ -216,6 +217,7 @@ test('model-catalog.json: every score names a described benchmark, its source pa
 test('model-catalog.json: every benchmark with a column says what it tests and what higher means', () => {
   const columns = benchmarkColumns(shipped.families);
   assert.ok(columns.length > 0, 'no benchmark has three families');
+  assert.deepEqual(Object.keys(shipped.benchmarks).sort(), [...columns].sort(), 'a described benchmark has no column');
   for (const bench of columns) {
     const b = shipped.benchmarks[bench];
     assert.ok(b.name && b.name.length <= 24, bench + ': name');

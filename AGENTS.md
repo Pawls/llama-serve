@@ -134,7 +134,9 @@ Other moving parts:
   [model-sources.ps1](./model-sources.ps1) (which `sync-opencode.ps1` also uses) plus
   [model-catalog.json](./model-catalog.json) (descriptions, speeds, code-only lanes, Strata and ninfer thinking); the
   tray reruns it when a source is newer. **A new preset, Strata size or ninfer profile needs a row in
-  `model-catalog.json`**; `.\test-model-finder.ps1` fails until it has one. Plan:
+  `model-catalog.json`**; `.\test-model-finder.ps1` fails until it has one. Its `families` table holds each
+  model's published benchmark scores (the publisher's own page, full precision, read 2026-11-27) and `benchmarks` what
+  each tests; a benchmark three families report becomes a sortable column by itself. Plan:
   [plans/model-finder.md](./plans/model-finder.md).
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
