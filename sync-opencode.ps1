@@ -29,20 +29,12 @@ function New-Model([string]$Name, [int]$Context, [bool]$Image, $Effort) {
     [ordered]@{ name = $Name; capabilities = $caps; limit = [ordered]@{ context = $Context } }
 }
 
-function Get-KeyValueSections([string]$Path) {
-    $sections = [ordered]@{}
-    $current = $null
-    foreach ($line in Get-Content $Path) {
-        if ($line -match '^\[(.+)\]\s*$') { $current = $sections[$Matches[1]] = @{} }
-        elseif ($current -and $line -match '^([\w-]+)\s*=\s*(.*?)\s*$') { $current[$Matches[1]] = $Matches[2] }
-    }
-    $sections
-}
+. (Join-Path $PSScriptRoot 'model-sources.ps1')
 
 # Router: one model per preset section.
 $router = [ordered]@{}
-$presets = Get-KeyValueSections (Join-Path $PSScriptRoot 'presets.ini')
-foreach ($id in $presets.Keys | Where-Object { $_ -ne '*' }) {
+$presets = Get-RouterPresets (Join-Path $PSScriptRoot 'presets.ini')
+foreach ($id in $presets.Keys) {
     $p = $presets[$id]
     $kwargs = [string]$p['chat-template-kwargs']
     $effort = if ($p['reasoning'] -eq 'on' -and $kwargs -match 'reasoning_effort') {
@@ -56,32 +48,22 @@ foreach ($id in $presets.Keys | Where-Object { $_ -ne '*' }) {
 # Strata: one alias per installed size, all answered by whichever size is loaded.
 $strata = [ordered]@{}
 $strataEffort = [ordered]@{ supported = $true; effort = @('low', 'medium', 'high'); toggle = $true }
-foreach ($file in Get-ChildItem (Join-Path $StrataDir 'strata-*.json') | Sort-Object Name) {
-    $cfg = Get-Content $file -Raw | ConvertFrom-Json
-    $context = [int]$cfg.args[[array]::IndexOf($cfg.args, '--max-context') + 1]
-    $fallback = "$($cfg.model_name) (Strata)"
-    $strata[$cfg.model_name] = New-Model ((Get-OldName 'strata' $cfg.model_name) ?? $fallback) $context $true $strataEffort
+foreach ($s in Get-StrataConfigs $StrataDir) {
+    $fallback = "$($s.ModelName) (Strata)"
+    $strata[$s.ModelName] = New-Model ((Get-OldName 'strata' $s.ModelName) ?? $fallback) $s.Context $s.Vision $strataEffort
 }
 
-# ninfer: the Inkling profiles; the model id is the profile name with dashes, as start-ninfer.ps1 passes it.
-$ninferScript = Get-Content (Join-Path $PSScriptRoot 'start-ninfer.ps1') -Raw
-$quants = @{}
-[regex]::Matches($ninferScript, '(?m)^\$(\w+)\s*=\s*''models\\[^\\]+\\Inkling-2-Mini-(UD-\w+?)-ninfer') |
-    ForEach-Object { $quants[$_.Groups[1].Value] = $_.Groups[2].Value }
+# ninfer: the Inkling profiles.
 $ninfer = [ordered]@{}
 $ninferEffort = [ordered]@{ supported = $true; effort = @('minimal', 'low', 'medium', 'high', 'xhigh'); toggle = $true }
-$profiles = [regex]::Matches($ninferScript, "(?m)^\s*'(inkling2-[\w-]+)'\s*=\s*@\{ File = \`$(\w+); Context = (\d+); Gpus = ('')?")
-foreach ($m in $profiles) {
-    $id = $m.Groups[1].Value -replace '^inkling2', 'inkling-2'
-    $context = [int]$m.Groups[3].Value
-    $gpus = if ($m.Groups[4].Success) { 'GPU 1' } else { '2 GPUs' }
-    $name = "Inkling 2 Mini $($quants[$m.Groups[2].Value]) (ninfer, $gpus, $($context / 1024)K)"
-    $ninfer[$id] = New-Model $name $context $true $ninferEffort
+foreach ($n in Get-NinferProfiles (Join-Path $PSScriptRoot 'start-ninfer.ps1')) {
+    $gpus = if ($n.Gpu1) { 'GPU 1' } else { '2 GPUs' }
+    $name = "Inkling 2 Mini $($n.Quant) (ninfer, $gpus, $($n.Context / 1024)K)"
+    $ninfer[$n.Id] = New-Model $name $n.Context $n.Vision $ninferEffort
 }
-if ($ninfer.Count -eq 0) { throw 'No Inkling profiles found in start-ninfer.ps1; its $Inkling table changed shape.' }
 
 # Front door: every id of the three engines on one port. The ninfer copy of the router's qwen3.8-27b is listed as
-# ninfer/qwen3.8-27b (README § Using the front door); 188416 is run.bat's NINFER_SPEC=dflash2 maximum context.
+# ninfer/qwen3.8-27b (README § Using the front door); its context is $NinferQwen's (model-sources.ps1).
 $door = [ordered]@{}
 foreach ($set in $router, $strata, $ninfer) {
     foreach ($id in $set.Keys) {
@@ -89,7 +71,7 @@ foreach ($set in $router, $strata, $ninfer) {
         $door[$id] = New-Model ($m.name -replace '\)$', ', front door)') $m.limit.context ($m.capabilities.input -contains 'image') $m.capabilities.reasoning
     }
 }
-$door['ninfer/qwen3.8-27b'] = New-Model 'Qwen3.8-27B (ninfer, GPU 1, front door)' 188416 $false $null
+$door['ninfer/qwen3.8-27b'] = New-Model 'Qwen3.8-27B (ninfer, GPU 1, front door)' $NinferQwen.Context $false $null
 $tokenFile = (Join-Path $PSScriptRoot 'logs\switchboard-token') -replace '\\', '/'
 
 $engine = '@opencode/ai/providers/openai-compatible'

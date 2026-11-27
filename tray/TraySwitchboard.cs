@@ -196,13 +196,28 @@ sealed partial class TrayApp : ISwitchHost
 
     Task<Dictionary<string, object>> ISwitchHost.StatusAsync()
     {
-        return OnUi(() => Task.FromResult(new Dictionary<string, object>
+        return OnUi(() => Task.FromResult(EngineStatus()));
+    }
+
+    // Each engine's state and model, as the front door's /switchboard/status and the model finder's /status.json
+    // report them. Read on the UI thread.
+    Dictionary<string, object> EngineStatus()
+    {
+        return new Dictionary<string, object>
         {
             { "router", new Dictionary<string, object> { { "state", state.ToString() }, { "model", activeModel == null ? null : activeModel.Id }, { "model_status", activeModel == null ? null : activeModel.Status } } },
-            { "strata", new Dictionary<string, object> { { "state", strataState.ToString() }, { "model", strata.Model } } },
+            { "strata", new Dictionary<string, object> { { "state", strataState.ToString() }, { "model", strata.Model }, { "size", StrataRunningSize() } } },
             { "ninfer", new Dictionary<string, object> { { "state", ninferState.ToString() }, { "model", ninfer.Model } } },
             { "reserve_gpu0", reserveGpu0 },
-        }));
+        };
+    }
+
+    // The size serving now, when the tray started it; null after a start by hand, where /health's model id may
+    // fit more than one size.
+    string StrataRunningSize()
+    {
+        if (strataStarted == null || strata.Model == null || strata.Model != strataStarted.ModelId) return null;
+        return strataStarted.Script;
     }
 
     // Unloads what holds the GPUs without stopping the servers: ninfer stops, Strata and the router lose their model.

@@ -125,16 +125,27 @@ Other moving parts:
   `ShareOnNetwork` (needs [allow-switchboard.ps1](./allow-switchboard.ps1) once, as admin; without it the tray falls
   back to loopback with a notice). Tests: `.\test-switchboard.ps1` (fake engines, no GPUs). Log: `logs\switchboard.log`.
   Plan (shipped, archived): [dev-notes/archive/switchboard.md](./dev-notes/archive/switchboard.md); usage: README.md § Using the front door.
+- **Model finder, port 8407.** A read-only page the tray always serves on loopback
+  ([tray/ModelFinder.cs](./tray/ModelFinder.cs), [tray/TrayModelFinder.cs](./tray/TrayModelFinder.cs), `web\`): every
+  router preset, Strata size and ninfer profile, filtered by context, images, GPUs, engine, thinking and speed.
+  [model-catalog.ps1](./model-catalog.ps1) builds `logs\model-catalog.json` from the launch files through
+  [model-sources.ps1](./model-sources.ps1) (which `sync-opencode.ps1` also uses) plus
+  [model-catalog.json](./model-catalog.json) (descriptions, speeds, code-only lanes, Strata and ninfer thinking); the
+  tray reruns it when a source is newer. **A new preset, Strata size or ninfer profile needs a row in
+  `model-catalog.json`**; `.\test-model-finder.ps1` fails until it has one. Plan:
+  [plans/model-finder.md](./plans/model-finder.md).
 - **Memory saver.** [memory-saver.ps1](./memory-saver.ps1) closes and reopens background apps to free RAM for Strata.
   Since `--resident-experts` (2026-11-01) Swift and IQ3_XXS leave 21-28 GB free with the usual apps closed by hand, so
   it matters mainly for UD-Q4_K_XL (~4 GB free that way, ~3 GB with SonarLint running). Ticks live in `memory-saver.choices.json` (untracked); what it
   closed is in `logs\memory-saver.json`.
-- **The tray** is four C# files, [tray/LlamaTray.cs](./tray/LlamaTray.cs) (menu, engine state),
+- **The tray** is seven C# files, [tray/LlamaTray.cs](./tray/LlamaTray.cs) (menu, engine state),
   [tray/EngineClients.cs](./tray/EngineClients.cs) (the status query and Strata's client, kept out of the WinForms
-  file so the tests can build them), [tray/Switchboard.cs](./tray/Switchboard.cs) (the front door's proxy) and
-  [tray/TraySwitchboard.cs](./tray/TraySwitchboard.cs) (its engine switching, a `partial` of `TrayApp`), compiled
+  file so the tests can build them), [tray/Switchboard.cs](./tray/Switchboard.cs) (the front door's proxy),
+  [tray/TraySwitchboard.cs](./tray/TraySwitchboard.cs) (its engine switching, a `partial` of `TrayApp`),
+  [tray/ModelFinder.cs](./tray/ModelFinder.cs) and [tray/TrayModelFinder.cs](./tray/TrayModelFinder.cs) (the model
+  finder page) and [tray/RequestLoop.cs](./tray/RequestLoop.cs) (the listener both servers use), compiled
   together with the C# compiler built into Windows (no SDK) by [install-tray.ps1](./install-tray.ps1) into `tray\bin\`
-  (untracked). `tray\tests` is built only by `test-switchboard.ps1`. After editing the tray, re-run
+  (untracked). `tray\tests` is built only by `test-switchboard.ps1` and `test-model-finder.ps1`. After editing the tray, re-run
   `install-tray.ps1`; that restarts the user's tray, so say so.
 
 ## Strata state and updating it
