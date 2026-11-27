@@ -16,21 +16,18 @@ sealed partial class TrayApp
 
     ModelFinder modelFinder;
 
-    void StartModelFinder()
+    // Starts or restarts the page's listener to match ShareOnNetwork. It answers short read-only requests, so a
+    // rebind needs no wait for replies in flight. Where it listens is in the tray's notices; "local" or "network".
+    string ApplyModelFinder()
     {
+        if (modelFinder != null) modelFinder.Stop();
+        modelFinder = null;
         var finder = new ModelFinder(Path.Combine(root, "web"), Path.Combine(root, "logs", "model-catalog.json"),
             ModelCatalogSources, BuildModelCatalog, () => OnUi(() => Task.FromResult<object>(EngineStatus())));
-        try
-        {
-            finder.Start(ModelFinder.Prefixes());
-            modelFinder = finder;
-        }
-        catch (HttpListenerException ex)
-        {
-            Notify("The model finder could not listen on port " + ModelFinder.Port + ": " + ex.Message, ToolTipIcon.Warning);
-        }
+        string bound = RequestLoop.BindListener(finder.Start, ModelFinder.Prefixes, shareOnNetwork, "The model finder", Notify);
+        if (bound != null) modelFinder = finder;
+        return bound;
     }
-
     // Every file model-catalog.ps1 reads, and the Strata folder itself, whose time moves when a config or run
     // script is added or deleted; the catalog is rebuilt when one is newer than it.
     IEnumerable<string> ModelCatalogSources()

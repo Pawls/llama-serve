@@ -783,7 +783,7 @@ sealed partial class TrayApp : ApplicationContext
         await RefreshAsync();
         pollTimer.Start();
         ApplySwitchboard();
-        StartModelFinder();
+        ApplyModelFinder();
     }
 
     // ---- Menu ----
@@ -1451,7 +1451,8 @@ sealed partial class TrayApp : ApplicationContext
         bool share = !shareOnNetwork;
         if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
         shareOnNetwork = share;
-        ApplySwitchboard();   // the front door follows the same bind choice
+        ApplySwitchboard();   // the front door and the model finder follow the same bind choice
+        ApplyModelFinder();
         string when = state == RouterState.Stopped ? " once the router is started." : ".";
         Notify(share
             ? "Router shared on port 8410 (LAN and Tailscale)" + when
