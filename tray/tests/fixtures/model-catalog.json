@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "vision-mtp": { "family": "fam-a", "description": "A vision model with MTP.", "speed": { "code": 57, "prose": 50 } },
+    "short-dflash": { "family": "fam-b", "description": "Code-only drafter.", "codeOnly": true, "speed": { "code": 190, "prose": 56 } },
+    "gpu1-always": { "family": "fam-c", "description": "Always reasons." },
+    "half-gpu1": { "family": "fam-d", "description": "Draft on GPU 0." },
+    "big": { "family": "fam-big", "description": "Strata, two GPUs.", "thinking": "on", "speed": { "code": 126, "prose": 94 } },
+    "big-gpu1": { "family": "fam-big", "description": "Strata, GPU 1.", "thinking": "on" },
+    "blind": { "family": "fam-blind", "description": "Strata, no images.", "thinking": "on" },
+    "inkling2-mini": { "family": "inkling-2-mini", "description": "ninfer, GPU 1.", "thinking": "on" },
+    "inkling2-mini-q8": { "family": "inkling-2-mini", "description": "ninfer Q8.", "thinking": "on" },
+    "qwen38-27b": { "family": "qwen3.8-27b", "description": "ninfer Qwen.", "thinking": "on" }
+  },
+  "families": {},
+  "benchmarks": {}
+}

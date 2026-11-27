@@ -1,0 +1,1 @@
+{ "model_name": "big-model", "gpu": [0, 1], "args": ["--max-context", "262144", "--vision", "--vram-reserve-mib", "1344"] }
