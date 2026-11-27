@@ -108,6 +108,10 @@
   /* The benchmark columns need more width than most windows have, so each table scrolls inside its own box: the
      sticky headers need a box that scrolls both ways. */
   .table-wrap { overflow: auto; max-height: calc(100vh - 5rem); }
+  /* The model's name stays in view while the scores scroll sideways. */
+  td.name, th:first-child { position: sticky; left: 0; background: var(--bg); }
+  th:first-child { z-index: 1; }
+  tbody tr:hover td.name { background: var(--panel); }
   .explain a { color: var(--muted); }
   .explain a:hover { color: var(--accent); }
 
