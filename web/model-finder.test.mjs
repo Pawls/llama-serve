@@ -1,7 +1,7 @@
 // Run with: node --test web/model-finder.test.mjs   (test-model-finder.ps1 runs it too)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterModels, sortModels, defaultFilters } from './model-finder.js';
+import { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds } from './model-finder.js';
 
 const entries = [
   { id: 'big-vision', engine: 'router', context: 262144, vision: true, gpus: 'both', thinking: 'on', speed: { code: 57, prose: 50 } },
@@ -75,4 +75,48 @@ test('sorting does not reorder the input', () => {
   const before = ids(entries);
   sortModels(entries, 'speed');
   assert.deepEqual(ids(entries), before);
+});
+
+test('whyHidden names the first filter an entry fails, or null', () => {
+  assert.equal(whyHidden(entries[1], filters({ minContext: 131072 })), 'context');
+  assert.equal(whyHidden(entries[2], filters({ vision: true })), 'images');
+  assert.equal(whyHidden(entries[0], filters({ gpu1Only: true })), 'gpus');
+  assert.equal(whyHidden(entries[0], filters()), null);
+});
+
+// The docs say both "262k" and "256K" for 262144, so a typed K is read as 1000: the threshold then never drops a
+// model whose context someone wrote either way.
+test('parseContext reads what people type, K and M as decimal thresholds', () => {
+  assert.equal(parseContext('32k'), 32000);
+  assert.equal(parseContext('262K'), 262000);
+  assert.equal(parseContext('256K'), 256000);
+  assert.equal(parseContext('1M'), 1000000);
+  assert.equal(parseContext(' 131072 '), 131072);
+  assert.equal(parseContext('1.5m'), 1500000);
+  assert.equal(parseContext('32,768'), 32768);
+  assert.equal(parseContext('abc'), null);
+  assert.equal(parseContext(''), null);
+});
+
+test('formatContext writes tokens in binary K and M, as the tray menu does', () => {
+  assert.equal(formatContext(32768), '32K');
+  assert.equal(formatContext(262144), '256K');
+  assert.equal(formatContext(8192), '8K');
+  assert.equal(formatContext(65536), '64K');
+  assert.equal(formatContext(368640), '360K');
+  assert.equal(formatContext(1048576), '1M');
+  assert.equal(formatContext(786432), '768K');
+  assert.equal(formatContext(188416), '184K');
+});
+
+test('loadedIds: the router model only once loaded, Strata when Loaded, ninfer when Ready', () => {
+  const ids = loadedIds({
+    router: { state: 'Loaded', model: 'qwen3.8-27b', model_status: 'loaded' },
+    strata: { state: 'Unloaded', model: 'swift-1.5-iq3_s' },
+    ninfer: { state: 'Ready', model: 'inkling-2-mini' },
+  });
+  assert.deepEqual([...ids].sort(), ['ninfer:inkling-2-mini', 'router:qwen3.8-27b']);
+  const loading = loadedIds({ router: { model: 'x', model_status: 'loading' }, strata: { state: 'Loaded', model: 's' }, ninfer: { state: 'Stopped' } });
+  assert.deepEqual([...loading], ['strata:s']);
+  assert.equal(loadedIds(null).size, 0);
 });
