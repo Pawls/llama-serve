@@ -29,6 +29,174 @@
     "inkling2-mini-q8": { "family": "inkling-2-mini", "description": "Inkling 2 Mini UD-Q8_K_XL on ninfer, both GPUs: closer to full precision.", "thinking": "on", "speed": { "code": 80, "prose": 59 } },
     "qwen38-27b": { "family": "qwen3.8-27b", "description": "Qwen3.8-27B on ninfer, GPU 1: the fastest single stream (a ~4-bit conversion; quality not compared).", "thinking": "on", "speed": { "code": 204 } }
   },
-  "families": {},
-  "benchmarks": {}
+  "_families": "Published benchmark scores, per family: source is the publisher's page they were read from (checked 2026-11-27), measuredOn the model that page measured (full precision, never the quant this PC runs). A score's setting is the harness or variant the page names. Only the publisher's own numbers for its own model: no score from another publisher's comparison column. A family with no row (qwen3-coder-30b-a3b: its card shows scores only as an image; qwen3.8-fable: third-party runs of other tests) shows dashes.",
+  "families": {
+    "qwen3.8-27b": {
+      "source": "https://huggingface.co/Qwen/Qwen3.8-27B", "measuredOn": "Qwen3.8-27B",
+      "scores": {
+        "gpqa-diamond": { "value": 89.2 },
+        "livecodebench-v6": { "value": 90.3 },
+        "hle": { "value": 30.8, "setting": "judged by GPT-4o" },
+        "terminal-bench-2.1": { "value": 73.0, "setting": "Terminus harness" },
+        "swe-bench-pro": { "value": 61.7, "setting": "Claude Code harness" },
+        "ifbench": { "value": 79.5 },
+        "deepswe-1.1": { "value": 42.2, "setting": "Claude Code harness" },
+        "jobbench": { "value": 33.4 }
+      }
+    },
+    "qwen3.8-flash-next": {
+      "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next", "measuredOn": "Qwen3.8-Flash-Next (125B)",
+      "scores": {
+        "gpqa-diamond": { "value": 91.7 },
+        "livecodebench-v6": { "value": 91.9 },
+        "hle": { "value": 35.9, "setting": "judged by GPT-4o" },
+        "swe-bench-pro": { "value": 62.5, "setting": "Claude Code harness" },
+        "swe-bench-multilingual": { "value": 81.0, "setting": "mini-SWE-agent harness" },
+        "ifbench": { "value": 81.3 },
+        "deepswe-1.1": { "value": 58.7, "setting": "best of Claude Code and mini-SWE-agent" },
+        "jobbench": { "value": 55.7 }
+      }
+    },
+    "qwen3.6-35b-a3b": {
+      "source": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B", "measuredOn": "Qwen3.6-35B-A3B",
+      "scores": {
+        "gpqa-diamond": { "value": 86.0, "setting": "the page's row says GPQA; its Gemma 4 columns match Google's GPQA Diamond" },
+        "livecodebench-v6": { "value": 80.4 },
+        "hle": { "value": 21.4 },
+        "swe-bench-pro": { "value": 49.5, "setting": "Qwen's own agent scaffold" },
+        "swe-bench-verified": { "value": 73.4, "setting": "Qwen's own agent scaffold" },
+        "swe-bench-multilingual": { "value": 67.2, "setting": "Qwen's own agent scaffold" },
+        "mmlu-pro": { "value": 85.2 }
+      }
+    },
+    "gemma-4-31b": {
+      "source": "https://huggingface.co/google/gemma-4-31B-it", "measuredOn": "Gemma 4 31B, instruction-tuned (this PC runs its QAT build)",
+      "scores": {
+        "gpqa-diamond": { "value": 84.3 },
+        "livecodebench-v6": { "value": 80.0 },
+        "hle": { "value": 19.5, "setting": "no tools" },
+        "mmlu-pro": { "value": 85.2 }
+      }
+    },
+    "gemma-4-26b-a4b": {
+      "source": "https://huggingface.co/google/gemma-4-26B-A4B-it", "measuredOn": "Gemma 4 26B A4B, instruction-tuned",
+      "scores": {
+        "gpqa-diamond": { "value": 82.3 },
+        "livecodebench-v6": { "value": 77.1 },
+        "hle": { "value": 8.7, "setting": "no tools" },
+        "mmlu-pro": { "value": 82.6 }
+      }
+    },
+    "muse-glimmer-30b": {
+      "source": "https://huggingface.co/meta-models/Muse-Glimmer-30B", "measuredOn": "Muse Glimmer-30B, high reasoning",
+      "scores": {
+        "gpqa-diamond": { "value": 83.5, "setting": "Artificial Analysis run" },
+        "hle": { "value": 22.0, "setting": "text questions only, Artificial Analysis run" },
+        "terminal-bench-2.1": { "value": 51.7, "setting": "Terminus 2 harness" },
+        "swe-bench-pro": { "value": 51.2 },
+        "swe-bench-verified": { "value": 76.0 },
+        "ifbench": { "value": 77.0 }
+      }
+    },
+    "ornith-1.5-35b": {
+      "source": "https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B", "measuredOn": "Ornith-1.5-35B-A3B",
+      "scores": {
+        "gpqa-diamond": { "value": 89.2 },
+        "hle": { "value": 25.6, "setting": "no tools, judged by Claude Opus 4.6" },
+        "terminal-bench-2.1": { "value": 67.8, "setting": "Terminus 2 harness (68.5 under Claude Code)" },
+        "swe-bench-pro": { "value": 59.6, "setting": "OpenHands harness" },
+        "swe-bench-verified": { "value": 79, "setting": "OpenHands harness" },
+        "swe-bench-multilingual": { "value": 71.4, "setting": "OpenHands harness" }
+      }
+    },
+    "inkling-2-mini": {
+      "source": "https://huggingface.co/thinkingmachines/Inkling-2-Mini", "measuredOn": "Inkling 2 Mini",
+      "scores": {
+        "terminal-bench-2.1": { "value": 71.6, "setting": "pi 0.83.0 as the agent" },
+        "swe-bench-verified": { "value": 79.2, "setting": "bash only" },
+        "swe-bench-multilingual": { "value": 73.7, "setting": "bash only" },
+        "deepswe-1.1": { "value": 48.2, "setting": "mini-swe-agent 2.4.6" },
+        "jobbench": { "value": 49.6 }
+      }
+    },
+    "swift-1.5-27b": {
+      "source": "https://huggingface.co/ukisai/Swift-1.5-Qwen3.8-27B", "measuredOn": "Swift 1.5 Qwen3.8-27B, BF16, thinking xhigh, mean of five seeds",
+      "scores": {
+        "gpqa-diamond": { "value": 88.59 },
+        "livecodebench-v6": { "value": 81.71 },
+        "terminal-bench-2.1": { "value": 72.13, "setting": "Harbor, five trials per task, 131K context" },
+        "ifbench": { "value": 72.07 }
+      }
+    },
+    "swift-1.5-flash-next": {
+      "source": "https://huggingface.co/ukisai/Swift1.5-Qwen3.8-Flash-Next", "measuredOn": "Swift 1.5 Qwen3.8-Flash-Next, BF16, thinking xhigh, mean of five seeds",
+      "scores": {
+        "gpqa-diamond": { "value": 89.60 },
+        "livecodebench-v6": { "value": 90.39 },
+        "terminal-bench-2.1": { "value": 69.66, "setting": "default task timeouts, which the page says lower it" },
+        "ifbench": { "value": 70.13 },
+        "mmlu-pro": { "value": 87.20 }
+      }
+    }
+  },
+  "_benchmarks": "One row per benchmark a family reports. name is the column header, tests what it asks of the model, higher what a larger number means. Left out on purpose: benchmarks that need images (ERQA, OmniDocBench, CharXiv), C-Eval (a Chinese-language exam) and any benchmark fewer than three families report.",
+  "benchmarks": {
+    "gpqa-diamond": {
+      "name": "GPQA Diamond",
+      "tests": "198 multiple-choice questions in physics, chemistry and biology, written by PhD-level experts so that skilled people outside the field get them wrong even with the web.",
+      "higher": "Higher means more of them answered correctly (guessing scores 25): stronger hard-science reasoning, with no coding or tools involved."
+    },
+    "livecodebench-v6": {
+      "name": "LiveCodeBench v6",
+      "tests": "Contest programming problems (LeetCode, AtCoder, Codeforces) published too recently to be in the training data, graded by hidden tests.",
+      "higher": "Higher means more problems solved on the first try: better at writing one correct program from a description, which says little about working in a large repository."
+    },
+    "hle": {
+      "name": "HLE",
+      "tests": "Humanity's Last Exam: about 2,500 questions at the edge of expert knowledge across many fields, answered here without tools.",
+      "higher": "Higher means more answered correctly. Every model here stays far below half, and each publisher used a different judge."
+    },
+    "terminal-bench-2.1": {
+      "name": "Terminal-Bench 2.1",
+      "tests": "Tasks carried out as an agent in a real Linux terminal (build software, repair a broken setup, process data), checked by tests at the end.",
+      "higher": "Higher means more tasks finished: better at long multi-step work with shell tools, the closest of these to a coding agent's day. The agent program differs per publisher."
+    },
+    "swe-bench-pro": {
+      "name": "SWE-bench Pro",
+      "tests": "Real issues in large, actively developed repositories whose fixes span several files; longer and harder than SWE-bench Verified.",
+      "higher": "Higher means more issues fixed so that the repository's own tests pass: better at finding and changing the right code in an unfamiliar project."
+    },
+    "swe-bench-verified": {
+      "name": "SWE-bench Verified",
+      "tests": "500 real GitHub issues from Python projects, each hand-checked to be solvable; the model edits the repository until the project's tests pass.",
+      "higher": "Higher means more issues fixed. The best models are close together near the top, so it separates weak models from strong ones better than strong ones from each other."
+    },
+    "swe-bench-multilingual": {
+      "name": "SWE-bench Multiling.",
+      "tests": "SWE-bench Multilingual: 300 real GitHub issues in nine languages other than Python (C, C++, Go, Java, JavaScript, TypeScript, PHP, Ruby, Rust).",
+      "higher": "Higher means more issues fixed so the project's tests pass: repository work that holds up outside Python."
+    },
+    "ifbench": {
+      "name": "IFBench",
+      "tests": "Writing tasks with exact rules on the answer (counts, formatting, words to use once or avoid), each checked by code; the rules were chosen to be ones models were not trained on.",
+      "higher": "Higher means more answers obeying every rule: the model does what the prompt literally says."
+    },
+    "mmlu-pro": {
+      "name": "MMLU-Pro",
+      "tests": "About 12,000 multiple-choice questions over 14 subjects with ten options each; a harder, cleaned-up MMLU.",
+      "higher": "Higher means more answered correctly (guessing scores 10): broader knowledge and textbook reasoning."
+    },
+    "deepswe-1.1": {
+      "name": "DeepSWE 1.1",
+      "tests": "113 long software tasks written for the benchmark (so not in any training data) across 91 open-source repositories in five languages, done alone in a sandbox and graded by hand-written checks of behavior.",
+      "higher": "Higher means more tasks completed: better at large, many-file changes without help. The set is small and the agent program changes the score a lot.",
+      "about": "https://arxiv.org/abs/2607.07946"
+    },
+    "jobbench": {
+      "name": "JobBench",
+      "tests": "Office work across 35 occupations: each task is a folder of mixed reference files from which the agent must produce a finished deliverable, graded against a checklist of facts.",
+      "higher": "Higher means more of each checklist met: better at finding and reconciling information in documents and writing up the result. Not a coding test.",
+      "about": "https://arxiv.org/abs/2605.26329"
+    }
+  }
 }

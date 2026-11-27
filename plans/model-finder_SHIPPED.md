@@ -75,3 +75,46 @@ Rulings and findings:
 - The page also lists the models that do not fit, with what each misses (`whyHidden`), so a filter's effect is visible.
 - Not driven: the tray menu click itself (the item is `OpenPath` of the URL, like "Open chat in browser"); the page
   was checked over HTTP and Playwright against the running tray after `install-tray.ps1`.
+
+### ~~S3 — Benchmark scores, sortable, each explained~~ — SHIPPED 2026-11-27 {#s3}
+
+**Status:** shipped 2026-11-27.
+- **Note (from S1):** entries carry `family` already (`model-catalog.json`); scores go in its `families` table and
+  `model-catalog.ps1` passes `families` and `benchmarks` through unchanged. Add the sort key to `SORT_VALUES` in
+  `web/model-finder.js`. Paul asked on 2026-11-27 that research run on the API credit (the `offload` skill's Batch
+  route) while it lasts; it expires in early December 2026.
+**Touches:** `model-catalog.json` (`families`, `benchmarks`), `web/model-finder.js`, `web/model-finder.html`,
+`web/model-finder.test.mjs`.
+**After:** S1.
+**Seam:** `sortModels` with a benchmark key, and the catalog's `benchmarks` table.
+
+Scores are the publisher's (model card or paper), per family, each with its source URL and the model size it was
+measured on; a fine-tune with no published score shows a dash and sorts last. A benchmark gets a column when at
+least three families report it. Each benchmark has a line on what it tests and what a higher number means. The
+default sort is the benchmark the most families report. Publishers use different harnesses, so the page says once
+that scores within a few points are a tie.
+
+- [x] Red test: sorting by a benchmark puts missing scores last and keeps ties in name order.
+- [x] Every score has a source URL naming that exact model, checked by reading each page. Each publisher's card was
+      downloaded and its tables read twice: by a Sonnet 5.5 batch on the API credit (13 cards, about $0.67) and by a
+      table parser run here; a script then matched all 57 catalog values to their card cells.
+- [x] Playwright: picking each benchmark re-sorts the list and shows its explanation (the repo's `web/` files and a
+      catalog built from the real launch files, served by a throwaway static server; the tray was not restarted).
+
+- **Ruling:** scores are only the publisher's numbers for its own model. A score a publisher measured for someone
+  else's model (Qwen's card scores Muse Glimmer, Ornith's scores Gemma) is not used, so no family mixes harnesses
+  within its own row.
+- **Ruling:** left out of the catalog: benchmarks that need images (ERQA, OmniDocBench, CharXiv), C-Eval (a
+  Chinese-language exam), and versions that differ from the column's (Qwen3.6's Terminal-Bench 2.0, Ornith's unversioned
+  DeepSWE, Inkling's SWE-bench Pro v2 Hard and HLE-Diamond). Eleven columns remain; the table scrolls
+  sideways inside its own box, which keeps the header row in view.
+- **Ruling:** `source` and `measuredOn` sit on the family row, not on each score: one page per family holds all its
+  scores. A score carries only `value` and the `setting` its page names.
+- **Ruling:** the default sort applies until a sort is picked by hand (`sortChosen` in the saved state), so a browser
+  that had saved the old default (speed) also opens on GPQA Diamond.
+- **Ruling:** scores show one decimal; the tooltip has the full number (JSON drops a trailing zero: 89.60 reads 89.6).
+- **Ruling:** Qwen3.6-35B-A3B's row is labelled "GPQA"; it is filed under GPQA Diamond because the Gemma 4 columns
+  of the same table equal Google's GPQA Diamond figures.
+- **Ruling:** DeepSWE 1.1 and JobBench are described from their papers (arXiv 2607.07946, 2605.26329), since no
+  model card says what they test.
+

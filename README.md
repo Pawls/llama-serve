@@ -135,7 +135,7 @@ Tests: `.\test-switchboard.ps1` runs the proxy against fake engines on loopback 
 Tray menu: **Model finder (which models fit)** opens `http://127.0.0.1:8407/`, a page that lists every router
 preset, Strata size and ninfer profile and drops the ones that miss what you need: the context (a slider from 8K to
 1M, or type `32k`, `262144` or `1M`), images, GPU 1 only (ticked by itself while Reserve GPU 0 is on), engine,
-thinking, code-only drafter lanes and a minimum speed. Sort by speed on code, context or name. The model an engine is
+thinking, code-only drafter lanes and a minimum speed. Sort by a benchmark, speed on code, context or name. The model an engine is
 serving now is marked **loaded**, and the list of models that do not fit says what each one misses. Filters are kept
 in the browser between visits. It only reads: nothing on the page loads or starts a model.
 
@@ -148,6 +148,17 @@ without one). The tray rebuilds the list with `model-catalog.ps1` when one of th
 answers on the LAN and Tailscale at `http://<this PC>:8407/`. It needs no token: it lists only what a router client
 could list. Without the reservation the tray says so (at every start while Share is ticked) and the page stays on this PC. If you
 ran the older `allow-switchboard.ps1`, run `allow-tray-ports.ps1` once: it adds port 8407.
+
+**Benchmark columns.** Each model shows the scores its publisher gives on its own page (read 2026-11-27), for the
+full-precision model: the quant and drafter lanes this PC runs share that number, and none of it was measured here.
+Picking a benchmark in **Sort by** puts the highest score first and shows a line on what it tests and what a higher
+number means; a score links to the page it came from and its tooltip names the model and harness. The page opens
+sorted by the benchmark the most model families report (GPQA Diamond) until you pick a sort. Publishers run different
+harnesses, so a few points apart is a tie. A dash means the publisher gives no number: `qwen3-coder-30b` (its card
+shows scores only as an image) and `qwen3.8-fable-q5` (a merge with only third-party runs of other tests). Scores and
+the benchmark descriptions are the `families` and `benchmarks` tables of `model-catalog.json`; a benchmark gets a
+column once three model families report it (the lanes and quants of one model count once). Left out: benchmarks that need images, C-Eval, and scores a publisher measured
+for someone else's model.
 
 ### Using it from VS Code chat
 
