@@ -14,6 +14,10 @@
     "inkling2-mini-q8": { "family": "inkling-2-mini", "description": "ninfer Q8.", "thinking": "on" },
     "qwen38-27b": { "family": "qwen3.8-27b", "description": "ninfer Qwen.", "thinking": "on" }
   },
-  "families": {},
-  "benchmarks": {}
+  "families": {
+    "fam-a": { "source": "https://example.test/fam-a", "measuredOn": "Fam A", "scores": { "quiz": { "value": 71.5, "setting": "no tools" } } }
+  },
+  "benchmarks": {
+    "quiz": { "name": "Quiz", "tests": "Questions.", "higher": "More right." }
+  }
 }

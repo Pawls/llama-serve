@@ -61,6 +61,10 @@ Check 'metadata: description, family and speed carried' (($fx.entries | Where-Ob
     ForEach-Object { @($_.family, $_.description, $_.speed.code, $_.speed.prose) }) @('fam-a', 'A vision model with MTP.', 57, 50)
 Check 'an id with no metadata row is listed under missing, family = its id' (@($fx.missing) + @(($fx.entries |
     Where-Object id -eq 'not-in-json').family)) @('not-in-json', 'not-in-json')
+Check 'families and benchmarks reach the built catalog whole, down to a score and its setting' @(
+    $fx.families.'fam-a'.source, $fx.families.'fam-a'.measuredOn, $fx.families.'fam-a'.scores.quiz.value,
+    $fx.families.'fam-a'.scores.quiz.setting, $fx.benchmarks.quiz.name, $fx.benchmarks.quiz.higher) @(
+    'https://example.test/fam-a', 'Fam A', 71.5, 'no tools', 'Quiz', 'More right.')
 
 $noContextDir = Join-Path ([IO.Path]::GetTempPath()) "model-catalog-test-strata-$PID"
 Copy-Item (Join-Path $Fixtures 'strata') $noContextDir -Recurse

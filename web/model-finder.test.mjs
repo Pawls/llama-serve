@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import * as finder from './model-finder.js';
 
 const { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds, thinkingName,
-  scoreOf, benchmarkColumns } = finder;
+  scoreOf, benchmarkColumns, benchOf } = finder;
 
 const entries = [
   { id: 'big-vision', engine: 'router', context: 262144, vision: true, gpus: 'both', thinking: 'on', speed: { code: 57, prose: 50 } },
@@ -176,6 +176,14 @@ test('sort by a benchmark nobody reports, or with no family table, is name order
   const byName = ['alpha-lane', 'beta-one', 'delta-one', 'finetune', 'gamma-one', 'zeta'];
   assert.deepEqual(ids(sortModels(scored, 'bench:nope', families)), byName);
   assert.deepEqual(ids(sortModels(scored, 'bench:swe')), byName);
+});
+
+test('benchOf: the benchmark a sort key names, or null for the other sorts', () => {
+  assert.equal(benchOf('bench:swe'), 'swe');
+  assert.equal(benchOf('bench:swe-bench-pro'), 'swe-bench-pro');
+  assert.equal(benchOf('speed'), null);
+  assert.equal(benchOf('name'), null);
+  assert.equal(benchOf(undefined), null);
 });
 
 test('scoreOf reads the family score an entry shares with its lanes', () => {
