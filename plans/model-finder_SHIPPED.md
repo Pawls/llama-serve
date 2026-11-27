@@ -13,7 +13,7 @@ port 8407.
 
 How it is built:
 
-- **Sources.** `model-sources.ps1` (dot-sourced) exports `Get-RouterPresets`, `Get-StrataSizes` and
+- **Sources.** `model-sources.ps1` (dot-sourced) exports `Get-RouterPresets`, `Get-StrataConfigs` and
   `Get-NinferProfiles`, lifted from `sync-opencode.ps1`, which then uses them. Strata sizes are the
   `strata-<size>.json` files that have a `run-<size>.bat` beside them (what `start-strata.ps1 -Model <size>`
   accepts). ninfer profiles are the `$Inkling` rows plus `qwen38-27b` (context 188416, the constant
@@ -31,10 +31,11 @@ How it is built:
 - **Serving.** `ModelFinder` (an `HttpListener` on `127.0.0.1:8407` and `localhost:8407`, started in
   `StartUp()`) serves the two `web\` files, `logs\model-catalog.json` and `status.json`; anything else 404. Before
   serving the catalog it runs `pwsh -NoProfile -File model-catalog.ps1 -Out logs\model-catalog.json` (30 s
-  timeout) when that file is missing or older than `presets.ini`, `model-catalog.json`, `start-ninfer.ps1` or any
-  `strata-*.json`; on failure it serves the old file, or a 500 with the script's error when there is none.
-  `status.json` = `{"reserveGpu0": bool, "loaded": {"router": id|null, "strata": id|null, "ninfer": id|null}}`
-  from the tray's fields, read on the UI thread. The page polls it every 5 s.
+  timeout) when that file is missing or older than `presets.ini`, `model-catalog.json`, `start-ninfer.ps1`, the
+  Strata folder or any `strata-*.json` or `run-*.bat` in it; on failure it serves the old file, or a 500 with the
+  script's error when there is none. `status.json` is the front door's `EngineStatus()`: `router` / `strata` /
+  `ninfer` with `state` and `model` (Strata also `size`, the size the tray started), plus `reserve_gpu0`, read on
+  the UI thread. The page polls it every 5 s.
 - **The page.** Filters: context (a log-scale slider 8K-1M with a number field, kept in step; an entry shows when
   its context ≥ the value), images required, GPUs (any / GPU 1 only, preset to GPU 1 only while Reserve GPU 0 is
   on), engine (router / Strata / ninfer), thinking (any / can think / no thinking), hide code-only drafter lanes,

@@ -1,4 +1,4 @@
-# Builds the model finder's catalog (plans/model-finder.md § S1): one entry per router preset, Strata size and ninfer
+# Builds the model finder's catalog (README.md § Using the model finder): one entry per router preset, Strata size and ninfer
 # profile, with context, images, GPUs, thinking and drafter read from the launch files (model-sources.ps1), and the
 # description, family, measured speed and code-only flag from model-catalog.json. The tray runs it when the catalog
 # is older than a source; run it by hand to see what the page will show.
@@ -31,7 +31,7 @@ function New-Entry([string]$Id, [string]$Engine, [string]$ModelId, [int]$Context
         context     = $Context
         vision      = $Vision
         gpus        = if ($Gpu1) { 'gpu1' } else { 'both' }
-        # Router presets carry their own thinking setting; Strata and ninfer have none in their launch files.
+        # A router preset's reasoning flags win; Strata, ninfer and presets without them take the JSON row's.
         thinking    = if ($Thinking) { $Thinking } else { $row.thinking ?? 'none' }
         drafter     = if ($Drafter) { $Drafter } else { $null }
         codeOnly    = [bool]$row.codeOnly
@@ -39,10 +39,13 @@ function New-Entry([string]$Id, [string]$Engine, [string]$ModelId, [int]$Context
     }
 }
 
+# A budget of 0 turns thinking off whatever reasoning says; -1 is llama-server's default (unlimited), so it says
+# nothing. auto thinks when the template can. With no reasoning key the model-catalog.json row decides.
 function Get-RouterThinking($Preset) {
-    if ($Preset['reasoning-budget'] -eq '-1') { return 'always' }
-    if ($Preset['reasoning']) { return $Preset['reasoning'] }
-    'none'
+    if ($Preset['reasoning-budget'] -eq '0') { return 'off' }
+    $reasoning = $Preset['reasoning']
+    if ($reasoning -eq 'auto') { return 'on' }
+    $reasoning
 }
 
 $entries = [Collections.Generic.List[object]]::new()
@@ -70,5 +73,8 @@ $catalog = [ordered]@{
     benchmarks = $meta.benchmarks ?? @{}
 }
 New-Item -ItemType Directory -Force (Split-Path $Out) | Out-Null
-Set-Content -Path $Out -Value ($catalog | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+# Written beside the catalog, then moved over it, so a reader never sees a half-written file.
+$partial = "$Out.partial"
+Set-Content -Path $partial -Value ($catalog | ConvertTo-Json -Depth 8) -Encoding utf8NoBOM
+Move-Item -Force $partial $Out
 if ($missing.Count) { Write-Warning "No model-catalog.json row for: $($missing -join ', ')" }

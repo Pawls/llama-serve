@@ -1,5 +1,5 @@
 // The tray's half of the model finder (ModelFinder.cs): where its files are, how the catalog is rebuilt, and the
-// live state the page marks. Plan: plans/model-finder.md § S1.
+// live state the page marks. Usage: README.md § Using the model finder.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -31,13 +31,19 @@ sealed partial class TrayApp
         }
     }
 
-    // Every file model-catalog.ps1 reads; the catalog is rebuilt when one is newer than it.
+    // Every file model-catalog.ps1 reads, and the Strata folder itself, whose time moves when a config or run
+    // script is added or deleted; the catalog is rebuilt when one is newer than it.
     IEnumerable<string> ModelCatalogSources()
     {
         var files = new List<string>();
         foreach (string name in new[] { "presets.ini", "model-catalog.json", "start-ninfer.ps1", "model-catalog.ps1", "model-sources.ps1" })
             files.Add(Path.Combine(root, name));
-        if (Directory.Exists(StrataSize.StrataDir)) files.AddRange(Directory.GetFiles(StrataSize.StrataDir, "strata-*.json"));
+        if (Directory.Exists(StrataSize.StrataDir))
+        {
+            files.Add(StrataSize.StrataDir);
+            files.AddRange(Directory.GetFiles(StrataSize.StrataDir, "strata-*.json"));
+            files.AddRange(Directory.GetFiles(StrataSize.StrataDir, "run-*.bat"));
+        }
         return files;
     }
 

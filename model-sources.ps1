@@ -28,6 +28,7 @@ function Get-StrataConfigs([string]$StrataDir) {
         $cfg = Get-Content $file -Raw | ConvertFrom-Json
         $args_ = @($cfg.args)
         $at = [array]::IndexOf($args_, '--max-context')
+        if ($at -lt 0) { Write-Warning "$($file.Name) has no --max-context; left out."; continue }
         $vision = [array]::IndexOf($args_, '--vision')
         [pscustomobject]@{
             Size      = $size

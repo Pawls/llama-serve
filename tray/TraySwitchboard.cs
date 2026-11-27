@@ -206,10 +206,18 @@ sealed partial class TrayApp : ISwitchHost
         return new Dictionary<string, object>
         {
             { "router", new Dictionary<string, object> { { "state", state.ToString() }, { "model", activeModel == null ? null : activeModel.Id }, { "model_status", activeModel == null ? null : activeModel.Status } } },
-            { "strata", new Dictionary<string, object> { { "state", strataState.ToString() }, { "model", strata.Model } } },
+            { "strata", new Dictionary<string, object> { { "state", strataState.ToString() }, { "model", strata.Model }, { "size", StrataRunningSize() } } },
             { "ninfer", new Dictionary<string, object> { { "state", ninferState.ToString() }, { "model", ninfer.Model } } },
             { "reserve_gpu0", reserveGpu0 },
         };
+    }
+
+    // The size serving now, when the tray started it; null after a start by hand, where /health's model id may
+    // fit more than one size.
+    string StrataRunningSize()
+    {
+        if (strataStarted == null || strata.Model == null || strata.Model != strataStarted.ModelId) return null;
+        return strataStarted.Script;
     }
 
     // Unloads what holds the GPUs without stopping the servers: ninfer stops, Strata and the router lose their model.

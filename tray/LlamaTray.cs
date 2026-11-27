@@ -715,6 +715,7 @@ sealed partial class TrayApp : ApplicationContext
     StrataState strataState = StrataState.Stopped;
     bool strataLoading;                 // a load the tray sent is in flight
     bool strataLaunching;               // a menu Start is stopping ninfer before it launches Strata
+    StrataSize strataStarted;           // the size the tray last started; two sizes can share a model id
     DateTime? strataStartRequestedAt;   // set while the tray waits for a Strata it started
     bool strataUnloading;               // an unload the tray sent is in flight
     bool strataStopping;                // stop-strata.ps1 is running
@@ -1524,6 +1525,7 @@ sealed partial class TrayApp : ApplicationContext
             if (ninferState != NinferState.Stopped) await StopNinferAsync();
             // start-strata.ps1 unloads the router's model before Strata takes the GPUs.
             strataProcess.Start("-Model " + size.Script);
+            strataStarted = size;
             strataStartRequestedAt = DateTime.Now;
             strataState = StrataState.Starting;
         }

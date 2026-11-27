@@ -1,4 +1,4 @@
-// The model finder's filter and sort rules, and the page that uses them. Plan: plans/model-finder.md § S1.
+// The model finder's filter and sort rules, and the page that uses them. Usage: README.md § Using the model finder.
 // The rules are pure exports so web/model-finder.test.mjs can run them under node; the page code at the end runs
 // only in a browser.
 
@@ -59,15 +59,30 @@ export function formatContext(tokens) {
   return trim(tokens / 1024) + 'K';
 }
 
-// "engine:modelId" for each model an engine is serving now, from the tray's status.json.
-export function loadedIds(status) {
+// The ids of the entries an engine is serving now, from the tray's status.json. Strata sizes can share a model id,
+// so a size the tray reports picks one of them; without it every size with that id is marked.
+export function loadedIds(status, entries) {
   const ids = new Set();
   if (!status) return ids;
   const { router, strata, ninfer } = status;
-  if (router?.model && router.model_status === 'loaded') ids.add('router:' + router.model);
-  if (strata?.model && strata.state === 'Loaded') ids.add('strata:' + strata.model);
-  if (ninfer?.model && ninfer.state === 'Ready') ids.add('ninfer:' + ninfer.model);
+  const serving = {
+    router: router?.model_status === 'loaded' ? router.model : null,
+    strata: strata?.state === 'Loaded' ? strata.model : null,
+    ninfer: ninfer?.state === 'Ready' ? ninfer.model : null,
+  };
+  for (const e of entries) {
+    if (!serving[e.engine] || e.modelId !== serving[e.engine]) continue;
+    if (e.engine === 'strata' && strata.size && e.id !== strata.size) continue;
+    ids.add(e.id);
+  }
   return ids;
+}
+
+const THINKING_NAMES = { on: 'Thinks', always: 'Always reasons', off: 'Off by default', none: 'Never' };
+
+// The label for an entry's thinking value; one the page does not know is shown as written.
+export function thinkingName(value) {
+  return THINKING_NAMES[value] ?? value;
 }
 
 // ---- The page ----
@@ -75,13 +90,12 @@ export function loadedIds(status) {
 const STORE_KEY = 'model-finder.filters';
 const CONTEXT_MIN_LOG = 13, CONTEXT_MAX_LOG = 20;   // the slider runs 8K to 1M on a log2 scale
 const ENGINE_NAMES = { router: 'Router', strata: 'Strata', ninfer: 'ninfer' };
-const THINKING_NAMES = { on: 'Thinks', always: 'Always reasons', off: 'Off by default', none: 'Never' };
 const HIDDEN_REASONS = {
   context: e => 'context ' + formatContext(e.context),
   images: () => 'no images',
   gpus: () => 'needs both GPUs',
   engine: e => ENGINE_NAMES[e.engine] + ' is unticked',
-  thinking: e => THINKING_NAMES[e.thinking].toLowerCase(),
+  thinking: e => 'thinking: ' + thinkingName(e.thinking).toLowerCase(),
   codeOnly: () => 'code-only drafter',
   speed: e => e.speed?.code ? e.speed.code + ' t/s on code' : 'speed not measured',
 };
@@ -119,7 +133,7 @@ function startPage() {
     const name = cell('td', null, 'name');
     const title = cell('div', null, 'id');
     title.append(cell('span', e.id));
-    if (state.loaded.has(e.engine + ':' + e.modelId)) title.append(cell('span', 'loaded', 'loaded'));
+    if (state.loaded.has(e.id)) title.append(cell('span', 'loaded', 'loaded'));
     name.append(title, cell('div', e.description, 'desc'));
     if (reason) name.append(cell('div', HIDDEN_REASONS[reason](e), 'reason'));
     tr.append(name,
@@ -127,7 +141,7 @@ function startPage() {
       cell('td', formatContext(e.context), 'num'),
       cell('td', e.vision ? 'yes' : 'no', e.vision ? '' : 'muted'),
       cell('td', e.gpus === 'gpu1' ? 'GPU 1' : 'both'),
-      cell('td', THINKING_NAMES[e.thinking]),
+      cell('td', thinkingName(e.thinking)),
       cell('td', e.speed?.code ?? '–', 'num'),
       cell('td', e.speed?.prose ?? '–', 'num'));
     if (e.codeOnly) tr.classList.add('code-only');
@@ -136,9 +150,13 @@ function startPage() {
 
   function render() {
     const f = state.filters;
+    state.loaded = loadedIds(state.status, state.entries);
     // What was typed stays as typed ("262k"); the slider writes its own label.
     const typed = $('context-value').value.trim();
-    if ((parseContext(typed) ?? 0) !== f.minContext) $('context-value').value = f.minContext ? formatContext(f.minContext) : '';
+    if ((parseContext(typed) ?? 0) !== f.minContext) {
+      $('context-value').value = f.minContext ? formatContext(f.minContext) : '';
+      $('context-value').setCustomValidity('');   // the text it replaces may have been invalid
+    }
     $('context-slider').value = contextToSlider(f.minContext);
     $('vision').checked = f.vision;
     $('gpu-any').checked = !f.gpu1Only;
@@ -200,7 +218,6 @@ function startPage() {
     try {
       const response = await fetch('status.json', { cache: 'no-store' });
       state.status = await response.json();
-      state.loaded = loadedIds(state.status);
       // While GPU 0 is reserved only GPU 1 models can start, until the GPU choice is made by hand.
       if (!state.gpuChosen) state.filters.gpu1Only = Boolean(state.status.reserve_gpu0);
       $('offline').hidden = true;

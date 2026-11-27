@@ -1,5 +1,5 @@
-// The model finder page on port 8407 (plans/model-finder.md § S1): serves web\model-finder.html and its script, the
-// catalog model-catalog.ps1 builds (rebuilt here when a source file is newer than it) and the tray's live state. It is
+// The model finder page on port 8407 (README.md § Using the model finder): serves web\model-finder.html and its script, the
+// catalog model-catalog.ps1 builds (rebuilt here when a source is newer than it) and the tray's live state. It is
 // read-only and needs no token: it shows nothing a client of the router could not list.
 using System;
 using System.Collections.Generic;
@@ -83,40 +83,39 @@ sealed class ModelFinder
         }
     }
 
+    // The read happens under the same gate as the rebuild, so a request that arrives during a rebuild waits for it
+    // (rather than starting its own, or reading the file part way through its write).
     async Task ServeCatalogAsync(HttpListenerResponse response)
     {
-        string error = await RebuildIfStaleAsync();
-        // A failed rebuild still serves the last good catalog: the page then shows what it showed before.
-        if (File.Exists(catalogPath))
-        {
-            response.Headers["Cache-Control"] = "no-store";
-            Write(response, 200, "application/json; charset=utf-8", File.ReadAllBytes(catalogPath));
-        }
-        else
-            Write(response, 500, "text/plain; charset=utf-8", "The catalog could not be built: " + error);
-    }
-
-    bool Stale()
-    {
-        if (!File.Exists(catalogPath)) return true;
-        DateTime built = File.GetLastWriteTimeUtc(catalogPath);
-        return sources().Where(File.Exists).Any(source => File.GetLastWriteTimeUtc(source) > built);
-    }
-
-    // Requests that arrive during a rebuild wait for it rather than starting their own.
-    async Task<string> RebuildIfStaleAsync()
-    {
-        if (!Stale()) return null;
+        string error = null;
+        byte[] body = null;
         await rebuildGate.WaitAsync();
         try
         {
-            if (!Stale()) return null;
-            return await Task.Run(rebuild);
+            if (Stale()) error = await Task.Run(rebuild);
+            if (File.Exists(catalogPath)) body = File.ReadAllBytes(catalogPath);
         }
         finally
         {
             rebuildGate.Release();
         }
+        // A failed rebuild still serves the last good catalog: the page then shows what it showed before.
+        if (body != null)
+        {
+            response.Headers["Cache-Control"] = "no-store";
+            Write(response, 200, "application/json; charset=utf-8", body);
+        }
+        else
+            Write(response, 500, "text/plain; charset=utf-8", "The catalog could not be built: " + error);
+    }
+
+    // A source is a file or a folder; a folder's time changes when a file in it is added, deleted or renamed.
+    bool Stale()
+    {
+        if (!File.Exists(catalogPath)) return true;
+        DateTime built = File.GetLastWriteTimeUtc(catalogPath);
+        return sources().Where(source => File.Exists(source) || Directory.Exists(source))
+            .Any(source => File.GetLastWriteTimeUtc(source) > built);
     }
 
     static void Write(HttpListenerResponse response, int code, string type, string text)
