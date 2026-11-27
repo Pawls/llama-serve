@@ -637,7 +637,7 @@ Not tested: video, more than one request at a time (`--max-concurrency`), stream
 
 ### Inkling 2 Mini on Strata (measured 2026-11-24)
 
-> **Superseded for speed (2026-11-24, later that day):** everything below was measured on Strata 0.2.20 / engine 0.1.66 on both GPUs. Strata 0.2.21 (engine 0.1.67) is installed and the config then ran on GPU 1 alone, where the DSpark drafter works (since that afternoon it runs the two-GPU split at 368,640, drafter off): one greedy 500-token code sample decoded 104-107 tok/s (369 drafted, 174 accepted) against 58 on the split (no drafts), 22.6 GiB used on GPU 1. A single sample, not a bench; the re-bench is the plan's S5.
+> **Superseded for speed (2026-11-24, later that day):** everything below was measured on Strata 0.2.20 / engine 0.1.66 on both GPUs. Strata 0.2.21 (engine 0.1.67) is installed and the config then ran on GPU 1 alone, where the DSpark drafter works (since that afternoon it runs the two-GPU split at 368,640, drafter off): one greedy 500-token code sample decoded 104-107 tok/s (369 drafted, 174 accepted) against 58 on the split (no drafts), 22.6 GiB used on GPU 1. A single sample, not a bench; the re-bench is [below](#re-bench-on-engine-0169-strata-0222-measured-2026-11-26) (S5).
 
 Strata 0.2.20 added Inkling 2 Mini with its own engine (`strata-inkling`) and packs from [strata-engine/Inkling-2-Mini-Strata](https://huggingface.co/strata-engine/Inkling-2-Mini-Strata). SQ-20 (19.35 GB) matches the original model in every test on the card (KL 0.00000, same top token 100%). The Strata server only keeps 8 of Inkling's 48 layer passes as full-length cache (32 KiB a token at FP16) and can hold that cache in pinned host RAM; Strata's own planner (`strata_control\inkling_fit.compute`, run for this PC) puts 256K entirely in VRAM on both cards and 1M with 34.4 GB of cache in RAM.
 
@@ -699,6 +699,21 @@ Without drafts, net speed is 105 tok/s at 2k and 94-95 at 51k. Greedy, DSpark ad
 - RAM is not a way to more context for Inkling: ninfer-all keeps the whole cache on the first device (`--kv-resident` is Flash-Next only), and experts in host memory (`--expert-residency host`) roughly halve decode.
 - Checks through `start-ninfer.ps1` for all three profiles: tool calls 3/3, `response_format` JSON parses, and a solid red image is named red (GPU 1 at 23,040 MiB with the image on the one-GPU profile).
 - Logs: `logs\ink-bench-{new,old}-1gpu-r{1,2}.console.txt`, `logs\ink-bench-new-2gpu-768k.console.txt`, `logs\ink-bench-new-q8-512k.console.txt`, `logs\ink-check-profiles-20261123.txt`, `logs\ink-check-images-20261123.txt`, `logs\ink-needle-256k-vram.txt`, `logs\ink-bench-greedy-{nospec,dspark}.console.txt`, `logs\ink-extra.console.txt` (370K and 699K prompts), start logs `logs\ink-arm-*.log`.
+
+#### Re-bench on engine 0.1.69 (Strata 0.2.22, measured 2026-11-26)
+
+`bench-depth.ps1 -BaseUrl http://127.0.0.1:8411 -Depth 2000,51000 -Runs 3`, thinking off, default temperature 1.0, 3 measured runs per cell, 2 rounds interleaved (split, GPU 1, split, GPU 1), both cards undervolted ([AGENTS.md](AGENTS.md#the-machine)), nothing else on the GPUs (ComfyUI closed). Net tok/s (decode in brackets), the two rounds:
+
+| | Code 2k | Code 51k | Essay 2k | Essay 51k | Prompt read 2k / 51k |
+|---|---|---|---|---|---|
+| **Split**, 368,640, no drafts | 56.5 / 56.4 (56.8 / 56.6) | 48.2 / 48.3 (48.4 / 48.5) | 56.4 / 56.4 (56.8 / 56.9) | 48.2 / 48.3 (48.4 / 48.5) | 1,390-1,890 / 1,530-1,560 |
+| **GPU 1 alone**, 262,144, DSpark | 84.9 / 85.1 (85.7 / 85.7) | 59.4 / 59.8 (59.8 / 60.2) | 66.4 / 66.5 (67.0 / 67.0) | 53.4 / 53.5 (53.9 / 53.9) | 2,050-2,060 / 1,670-1,690 |
+
+- **The split decodes the same as on 0.1.67 (55.7 / 48.1 decode) and no longer re-reads a repeated prompt**: a 51k request's net speed was 13 tok/s on 2026-11-24 and now equals its decode (48 tok/s), and the 51k read is 1,530-1,560 tok/s against 1,146. The drafter drafts nothing here (`draft_n` 0). Strata now stops essays only at `max_tokens` (1,000 tokens), so the essay column no longer includes a short reply.
+- **GPU 1 alone is 50% faster on code at 2k, 23-24% at 51k and 18% / 11% on the essay**, with DSpark acceptance 0.40-0.42 on code and 0.21-0.24 on the essay (one GPU 2026-11-24 estimate: 84 / 51 net on code; the 51k cell is up 17%). Prompt reads are faster too (about 2,060 against 1,390-1,890 at 2k, 1,680 against 1,540 at 51k). Against ninfer on GPU 1 (115 / 95 net on code, the 2026-11-24 medians) it is 25% slower at 2k and 37% at 51k.
+- **Why the split stays installed.** At 256K GPU 1 alone puts 56,320 tokens of global KV in VRAM and maps 205,824 in host RAM (start log, 22.7-23.0 GiB used; the 51k prompt fits inside the VRAM window, so this bench does not show the cliff). The 2026-11-24 measure on that layout: 2.7 tok/s at a 108k-token request. The split keeps up to 368,640 in VRAM (above). The GPU 1 config was built from the installed one by dropping `--gpus 2 --layer-split auto`, setting `"gpu": 1` and `--max-context 262144`; it stays beside it as `strata-inkling-2-mini-sq-20-gpu1.json` and `run-inkling-2-mini-sq-20-gpu1.bat` (`.\start-strata.ps1 -Model inkling-2-mini-sq-20-gpu1`; not in the tray). Use it only for short agent turns.
+- Not measured: more parallel slots (no client here sends parallel requests); thinking length and quality (A3 of [context-and-quality-benches.md](./context-and-quality-benches.md)); the split above 368,640.
+- Logs: `logs\ink-s5-{split,gpu1}-r{1,2}.console.txt`, `logs\bench-depth-20261126-*.txt` (summaries) and `.jsonl` (every run).
 
 #### Context ceiling on the split (measured 2026-11-24)
 
