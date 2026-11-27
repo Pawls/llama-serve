@@ -42,9 +42,9 @@ sealed class ModelFinder
         loop = new RequestLoop(HandleAsync);
     }
 
-    public static string[] Prefixes()
+    public static string[] Prefixes(bool shared)
     {
-        return RequestLoop.Prefixes(Port, false);
+        return RequestLoop.Prefixes(Port, shared);
     }
 
     // Throws HttpListenerException when a prefix cannot be bound.

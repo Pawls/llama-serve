@@ -783,7 +783,7 @@ sealed partial class TrayApp : ApplicationContext
         await RefreshAsync();
         pollTimer.Start();
         ApplySwitchboard();
-        StartModelFinder();
+        ApplyModelFinder();
     }
 
     // ---- Menu ----
@@ -1451,11 +1451,15 @@ sealed partial class TrayApp : ApplicationContext
         bool share = !shareOnNetwork;
         if (!await SetRouterFlagAsync(TraySettings.ShareOnNetworkKey, share, "network sharing")) return;
         shareOnNetwork = share;
-        ApplySwitchboard();   // the front door follows the same bind choice
+        // The front door and the model finder follow the same bind choice; one notice says where they ended up.
+        string board = ApplySwitchboard();
+        string finder = ApplyModelFinder();
         string when = state == RouterState.Stopped ? " once the router is started." : ".";
+        bool stayedLocal = share && (finder == "local" || board == "local");
         Notify(share
             ? "Router shared on port 8410 (LAN and Tailscale)" + when
-            : "Router is local only (127.0.0.1)" + when, ToolTipIcon.Info);
+                + (stayedLocal ? " The model finder or front door stayed on this PC: run allow-tray-ports.ps1 as administrator." : "")
+            : "Router is local only (127.0.0.1)" + when, stayedLocal ? ToolTipIcon.Warning : ToolTipIcon.Info);
     }
 
     void StartRouter()

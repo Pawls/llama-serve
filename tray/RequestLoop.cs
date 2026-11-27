@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 sealed class RequestLoop
 {
@@ -16,11 +17,44 @@ sealed class RequestLoop
     }
 
     // The prefixes for a bind: this PC only, or every interface (which needs a URL reservation for the port, made
-    // once as administrator by allow-switchboard.ps1).
+    // once as administrator by allow-tray-ports.ps1).
     public static string[] Prefixes(int port, bool shared)
     {
         if (shared) return new[] { "http://+:" + port + "/" };
         return new[] { "http://127.0.0.1:" + port + "/", "http://localhost:" + port + "/" };
+    }
+
+    // Starts a listener on the prefixes for `shared`, falling back to loopback with a notice when the network bind is
+    // denied (no URL reservation yet). Returns "network", "local", or null when nothing could be bound (a notice says why).
+    public static string BindListener(Action<string[]> start, Func<bool, string[]> prefixes, bool shared, string what,
+        Action<string, ToolTipIcon> notify)
+    {
+        try
+        {
+            start(prefixes(shared));
+            return shared ? "network" : "local";
+        }
+        catch (HttpListenerException ex)
+        {
+            if (!shared)
+            {
+                notify(what + " could not start listening: " + ex.Message, ToolTipIcon.Error);
+                return null;
+            }
+            const int AccessDenied = 5;   // no URL reservation for the port yet
+            notify(what + " cannot listen on the network (" + ex.Message + "). It is local only"
+                + (ex.ErrorCode == AccessDenied ? " until you run allow-tray-ports.ps1 as administrator." : "."), ToolTipIcon.Warning);
+        }
+        try
+        {
+            start(prefixes(false));
+            return "local";
+        }
+        catch (HttpListenerException local)
+        {
+            notify(what + " could not start listening: " + local.Message, ToolTipIcon.Error);
+            return null;
+        }
     }
 
     // Throws HttpListenerException when a prefix cannot be bound (access denied without the URL reservation).
@@ -28,7 +62,12 @@ sealed class RequestLoop
     {
         var fresh = new HttpListener();
         foreach (string prefix in prefixes) fresh.Prefixes.Add(prefix);
-        fresh.Start();
+        try { fresh.Start(); }
+        catch (HttpListenerException)
+        {
+            fresh.Close();
+            throw;
+        }
         listener = fresh;
         AcceptLoop(fresh);
     }

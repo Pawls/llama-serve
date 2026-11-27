@@ -19,7 +19,7 @@ Write-Host '== catalog builder'
 if ($LASTEXITCODE -ne 0) { $failed += 'catalog builder' }
 
 Write-Host '== listener'
-$References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.Web.Extensions.dll' |
+$References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.Web.Extensions.dll', 'System.Windows.Forms.dll' |
     ForEach-Object { "/reference:$(Join-Path $FrameworkDir $_)" }
 $output = & (Join-Path $FrameworkDir 'csc.exe') /nologo /target:exe /debug+ "/out:$Exe" @References `
     (Join-Path $Root 'tray\ModelFinder.cs') (Join-Path $Root 'tray\RequestLoop.cs') `

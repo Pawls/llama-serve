@@ -81,9 +81,9 @@ whatever engine serves it, waits until it answers, and forwards the request. Not
    loopback, so loopback gets no pass). The tray makes it on first use in `logs\switchboard-token`; **Open front-door
    token** in the menu opens the file. Send it as `Authorization: Bearer <token>` or `x-api-key: <token>`. Anyone with
    the token can take the GPUs from whatever you are running.
-3. **From another machine**, once, in an administrator PowerShell: `.\allow-switchboard.ps1` (URL reservation and a
-   firewall rule for TCP 8409 from the LAN and Tailscale ranges). Then tick **Share router on the network** (the front
-   door follows it; without the reservation the tray says so and stays local). Base URL
+3. **From another machine**, once, in an administrator PowerShell: `.\allow-tray-ports.ps1` (URL reservation and a
+   firewall rule for TCP 8409 and 8407, the model finder, from the LAN and Tailscale ranges). Then tick **Share router
+   on the network** (the front door and the model finder follow it; without the reservation the tray says so and stays local). Base URL
    `http://100.112.21.82:8409/v1`, API key = the token.
 
 ```powershell
@@ -143,7 +143,11 @@ Context, images, GPUs and thinking are read from the files the engines start wit
 configs, `start-ninfer.ps1`, through `model-sources.ps1`). Descriptions and measured speeds are in
 `model-catalog.json`; add a row there for a new preset (`.\test-model-finder.ps1` fails and names any preset
 without one). The tray rebuilds the list with `model-catalog.ps1` when one of those files changes. Tests:
-`.\test-model-finder.ps1` (no engine, no GPU). For now the page answers on this PC only.
+`.\test-model-finder.ps1` (no engine, no GPU). With **Share router on the network** ticked and
+`.\allow-tray-ports.ps1` run once as administrator (see [Using the front door](#using-the-front-door)), the page also
+answers on the LAN and Tailscale at `http://<this PC>:8407/`. It needs no token: it lists only what a router client
+could list. Without the reservation the tray says so (at every start while Share is ticked) and the page stays on this PC. If you
+ran the older `allow-switchboard.ps1`, run `allow-tray-ports.ps1` once: it adds port 8407.
 
 ### Using it from VS Code chat
 

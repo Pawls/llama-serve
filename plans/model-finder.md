@@ -16,7 +16,7 @@
 > benchmark score with no source or from another model size (S3: the source box) · a text-only preset that loads
 > but spills under WDDM (S4: the `nvidia-smi` box) · a new download to make room (S4: the no-download box).
 >
-> **Next:** S2, the page reachable from the laptop
+> **Next:** S3, benchmark scores (S2 is in review; Paul's laptop check is its last box)
 >
 > **Branch:** per slice, `feat/model-finder-<slice id>` off `main`, one PR each
 >
@@ -51,7 +51,7 @@ Shipped: the tray serves the page on `127.0.0.1:8407` from `model-catalog.ps1` +
 
 ### S2 — Reachable from the laptop · Sonnet 5.5 / medium {#s2}
 
-**Status:** not started.
+**Status:** code and tests done, PR open; the last box is Paul's.
 - **Note (from S1):** `RequestLoop.Prefixes(port, shared)` in `tray/RequestLoop.cs` already gives both prefix sets;
   `ModelFinder.Prefixes()` calls it with `false`. The finder is started by `StartModelFinder()` in
   `tray/TrayModelFinder.cs`; put `BindListener` beside it in `RequestLoop.cs` and test it from `ModelFinderTests.cs`.
@@ -67,8 +67,8 @@ page binds `http://+:8407/`, falling back to loopback with a notice like the fro
 needs no token: it shows nothing a router client could not list. `allow-tray-ports.ps1` reserves 8407 and 8409 and
 adds one firewall rule per port with the front door's scope (192.168.1.0/24, 100.64.0.0/10).
 
-- [ ] Red test: the prefixes for both settings.
-- [ ] Every reference to `allow-switchboard.ps1` now names the new script (`git grep` empty).
+- [x] Red test: the prefixes for both settings (and `BindListener`'s fallback, in `ModelFinderTests.cs`).
+- [x] Every reference to `allow-switchboard.ps1` now names the new script (`git grep` empty).
 - [ ] Paul runs the script once as admin, then opens `http://<PC>:8407/` from the laptop (his laptop and an admin
       prompt; nothing here reaches either).
 

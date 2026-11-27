@@ -122,10 +122,12 @@ Other moving parts:
   GPUs from whatever is running, so only the token holder (`logs\switchboard-token`, Bearer or `x-api-key`, no loopback
   exemption) may use it. A request waits for in-flight replies of a different model (15 min), switches run one at a
   time, and `POST /switchboard/free` unloads everything. Binds `127.0.0.1` and `localhost`, or every interface with
-  `ShareOnNetwork` (needs [allow-switchboard.ps1](./allow-switchboard.ps1) once, as admin; without it the tray falls
-  back to loopback with a notice). Tests: `.\test-switchboard.ps1` (fake engines, no GPUs). Log: `logs\switchboard.log`.
+  `ShareOnNetwork` (needs [allow-tray-ports.ps1](./allow-tray-ports.ps1) once, as admin; without it the tray falls
+  back to loopback with a notice, through `RequestLoop.BindListener`). Tests: `.\test-switchboard.ps1` (fake engines, no GPUs). Log: `logs\switchboard.log`.
   Plan (shipped, archived): [dev-notes/archive/switchboard.md](./dev-notes/archive/switchboard.md); usage: README.md § Using the front door.
-- **Model finder, port 8407.** A read-only page the tray always serves on loopback
+- **Model finder, port 8407.** A read-only page the tray serves on loopback, or on every
+  interface with `ShareOnNetwork` (same reservation and fallback as the front door, no token: it shows nothing a router
+  client could not list; the firewall scope is `allow-tray-ports.ps1`)
   ([tray/ModelFinder.cs](./tray/ModelFinder.cs), [tray/TrayModelFinder.cs](./tray/TrayModelFinder.cs), `web\`): every
   router preset, Strata size and ninfer profile, filtered by context, images, GPUs, engine, thinking and speed.
   [model-catalog.ps1](./model-catalog.ps1) builds `logs\model-catalog.json` from the launch files through

@@ -88,6 +88,64 @@ static class ModelFinderTests
         return response.Content.Headers.ContentType == null ? "" : response.Content.Headers.ContentType.MediaType;
     }
 
+    static bool IsAdministrator()
+    {
+        return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent())
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
+
+    // Starts a listener on the prefixes it is given, as the tray's two listeners do.
+    static void BindTests()
+    {
+        Console.WriteLine("bind with fallback");
+        int port = FreePort();
+        var started = new List<string>();
+        var notices = new List<string>();
+        Action<string[]> start = prefixes =>
+        {
+            var probe = new HttpListener();
+            foreach (string prefix in prefixes) probe.Prefixes.Add(prefix);
+            probe.Start();
+            probe.Close();
+            started.Add(string.Join(" ", prefixes));
+        };
+        Func<bool, string[]> prefixesFor = shared => RequestLoop.Prefixes(port, shared);
+        Action<string, System.Windows.Forms.ToolTipIcon> notify = (text, icon) => notices.Add(text);
+
+        string local = RequestLoop.BindListener(start, prefixesFor, false, "The page", notify);
+        Check("not shared: bound locally, no notice", local == "local" && notices.Count == 0, local);
+
+        started.Clear();
+        string network = RequestLoop.BindListener(start, prefixesFor, true, "The page", notify);
+        if (IsAdministrator())
+            Check("shared as administrator: bound on the network", network == "network", network);
+        else
+        {
+            Check("shared without the URL reservation: falls back to loopback", network == "local"
+                && started.Count == 1 && started[0].StartsWith("http://127.0.0.1:"), network + " " + string.Join("|", started));
+            Check("and says which script to run", notices.Count == 1 && notices[0].Contains("allow-tray-ports.ps1")
+                && notices[0].Contains("The page"), string.Join("|", notices));
+        }
+
+        notices.Clear();
+        Action<string[]> taken = prefixes =>
+        {
+            if (prefixes[0].Contains("+")) throw new HttpListenerException(183, "Cannot create a file when that file already exists");
+        };
+        string other = RequestLoop.BindListener(taken, prefixesFor, true, "The page (port 1)", notify);
+        Check("another failure than access denied: local, the real error, no script hint",
+            other == "local" && notices.Count == 1 && notices[0].Contains("already exists") && !notices[0].Contains("allow-tray-ports")
+            && notices[0].Contains("port 1"), string.Join("|", notices));
+
+        notices.Clear();
+        Action<string[]> refuse = prefixes => { throw new HttpListenerException(5, "Access is denied"); };
+        string none = RequestLoop.BindListener(refuse, prefixesFor, false, "The page", notify);
+        Check("a loopback bind that fails returns null with a notice", none == null && notices.Count == 1, none);
+        notices.Clear();
+        none = RequestLoop.BindListener(refuse, prefixesFor, true, "The page", notify);
+        Check("a shared and a loopback bind that both fail return null", none == null && notices.Count == 2, string.Join("|", notices));
+    }
+
     static int Main()
     {
         MainAsync().GetAwaiter().GetResult();
@@ -177,6 +235,28 @@ static class ModelFinderTests
             var all = await Task.WhenAll(Enumerable.Range(0, 4).Select(i => rig.Get("/catalog.json")));
             Check("every request answered 200", all.All(r => r.StatusCode == HttpStatusCode.OK));
             Check("one rebuild", rig.Rebuilds == 1, rig.Rebuilds.ToString());
+        });
+
+        Console.WriteLine("prefixes");
+        Check("local: loopback and localhost",
+            string.Join(" ", RequestLoop.Prefixes(8407, false)) == "http://127.0.0.1:8407/ http://localhost:8407/");
+        Check("shared: every interface", string.Join(" ", RequestLoop.Prefixes(8407, true)) == "http://+:8407/");
+        Check("the finder's own prefixes follow the setting",
+            string.Join(" ", ModelFinder.Prefixes(true)) == "http://+:8407/"
+            && ModelFinder.Prefixes(false)[0] == "http://127.0.0.1:8407/");
+
+        BindTests();
+
+        await Run("catalog: a rebind of the listener during a rebuild keeps it the only one", async rig =>
+        {
+            rig.RebuildBody = () => { System.Threading.Thread.Sleep(400); File.WriteAllText(rig.Catalog, "{}"); return null; };
+            Task<HttpResponseMessage> first = rig.Get("/catalog.json");
+            await Task.Delay(100);
+            rig.Finder.Stop();
+            rig.Finder.Start(new[] { rig.BaseUrl + "/" });
+            var second = await rig.Get("/catalog.json");
+            await first;
+            Check("one rebuild, both answered", rig.Rebuilds == 1 && second.StatusCode == HttpStatusCode.OK, rig.Rebuilds.ToString());
         });
 
         await Run("status", async rig =>

@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -62,31 +61,11 @@ sealed partial class TrayApp : ISwitchHost
         if (!switchboardEnabled) return null;
         if (switchTargets == null) switchTargets = BuildSwitchTargets();
         var board = new Switchboard(this, ReadOrCreateSwitchboardToken(), WriteSwitchLog);
-        try
-        {
-            board.Start(Switchboard.Prefixes(shareOnNetwork));
-        }
-        catch (HttpListenerException ex)
-        {
-            if (!shareOnNetwork)
-            {
-                Notify("The front door could not listen on port " + Switchboard.Port + ": " + ex.Message, ToolTipIcon.Error);
-                return null;
-            }
-            // Access denied: the one-time URL reservation for all interfaces is missing.
-            Notify("The front door cannot listen on the network yet (" + ex.Message + "). It is local only until you run allow-switchboard.ps1 as administrator.", ToolTipIcon.Warning);
-            try { board.Start(Switchboard.Prefixes(false)); }
-            catch (HttpListenerException local)
-            {
-                Notify("The front door could not listen on port " + Switchboard.Port + ": " + local.Message, ToolTipIcon.Error);
-                return null;
-            }
-            switchboard = board;
-            switchboardBound = "local";
-            return switchboardBound;
-        }
+        string bound = RequestLoop.BindListener(board.Start, Switchboard.Prefixes, shareOnNetwork,
+            "The front door (port " + Switchboard.Port + ")", Notify);
+        if (bound == null) return null;
         switchboard = board;
-        switchboardBound = shareOnNetwork ? "network" : "local";
+        switchboardBound = bound;
         return switchboardBound;
     }
 
@@ -116,7 +95,7 @@ sealed partial class TrayApp : ISwitchHost
         }
         TraySettings.SetFlag(root, TraySettings.SwitchboardKey, switchboardEnabled);
         string where = bound == "network" ? " (LAN and Tailscale)."
-            : shareOnNetwork ? " (this PC only until allow-switchboard.ps1 has been run)."
+            : shareOnNetwork ? " (this PC only until allow-tray-ports.ps1 has been run)."
             : " (this PC only; tick Share router on the network for other machines).";
         Notify(turnOn
             ? "Front door on port " + Switchboard.Port + where + " A request that names a model starts the engine for it. Token: logs\\switchboard-token."
