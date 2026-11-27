@@ -17,8 +17,8 @@
 > handles effort itself, so the override is deleted (S4 done). The installed config has run the two-GPU split at
 > `--max-context 368640` since that afternoon (S6; the DSpark drafter does nothing on the split; S5 re-benches; the
 > 0.2.20 numbers in S2 and the README no longer hold).
-> **Next:** S5 (Paul's night bench)
-> **Branch:** feat/strata-inkling-s3
+> **Next:** none; the plan is done (archive it)
+> **Branch:** feat/strata-inkling-s5
 > **Flow:** lean
 
 - ~~[S1 — Engine 0.1.66 and the Inkling SQ-20 config](#s1)~~
@@ -26,7 +26,7 @@
 - ~~[S3 — Keep it: tray, clients, docs](#s3)~~
 - ~~[S4 — Retire the override when upstream ships its own](#s4)~~ (done 2026-11-24 with the 0.2.21 update)
 - ~~[S6 — Safe context ceiling without KV offload](#s6)~~ (done on the split 2026-11-24; above 368,640 untried)
-- [S5 — Re-bench Inkling on Strata 0.2.21](#s5)
+- ~~[S5 — Re-bench Inkling on Strata 0.2.21](#s5)~~ (done 2026-11-26 on engine 0.1.69)
 
 ## Traps
 
@@ -179,17 +179,21 @@ moved the ceiling; none of it is measured.
 - [ ] Record the largest size that passes twice, and the first that fails and how (README.md, dated, with engine).
 - [ ] Set the installed config's `--max-context` only if Paul wants it; say which GPU layout it belongs to.
 
-### S5 — Re-bench Inkling on Strata 0.2.21 · Sonnet 5.5 / medium {#s5}
+### ~~S5 — Re-bench Inkling on Strata 0.2.21~~ · Sonnet 5.5 / medium {#s5}
+
+**Done 2026-11-26** on Strata 0.2.22 / engine 0.1.69, not 0.2.21 (README.md § Re-bench on engine 0.1.69): split 56.5 / 48.2 net tok/s on code at 2k / 51k, GPU 1 alone 85 / 59.6; the split keeps its place because GPU 1 alone offloads KV past 56k tokens. Parallel slots not run (no client sends parallel requests); the bench ran in `pwsh -Command` because `pwsh -File` read `-Depth 2000,51000` as one number.
+
+(The slice as written:)
 
 **Status:** not started; Paul runs it at night. Installed 2026-11-24: code 0.2.21, engines 0.1.67 (Qwen engine and
 `strata-inkling`), config on GPU 1 alone (`"gpu": 1`, no `--gpus`/`--layer-split`), 256K, DSpark on. **Since that afternoon the installed config is the two-GPU split at 368,640 (S6), drafter off; the bench must pick its layout and say so.**
 **Known before the bench (one quick sample each, greedy code prompt, 500 tokens, not a bench):** both GPUs 58 tok/s
 with `draft_n` 0 (the drafter does nothing on the split; "DSpark took 0 MiB"); GPU 1 alone 104-107 tok/s, 369
 drafted / 174 accepted, GPU 1 at 22.6 GiB with ~0.9 GiB free and 205k tokens of KV mapped in host RAM.
-- [ ] `bench-depth.ps1` against ninfer's `inkling-2-mini` at 2k / 51k, 2 rounds interleaved, as in S2.
-- [ ] Compare the split config against GPU 1 alone, and one slot against the app's higher counts only if a client
+- [x] `bench-depth.ps1` against ninfer's `inkling-2-mini` at 2k / 51k, 2 rounds interleaved, as in S2.
+- [x] Compare the split config against GPU 1 alone, and one slot against the app's higher counts only if a client
       sends parallel requests.
-- [ ] Update README § Inkling 2 Mini on Strata and the keep/drop table.
+- [x] Update README § Inkling 2 Mini on Strata and the keep/drop table.
 
 ### ~~S4 — Retire the override when upstream ships its own~~ · Sonnet 5.5 / low {#s4}
 

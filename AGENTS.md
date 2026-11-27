@@ -309,8 +309,9 @@ Other moving parts:
   20.7 GiB on GPU 1 (README.md § Inkling 2 Mini on Strata, "Context ceiling on the split"). Between 2026-11-24
   morning and afternoon it ran on **GPU 1 alone** (`"gpu": 1`). The DSpark drafter does nothing on the split
   (`draft_n` 0) and works on one GPU: one greedy code sample decoded 58 tok/s split against 104-107 on GPU 1 (not a
-  bench; 22.6 GiB used there, ~0.9 GiB free, 205k tokens of KV in host RAM). The 0.2.20 numbers in README.md
-  § Inkling 2 Mini on Strata are superseded; plans/strata-inkling.md S5 re-benches.
+  bench; 22.6 GiB used there, ~0.9 GiB free, 205k tokens of KV in host RAM). Re-benched 2026-11-26 on engine 0.1.69
+  (README.md § Re-bench on engine 0.1.69): split 56.5 / 48.2 net tok/s on code at 2k / 51k, GPU 1 alone 85 / 59.6; the
+  split stays installed. The GPU 1 config sits beside it as `strata-inkling-2-mini-sq-20-gpu1.json`.
   **Its engine is a component outside the clone**: `%LOCALAPPDATA%\Strata\components\shapes\inkling2\engine\<version>\strata-inkling.exe`,
   which `stop-strata.ps1` and the tray's `StrataEngineRunning` match by that folder.
 - **Engine 0.1.59 (code v0.2.13.1-160) was installed 2026-11-13 to 2026-11-24**; 0.1.57 (installed 2026-11-05 with
@@ -469,8 +470,8 @@ republish it to the artifact URL named in the plan.
 [plans/strata-inkling.md](./plans/strata-inkling.md): Inkling 2 Mini on Strata 0.2.20 (lossless SQ-20, up to 1M
 context with the cache in RAM) against the ninfer setup (README.md § Inkling 2 Mini on Strata). Paul kept it on
 2026-11-24 and moved to Strata 0.2.21, which fixes the forced reasoning effort (the override is gone); Strata
-0.2.22 (engine 0.1.69, 2026-11-25) starts it unchanged. Benches run at night, when Paul is off the PC; the 0.2.20
-numbers no longer hold, and S5 should run on 0.1.69.
+0.2.22 (engine 0.1.69, 2026-11-25) starts it unchanged. S5 re-benched it on 0.1.69 on 2026-11-26; every slice is
+done, so the plan is ready to archive.
 
 [plans/context-and-quality-benches.md](./plans/context-and-quality-benches.md): more context for
 `qwen3.8-27b-single` (A1), Inkling 2 Mini on the `rk8v4` cache (A2), and Qwen3.8-27B on ninfer-all (A4), plus
