@@ -1,7 +1,11 @@
 // Run with: node --test web/model-finder.test.mjs   (test-model-finder.ps1 runs it too)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds, thinkingName } from './model-finder.js';
+import { readFileSync } from 'node:fs';
+import * as finder from './model-finder.js';
+
+const { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds, thinkingName,
+  scoreOf, benchmarkColumns } = finder;
 
 const entries = [
   { id: 'big-vision', engine: 'router', context: 262144, vision: true, gpus: 'both', thinking: 'on', speed: { code: 57, prose: 50 } },
@@ -139,4 +143,82 @@ test('loadedIds: a Strata size the tray started marks only that size, not every 
 test('thinkingName: a value the page has no name for is shown as it is', () => {
   assert.equal(thinkingName('on'), 'Thinks');
   assert.equal(thinkingName('budgeted'), 'budgeted');
+});
+
+// ---- Benchmark scores ----
+
+const families = {
+  alpha: { scores: { swe: { value: 70.1 }, gpqa: { value: 80 } } },
+  beta: { scores: { swe: { value: 75 }, gpqa: { value: 80 }, rare: { value: 9 } } },
+  gamma: { scores: { swe: { value: 70.1 } } },
+  delta: { scores: { gpqa: { value: 0 } } },
+};
+const scored = [
+  { id: 'zeta', family: 'alpha' },
+  { id: 'alpha-lane', family: 'alpha' },
+  { id: 'beta-one', family: 'beta' },
+  { id: 'gamma-one', family: 'gamma' },
+  { id: 'finetune', family: 'no-such-family' },
+  { id: 'delta-one', family: 'delta' },
+];
+
+test('sort by a benchmark: highest first, ties in name order, missing scores last in name order', () => {
+  assert.deepEqual(ids(sortModels(scored, 'bench:swe', families)),
+    ['beta-one', 'alpha-lane', 'gamma-one', 'zeta', 'delta-one', 'finetune']);
+});
+
+test('sort by a benchmark: a score of 0 is a score, not a missing one', () => {
+  assert.deepEqual(ids(sortModels(scored, 'bench:gpqa', families)),
+    ['alpha-lane', 'beta-one', 'zeta', 'delta-one', 'finetune', 'gamma-one']);
+});
+
+test('sort by a benchmark nobody reports, or with no family table, is name order', () => {
+  const byName = ['alpha-lane', 'beta-one', 'delta-one', 'finetune', 'gamma-one', 'zeta'];
+  assert.deepEqual(ids(sortModels(scored, 'bench:nope', families)), byName);
+  assert.deepEqual(ids(sortModels(scored, 'bench:swe')), byName);
+});
+
+test('scoreOf reads the family score an entry shares with its lanes', () => {
+  assert.equal(scoreOf(scored[0], 'swe', families).value, 70.1);
+  assert.equal(scoreOf(scored[4], 'swe', families), undefined);
+  assert.equal(scoreOf(scored[3], 'gpqa', families), undefined);
+});
+
+test('benchmarkColumns: a column needs three families; the most reported comes first, ties by id', () => {
+  const table = structuredClone(families);
+  assert.deepEqual(benchmarkColumns(table), ['gpqa', 'swe']);
+  table.gamma.scores.extra = { value: 1 };
+  table.alpha.scores.extra = { value: 1 };
+  assert.deepEqual(benchmarkColumns(table), ['gpqa', 'swe']);
+  table.delta.scores.swe = { value: 1 };
+  assert.deepEqual(benchmarkColumns(table), ['swe', 'gpqa']);
+  assert.deepEqual(benchmarkColumns({}), []);
+});
+
+// The shipped table (model-catalog.json): the rules the page and the plan rely on.
+const shipped = JSON.parse(readFileSync(new URL('../model-catalog.json', import.meta.url), 'utf8'));
+
+test('model-catalog.json: every score names a described benchmark, its source page and the model measured', () => {
+  const entryFamilies = new Set(Object.values(shipped.entries).map(e => e.family));
+  assert.ok(Object.keys(shipped.families).length > 0, 'no families');
+  for (const [family, row] of Object.entries(shipped.families)) {
+    assert.ok(entryFamilies.has(family), family + ' is no entry\'s family');
+    for (const [bench, score] of Object.entries(row.scores)) {
+      const where = family + ' / ' + bench;
+      assert.ok(shipped.benchmarks[bench], where + ': benchmark not described');
+      assert.equal(typeof score.value, 'number', where + ': value');
+      assert.match(score.source, /^https:\/\/\S+$/, where + ': source');
+      assert.ok(score.measuredOn, where + ': measuredOn');
+    }
+  }
+});
+
+test('model-catalog.json: every benchmark with a column says what it tests and what higher means', () => {
+  const columns = benchmarkColumns(shipped.families);
+  assert.ok(columns.length > 0, 'no benchmark has three families');
+  for (const bench of columns) {
+    const b = shipped.benchmarks[bench];
+    assert.ok(b.name && b.name.length <= 24, bench + ': name');
+    assert.ok(b.tests && b.higher, bench + ': tests and higher');
+  }
 });
