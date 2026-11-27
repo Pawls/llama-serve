@@ -146,7 +146,8 @@ without one). The tray rebuilds the list with `model-catalog.ps1` when one of th
 `.\test-model-finder.ps1` (no engine, no GPU). With **Share router on the network** ticked and
 `.\allow-tray-ports.ps1` run once as administrator (see [Using the front door](#using-the-front-door)), the page also
 answers on the LAN and Tailscale at `http://<this PC>:8407/`. It needs no token: it lists only what a router client
-could list. Without the reservation the tray says so and the page stays on this PC.
+could list. Without the reservation the tray says so (at every start while Share is ticked) and the page stays on this PC. If you
+ran the older `allow-switchboard.ps1`, run `allow-tray-ports.ps1` once: it adds port 8407.
 
 ### Using it from VS Code chat
 

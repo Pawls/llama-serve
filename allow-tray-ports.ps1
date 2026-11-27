@@ -4,7 +4,8 @@
 #   1. A URL reservation per port, so the unelevated tray may listen on http://+:<port>/ (every interface).
 #   2. A firewall rule per port, scoped to the home network and Tailscale like the llama-server rules
 #      (README.md § Using it from another machine).
-# The ports are Switchboard.Port in tray\Switchboard.cs and ModelFinder.Port in tray\ModelFinder.cs.$ErrorActionPreference = 'Stop'
+# The ports are Switchboard.Port in tray\Switchboard.cs and ModelFinder.Port in tray\ModelFinder.cs.
+$ErrorActionPreference = 'Stop'
 
 $Ports = @{ 8409 = 'llama-serve switchboard (8409)'; 8407 = 'llama-serve model finder (8407)' }
 $Me = [Security.Principal.WindowsIdentity]::GetCurrent()

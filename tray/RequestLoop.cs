@@ -41,7 +41,9 @@ sealed class RequestLoop
                 notify(what + " could not start listening: " + ex.Message, ToolTipIcon.Error);
                 return null;
             }
-            notify(what + " cannot listen on the network yet (" + ex.Message + "). It is local only until you run allow-tray-ports.ps1 as administrator.", ToolTipIcon.Warning);
+            const int AccessDenied = 5;   // no URL reservation for the port yet
+            notify(what + " cannot listen on the network (" + ex.Message + "). It is local only"
+                + (ex.ErrorCode == AccessDenied ? " until you run allow-tray-ports.ps1 as administrator." : "."), ToolTipIcon.Warning);
         }
         try
         {
@@ -60,7 +62,12 @@ sealed class RequestLoop
     {
         var fresh = new HttpListener();
         foreach (string prefix in prefixes) fresh.Prefixes.Add(prefix);
-        fresh.Start();
+        try { fresh.Start(); }
+        catch (HttpListenerException)
+        {
+            fresh.Close();
+            throw;
+        }
         listener = fresh;
         AcceptLoop(fresh);
     }

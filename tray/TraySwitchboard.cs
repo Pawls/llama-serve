@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -62,7 +61,8 @@ sealed partial class TrayApp : ISwitchHost
         if (!switchboardEnabled) return null;
         if (switchTargets == null) switchTargets = BuildSwitchTargets();
         var board = new Switchboard(this, ReadOrCreateSwitchboardToken(), WriteSwitchLog);
-        string bound = RequestLoop.BindListener(board.Start, Switchboard.Prefixes, shareOnNetwork, "The front door", Notify);
+        string bound = RequestLoop.BindListener(board.Start, Switchboard.Prefixes, shareOnNetwork,
+            "The front door (port " + Switchboard.Port + ")", Notify);
         if (bound == null) return null;
         switchboard = board;
         switchboardBound = bound;

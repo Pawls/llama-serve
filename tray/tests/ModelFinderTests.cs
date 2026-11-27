@@ -128,6 +128,16 @@ static class ModelFinderTests
         }
 
         notices.Clear();
+        Action<string[]> taken = prefixes =>
+        {
+            if (prefixes[0].Contains("+")) throw new HttpListenerException(183, "Cannot create a file when that file already exists");
+        };
+        string other = RequestLoop.BindListener(taken, prefixesFor, true, "The page (port 1)", notify);
+        Check("another failure than access denied: local, the real error, no script hint",
+            other == "local" && notices.Count == 1 && notices[0].Contains("already exists") && !notices[0].Contains("allow-tray-ports")
+            && notices[0].Contains("port 1"), string.Join("|", notices));
+
+        notices.Clear();
         Action<string[]> refuse = prefixes => { throw new HttpListenerException(5, "Access is denied"); };
         string none = RequestLoop.BindListener(refuse, prefixesFor, false, "The page", notify);
         Check("a loopback bind that fails returns null with a notice", none == null && notices.Count == 1, none);
@@ -236,6 +246,18 @@ static class ModelFinderTests
             && ModelFinder.Prefixes(false)[0] == "http://127.0.0.1:8407/");
 
         BindTests();
+
+        await Run("catalog: a rebind of the listener during a rebuild keeps it the only one", async rig =>
+        {
+            rig.RebuildBody = () => { System.Threading.Thread.Sleep(400); File.WriteAllText(rig.Catalog, "{}"); return null; };
+            Task<HttpResponseMessage> first = rig.Get("/catalog.json");
+            await Task.Delay(100);
+            rig.Finder.Stop();
+            rig.Finder.Start(new[] { rig.BaseUrl + "/" });
+            var second = await rig.Get("/catalog.json");
+            await first;
+            Check("one rebuild, both answered", rig.Rebuilds == 1 && second.StatusCode == HttpStatusCode.OK, rig.Rebuilds.ToString());
+        });
 
         await Run("status", async rig =>
         {
