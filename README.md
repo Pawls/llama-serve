@@ -153,11 +153,11 @@ ran the older `allow-switchboard.ps1`, run `allow-tray-ports.ps1` once: it adds 
 full-precision model: the quant and drafter lanes this PC runs share that number, and none of it was measured here.
 Picking a benchmark in **Sort by** puts the highest score first and shows a line on what it tests and what a higher
 number means; a score links to the page it came from and its tooltip names the model and harness. The page opens
-sorted by the benchmark the most models report (GPQA Diamond) until you pick a sort. Publishers run different
+sorted by the benchmark the most model families report (GPQA Diamond) until you pick a sort. Publishers run different
 harnesses, so a few points apart is a tie. A dash means the publisher gives no number: `qwen3-coder-30b` (its card
 shows scores only as an image) and `qwen3.8-fable-q5` (a merge with only third-party runs of other tests). Scores and
 the benchmark descriptions are the `families` and `benchmarks` tables of `model-catalog.json`; a benchmark gets a
-column once three models report it. Left out: benchmarks that need images, C-Eval, and scores a publisher measured
+column once three model families report it (the lanes and quants of one model count once). Left out: benchmarks that need images, C-Eval, and scores a publisher measured
 for someone else's model.
 
 ### Using it from VS Code chat

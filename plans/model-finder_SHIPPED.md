@@ -106,13 +106,13 @@ that scores within a few points are a tie.
   within its own row.
 - **Ruling:** left out of the catalog: benchmarks that need images (ERQA, OmniDocBench, CharXiv), C-Eval (a
   Chinese-language exam), and versions that differ from the column's (Qwen3.6's Terminal-Bench 2.0, Ornith's unversioned
-  DeepSWE, Inkling's SWE-bench Pro v2 Hard and HLE-Diamond). Eleven columns remain; below 1750 px the table scrolls
-  sideways.
+  DeepSWE, Inkling's SWE-bench Pro v2 Hard and HLE-Diamond). Eleven columns remain; the table scrolls
+  sideways inside its own box, which keeps the header row in view.
 - **Ruling:** `source` and `measuredOn` sit on the family row, not on each score: one page per family holds all its
   scores. A score carries only `value` and the `setting` its page names.
 - **Ruling:** the default sort applies until a sort is picked by hand (`sortChosen` in the saved state), so a browser
   that had saved the old default (speed) also opens on GPQA Diamond.
-- **Ruling:** scores show one decimal; the tooltip has the number as published.
+- **Ruling:** scores show one decimal; the tooltip has the full number (JSON drops a trailing zero: 89.60 reads 89.6).
 - **Ruling:** Qwen3.6-35B-A3B's row is labelled "GPQA"; it is filed under GPQA Diamond because the Gemma 4 columns
   of the same table equal Google's GPQA Diamond figures.
 - **Ruling:** DeepSWE 1.1 and JobBench are described from their papers (arXiv 2607.07946, 2605.26329), since no

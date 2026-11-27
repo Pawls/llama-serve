@@ -50,9 +50,14 @@ const SORT_VALUES = {
 };
 const BENCH_SORT = 'bench:';   // a sort key for a benchmark is this plus its id
 
+// The benchmark a sort key names, or null for the other sorts.
+export function benchOf(key) {
+  return key?.startsWith(BENCH_SORT) ? key.slice(BENCH_SORT.length) : null;
+}
+
 export function sortModels(entries, key, families) {
   const byId = (a, b) => a.id.localeCompare(b.id);
-  const bench = key?.startsWith(BENCH_SORT) ? key.slice(BENCH_SORT.length) : null;
+  const bench = benchOf(key);
   const value = bench ? e => scoreOf(e, bench, families)?.value : SORT_VALUES[key];
   if (!value) return [...entries].sort(byId);
   return [...entries].sort((a, b) => {
@@ -133,7 +138,8 @@ function startPage() {
   const $ = id => document.getElementById(id);
   const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
   // Until a sort is picked by hand the list follows the default: the benchmark the most families report.
-  const sortChosen = saved?.sortChosen ?? false;
+  // State saved before benchmarks existed has no sortChosen: its sort counts as picked unless it is the old default.
+  const sortChosen = saved?.sortChosen ?? (saved?.sort != null && saved.sort !== 'speed');
   const state = { filters: { ...defaultFilters(), ...(saved?.filters ?? {}) }, sort: sortChosen ? saved.sort : 'speed',
     sortChosen, gpuChosen: saved?.gpuChosen ?? false, entries: [], families: {}, benchmarks: {}, columns: [],
     loaded: new Set(), status: null };
@@ -150,12 +156,12 @@ function startPage() {
     return el;
   }
 
-  // A score links to the publisher's page it was read from; its tooltip has the number as published, the model and the setting.
+  // A score links to the publisher's page it was read from; its tooltip has the full number, the model and the setting.
   function scoreCell(e, bench) {
     const score = scoreOf(e, bench, state.families);
-    const sorted = state.sort === BENCH_SORT + bench ? ' sorted' : '';
-    if (!score) return cell('td', '–', 'num muted' + sorted);
-    const td = cell('td', null, 'num' + sorted);
+    const sorted = benchOf(state.sort) === bench ? ' sorted' : '';
+    if (!score) return cell('td', '–', 'num bench muted' + sorted);
+    const td = cell('td', null, 'num bench' + sorted);
     const family = state.families[e.family];
     const link = cell('a', score.value.toFixed(1));
     link.href = family.source;
@@ -171,7 +177,11 @@ function startPage() {
     const name = bench => state.benchmarks[bench]?.name ?? bench;
     for (const head of document.querySelectorAll('thead tr')) {
       head.querySelectorAll('th.bench').forEach(th => th.remove());
-      head.append(...state.columns.map(bench => cell('th', name(bench), 'num bench')));
+      head.append(...state.columns.map(bench => {
+        const th = cell('th', name(bench), 'num bench');
+        th.dataset.bench = bench;
+        return th;
+      }));
     }
     $('sort').querySelectorAll('option.bench').forEach(option => option.remove());
     $('sort').prepend(...state.columns.map(bench => {
@@ -183,12 +193,21 @@ function startPage() {
     if (!state.sortChosen || !known) state.sort = state.columns.length ? BENCH_SORT + state.columns[0] : 'speed';
   }
 
+  // Marks the column the list is sorted by and explains its benchmark.
   function explainSort() {
-    const b = state.sort.startsWith(BENCH_SORT) ? state.benchmarks[state.sort.slice(BENCH_SORT.length)] : null;
+    const bench = benchOf(state.sort);
+    for (const th of document.querySelectorAll('th.bench')) {
+      const active = th.dataset.bench === bench;
+      th.classList.toggle('sorted', active);
+      if (active) th.setAttribute('aria-sort', 'descending'); else th.removeAttribute('aria-sort');
+    }
+    const b = bench ? state.benchmarks[bench] : null;
     $('explain').hidden = !b;
     if (!b) return;
     $('explain-name').textContent = b.name;
     $('explain-text').textContent = b.tests + ' ' + b.higher;
+    $('explain-about').hidden = !b.about;
+    if (b.about) $('explain-about').href = b.about;
   }
 
   function row(e, reason) {
@@ -230,6 +249,8 @@ function startPage() {
     $('code-only').checked = f.hideCodeOnly;
     $('min-speed').value = f.minSpeed || '';
     $('sort').value = state.sort;
+    // A saved benchmark sort has no option until the catalog arrives; the list is in name order meanwhile.
+    if ($('sort').selectedIndex < 0) $('sort').value = 'name';
     $('reserved').hidden = !state.status?.reserve_gpu0;
 
     explainSort();
