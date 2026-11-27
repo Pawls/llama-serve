@@ -33,12 +33,16 @@ $fx = Build @{ Presets = (Join-Path $Fixtures 'presets.ini'); NinferScript = (Jo
     Metadata = (Join-Path $Fixtures 'model-catalog.json'); StrataDir = (Join-Path $Fixtures 'strata') }
 
 Check 'entry order: router, Strata, ninfer' ($fx.entries.id) @('vision-mtp', 'short-dflash', 'gpu1-always', 'half-gpu1',
-    'not-in-json', 'big-gpu1', 'big', 'blind', 'inkling2-mini', 'inkling2-mini-q8', 'qwen38-27b')
+    'not-in-json', 'budget-zero', 'off-unlimited', 'auto-thinking', 'big-gpu1', 'big', 'blind', 'inkling2-mini',
+    'inkling2-mini-q8', 'qwen38-27b')
 Check 'router: mmproj, mtp, reasoning on' (Pick $fx 'vision-mtp') ([ordered]@{ engine = 'router'; modelId = 'vision-mtp'
     context = 262144; vision = $true; gpus = 'both'; thinking = 'on'; drafter = 'mtp'; codeOnly = $false })
 Check 'router: dflash, reasoning off, codeOnly from the JSON' (Pick $fx 'short-dflash') ([ordered]@{ engine = 'router'
     modelId = 'short-dflash'; context = 65536; vision = $false; gpus = 'both'; thinking = 'off'; drafter = 'dflash'; codeOnly = $true })
-Check 'router: every device line CUDA1 is gpu1; budget -1 is always' (Pick $fx 'gpu1-always') ([ordered]@{ engine = 'router'
+Check 'router: reasoning-budget 0 is off, whatever reasoning says' ((Pick $fx 'budget-zero').thinking) 'off'
+Check 'router: reasoning off wins over an unlimited budget' ((Pick $fx 'off-unlimited').thinking) 'off'
+Check 'router: reasoning auto is on' ((Pick $fx 'auto-thinking').thinking) 'on'
+Check 'router: every device line CUDA1 is gpu1; no reasoning key takes the JSON thinking'(Pick $fx 'gpu1-always') ([ordered]@{ engine = 'router'
     modelId = 'gpu1-always'; context = 131072; vision = $false; gpus = 'gpu1'; thinking = 'always'; drafter = $null; codeOnly = $false })
 Check 'router: one device line off CUDA1 is both; no reasoning key is none' (Pick $fx 'half-gpu1') ([ordered]@{ engine = 'router'
     modelId = 'half-gpu1'; context = 32768; vision = $false; gpus = 'both'; thinking = 'none'; drafter = $null; codeOnly = $false })
@@ -57,6 +61,19 @@ Check 'metadata: description, family and speed carried' (($fx.entries | Where-Ob
     ForEach-Object { @($_.family, $_.description, $_.speed.code, $_.speed.prose) }) @('fam-a', 'A vision model with MTP.', 57, 50)
 Check 'an id with no metadata row is listed under missing, family = its id' (@($fx.missing) + @(($fx.entries |
     Where-Object id -eq 'not-in-json').family)) @('not-in-json', 'not-in-json')
+
+$noContextDir = Join-Path ([IO.Path]::GetTempPath()) "model-catalog-test-strata-$PID"
+Copy-Item (Join-Path $Fixtures 'strata') $noContextDir -Recurse
+Set-Content (Join-Path $noContextDir 'strata-nocontext.json') '{ "model_name": "x", "gpu": 1, "args": ["--gpus", "1"] }'
+Set-Content (Join-Path $noContextDir 'run-nocontext.bat') '@echo off'
+try {
+    $nc = Build @{ Presets = (Join-Path $Fixtures 'presets.ini'); NinferScript = (Join-Path $Fixtures 'start-ninfer.ps1')
+        Metadata = (Join-Path $Fixtures 'model-catalog.json'); StrataDir = $noContextDir }
+    Check 'Strata: a config without --max-context is left out, the rest still listed' (@($nc.entries.id | Where-Object {
+        $_ -in 'nocontext', 'big' })) @('big')
+}
+catch { Check 'Strata: a config without --max-context does not break the build' $_.Exception.Message 'no error' }
+finally { Remove-Item $noContextDir -Recurse -Force }
 
 Write-Host 'Real files'
 $real = Build @{}

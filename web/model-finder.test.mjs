@@ -1,7 +1,7 @@
 // Run with: node --test web/model-finder.test.mjs   (test-model-finder.ps1 runs it too)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds } from './model-finder.js';
+import { filterModels, sortModels, defaultFilters, whyHidden, parseContext, formatContext, loadedIds, thinkingName } from './model-finder.js';
 
 const entries = [
   { id: 'big-vision', engine: 'router', context: 262144, vision: true, gpus: 'both', thinking: 'on', speed: { code: 57, prose: 50 } },
@@ -109,14 +109,34 @@ test('formatContext writes tokens in binary K and M, as the tray menu does', () 
   assert.equal(formatContext(188416), '184K');
 });
 
+const running = [
+  { id: 'qwen3.8-27b', engine: 'router', modelId: 'qwen3.8-27b' },
+  { id: 'swift-iq3_s', engine: 'strata', modelId: 'swift-1.5-iq3_s' },
+  { id: 'sq-20', engine: 'strata', modelId: 'inkling-sq' },
+  { id: 'sq-20-gpu1', engine: 'strata', modelId: 'inkling-sq' },
+  { id: 'inkling2-mini', engine: 'ninfer', modelId: 'inkling-2-mini' },
+];
+
 test('loadedIds: the router model only once loaded, Strata when Loaded, ninfer when Ready', () => {
   const ids = loadedIds({
     router: { state: 'Loaded', model: 'qwen3.8-27b', model_status: 'loaded' },
     strata: { state: 'Unloaded', model: 'swift-1.5-iq3_s' },
     ninfer: { state: 'Ready', model: 'inkling-2-mini' },
-  });
-  assert.deepEqual([...ids].sort(), ['ninfer:inkling-2-mini', 'router:qwen3.8-27b']);
-  const loading = loadedIds({ router: { model: 'x', model_status: 'loading' }, strata: { state: 'Loaded', model: 's' }, ninfer: { state: 'Stopped' } });
-  assert.deepEqual([...loading], ['strata:s']);
-  assert.equal(loadedIds(null).size, 0);
+  }, running);
+  assert.deepEqual([...ids].sort(), ['inkling2-mini', 'qwen3.8-27b']);
+  const loading = loadedIds({ router: { model: 'qwen3.8-27b', model_status: 'loading' },
+    strata: { state: 'Loaded', model: 'swift-1.5-iq3_s' }, ninfer: { state: 'Stopped' } }, running);
+  assert.deepEqual([...loading], ['swift-iq3_s']);
+  assert.equal(loadedIds(null, running).size, 0);
+});
+
+test('loadedIds: a Strata size the tray started marks only that size, not every size with its model id', () => {
+  const status = size => ({ strata: { state: 'Loaded', model: 'inkling-sq', size } });
+  assert.deepEqual([...loadedIds(status('sq-20'), running)], ['sq-20']);
+  assert.deepEqual([...loadedIds(status(null), running)], ['sq-20', 'sq-20-gpu1']);
+});
+
+test('thinkingName: a value the page has no name for is shown as it is', () => {
+  assert.equal(thinkingName('on'), 'Thinks');
+  assert.equal(thinkingName('budgeted'), 'budgeted');
 });

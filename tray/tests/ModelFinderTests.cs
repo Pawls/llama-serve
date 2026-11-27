@@ -32,7 +32,7 @@ static class ModelFinderTests
     sealed class Rig : IDisposable
     {
         public readonly string Dir = Path.Combine(Path.GetTempPath(), "model-finder-tests-" + Guid.NewGuid().ToString("N"));
-        public readonly string WebDir, Catalog, Source;
+        public readonly string WebDir, Catalog, Source, SourceDir;
         public readonly HttpClient Http = new HttpClient();
         public readonly ModelFinder Finder;
         public readonly string BaseUrl;
@@ -48,8 +48,11 @@ static class ModelFinderTests
             Catalog = Path.Combine(Dir, "catalog.json");
             Source = Path.Combine(Dir, "presets.ini");
             File.WriteAllText(Source, "[a]");
+            SourceDir = Path.Combine(Dir, "configs");
+            Directory.CreateDirectory(SourceDir);
+            File.WriteAllText(Path.Combine(SourceDir, "strata-a.json"), "{}");
             RebuildBody = () => { File.WriteAllText(Catalog, "{\"built\":" + Rebuilds + "}"); return null; };
-            Finder = new ModelFinder(WebDir, Catalog, () => new[] { Source, Path.Combine(Dir, "absent.json") },
+            Finder = new ModelFinder(WebDir, Catalog, () => new[] { Source, SourceDir, Path.Combine(Dir, "absent.json") },
                 () => { Rebuilds++; return RebuildBody(); },
                 () => Task.FromResult<object>(new Dictionary<string, object> { { "reserveGpu0", true } }));
             int port = FreePort();
@@ -122,6 +125,38 @@ static class ModelFinderTests
             File.SetLastWriteTimeUtc(rig.Source, DateTime.UtcNow.AddMinutes(5));
             var third = await rig.Get("/catalog.json");
             Check("a newer source: rebuilt", rig.Rebuilds == 2 && (await third.Content.ReadAsStringAsync()) == "{\"built\":2}", rig.Rebuilds.ToString());
+        });
+
+        await Run("catalog: a file deleted from a source folder rebuilds it", async rig =>
+        {
+            await rig.Get("/catalog.json");
+            File.SetLastWriteTimeUtc(rig.Catalog, DateTime.UtcNow.AddMinutes(-10));
+            Directory.SetLastWriteTimeUtc(rig.SourceDir, DateTime.UtcNow.AddMinutes(-20));
+            File.SetLastWriteTimeUtc(rig.Source, DateTime.UtcNow.AddMinutes(-20));
+            await rig.Get("/catalog.json");
+            Check("older folder: not rebuilt", rig.Rebuilds == 1, rig.Rebuilds.ToString());
+            File.Delete(Path.Combine(rig.SourceDir, "strata-a.json"));
+            await rig.Get("/catalog.json");
+            Check("after the delete: rebuilt", rig.Rebuilds == 2, rig.Rebuilds.ToString());
+        });
+
+        await Run("catalog: a request during a rebuild gets the whole new file", async rig =>
+        {
+            File.WriteAllText(rig.Catalog, "{\"old\":true}");
+            File.SetLastWriteTimeUtc(rig.Catalog, DateTime.UtcNow.AddMinutes(-10));
+            rig.RebuildBody = () =>
+            {
+                File.WriteAllText(rig.Catalog, "{\"half");   // a writer part way through
+                System.Threading.Thread.Sleep(400);
+                File.WriteAllText(rig.Catalog, "{\"new\":true}");
+                return null;
+            };
+            Task<HttpResponseMessage> first = rig.Get("/catalog.json");
+            await Task.Delay(150);
+            var second = await rig.Get("/catalog.json");
+            string text = await second.Content.ReadAsStringAsync();
+            Check("the second request read the finished catalog", text == "{\"new\":true}", text);
+            await first;
         });
 
         await Run("catalog: a failed rebuild", async rig =>

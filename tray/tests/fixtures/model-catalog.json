@@ -2,8 +2,11 @@
   "entries": {
     "vision-mtp": { "family": "fam-a", "description": "A vision model with MTP.", "speed": { "code": 57, "prose": 50 } },
     "short-dflash": { "family": "fam-b", "description": "Code-only drafter.", "codeOnly": true, "speed": { "code": 190, "prose": 56 } },
-    "gpu1-always": { "family": "fam-c", "description": "Always reasons." },
+    "gpu1-always": { "family": "fam-c", "description": "Always reasons.", "thinking": "always" },
     "half-gpu1": { "family": "fam-d", "description": "Draft on GPU 0." },
+    "budget-zero": { "family": "fam-e", "description": "Thinking on, budget 0." },
+    "off-unlimited": { "family": "fam-f", "description": "Thinking off, budget -1." },
+    "auto-thinking": { "family": "fam-g", "description": "Thinking auto." },
     "big": { "family": "fam-big", "description": "Strata, two GPUs.", "thinking": "on", "speed": { "code": 126, "prose": 94 } },
     "big-gpu1": { "family": "fam-big", "description": "Strata, GPU 1.", "thinking": "on" },
     "blind": { "family": "fam-blind", "description": "Strata, no images.", "thinking": "on" },
