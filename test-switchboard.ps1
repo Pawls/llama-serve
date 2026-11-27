@@ -8,7 +8,7 @@ $Out = Join-Path ([IO.Path]::GetTempPath()) 'switchboard-tests'
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Exe = Join-Path $Out 'SwitchboardTests.exe'
 
-$References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.Web.Extensions.dll' |
+$References = 'System.dll', 'System.Core.dll', 'System.Net.Http.dll', 'System.Web.Extensions.dll', 'System.Windows.Forms.dll' |
     ForEach-Object { "/reference:$(Join-Path $FrameworkDir $_)" }
 
 $output = & (Join-Path $FrameworkDir 'csc.exe') /nologo /target:exe /debug+ "/out:$Exe" @References `
